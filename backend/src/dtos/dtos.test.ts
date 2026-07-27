@@ -1,0 +1,182 @@
+import { Value } from "@sinclair/typebox/value";
+import { describe, expect, test } from "bun:test";
+import { createOrderDto, updateOrderDto } from "./orders.dto";
+import { updatePaymentMethodDto } from "./payments.dto";
+import { quoteDto } from "./pricing.dto";
+import { createProductDto, updateProductDto } from "./products.dto";
+import { createStaffDto, permissionsDto } from "./staff.dto";
+
+/**
+ * Sanity checks that the DTO schemas actually reject bad payloads at the
+ * edge — Elysia validates with these exact TypeBox schemas at runtime.
+ */
+
+const validOrder = {
+  name: "Rahim Uddin",
+  phone: "01712345678",
+  address: "House 7, Road 3, Dhanmondi",
+  insideDhaka: true,
+  pay: "Cash on delivery",
+  items: [{ productId: "ips1000", qty: 2 }],
+};
+
+describe("createOrderDto", () => {
+  test("accepts a valid checkout payload", () => {
+    expect(Value.Check(createOrderDto, validOrder)).toBe(true);
+  });
+  test("rejects an empty cart", () => {
+    expect(Value.Check(createOrderDto, { ...validOrder, items: [] })).toBe(false);
+  });
+  test("rejects zero/negative/fractional quantities", () => {
+    for (const qty of [0, -1, 1.5]) {
+      const items = [{ productId: "ips1000", qty }];
+      expect(Value.Check(createOrderDto, { ...validOrder, items })).toBe(false);
+    }
+  });
+  test("rejects missing fields and unknown-shaped items", () => {
+    const { pay: _pay, ...noPay } = validOrder;
+    expect(Value.Check(createOrderDto, noPay)).toBe(false);
+    expect(Value.Check(createOrderDto, { ...validOrder, items: [{ qty: 1 }] })).toBe(false);
+  });
+  test("caps qty at 99 and lines at 50 (cal-bk.md §3)", () => {
+    expect(Value.Check(createOrderDto, { ...validOrder, items: [{ productId: "x", qty: 99 }] })).toBe(true);
+    expect(Value.Check(createOrderDto, { ...validOrder, items: [{ productId: "x", qty: 100 }] })).toBe(false);
+    const tooMany = Array(51).fill({ productId: "x", qty: 1 });
+    expect(Value.Check(createOrderDto, { ...validOrder, items: tooMany })).toBe(false);
+  });
+});
+
+describe("quoteDto", () => {
+  const items = [{ productId: "ips1000", qty: 2 }];
+  test("insideDhaka is optional (cart page) and allowed (checkout)", () => {
+    expect(Value.Check(quoteDto, { items })).toBe(true);
+    expect(Value.Check(quoteDto, { items, insideDhaka: true })).toBe(true);
+  });
+  test("rejects empty carts and out-of-range quantities", () => {
+    expect(Value.Check(quoteDto, { items: [] })).toBe(false);
+    expect(Value.Check(quoteDto, { items: [{ productId: "x", qty: 0 }] })).toBe(false);
+    expect(Value.Check(quoteDto, { items: [{ productId: "x", qty: 100 }] })).toBe(false);
+    expect(Value.Check(quoteDto, { items: [{ productId: "x", qty: 1.5 }] })).toBe(false);
+  });
+});
+
+const validProduct = {
+  name: "Voltage Protector 220V",
+  slug: "voltage-protector-220v",
+  categoryId: "cat_protection",
+  price: 1650,
+  minDp: 10,
+  onSale: false,
+  salePercentage: 0,
+  deliveryFeeInsideDhaka: 60,
+  deliveryFeeOutsideDhaka: 150,
+  installationFeeInsideDhaka: 0,
+  installationFeeOutsideDhaka: 0,
+  freeDeliveryMinQty: 0,
+  warrantyMonths: 12,
+  imgHint: "voltage protector photo",
+  specs: ["Cuts off on high/low voltage"],
+  description: "Protects appliances from voltage spikes.",
+  sku: "ZT-VPR-40",
+  cost: 1100,
+  stock: 230,
+  reserved: 12,
+  reorderAt: 50,
+  visible: true,
+  photos: [],
+};
+
+describe("product DTOs", () => {
+  test("accepts a valid product, with or without a video link", () => {
+    expect(Value.Check(createProductDto, validProduct)).toBe(true);
+    const withVideo = { ...validProduct, video: "https://youtu.be/abc123" };
+    expect(Value.Check(createProductDto, withVideo)).toBe(true);
+  });
+  test("video must be an http(s) URL — empty string clears it", () => {
+    expect(Value.Check(updateProductDto, { video: "" })).toBe(true);
+    expect(Value.Check(updateProductDto, { video: "https://www.youtube.com/watch?v=x" })).toBe(true);
+    expect(Value.Check(updateProductDto, { video: "not a url" })).toBe(false);
+    expect(Value.Check(updateProductDto, { video: "ftp://example.com/clip.mp4" })).toBe(false);
+  });
+  test("categoryId is required on create — a product must have a category", () => {
+    const { categoryId, ...withoutCategory } = validProduct;
+    expect(Value.Check(createProductDto, withoutCategory)).toBe(false);
+    expect(Value.Check(createProductDto, { ...withoutCategory, categoryId: "" })).toBe(false);
+  });
+  test("categoryId is optional on update, since PATCH is partial", () => {
+    expect(Value.Check(updateProductDto, { categoryId: "cat_solar" })).toBe(true);
+    expect(Value.Check(updateProductDto, { price: 100 })).toBe(true);
+  });
+  test("freeDeliveryMinQty accepts a non-negative threshold, 0 disables it", () => {
+    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: 0 })).toBe(true);
+    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: 4 })).toBe(true);
+    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: -1 })).toBe(false);
+    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: 1000 })).toBe(false);
+    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: 1.5 })).toBe(false);
+  });
+
+  test("warrantyMonths accepts a period in months, 0 means no warranty", () => {
+    expect(Value.Check(updateProductDto, { warrantyMonths: 0 })).toBe(true);
+    expect(Value.Check(updateProductDto, { warrantyMonths: 24 })).toBe(true);
+    expect(Value.Check(updateProductDto, { warrantyMonths: -1 })).toBe(false);
+    expect(Value.Check(updateProductDto, { warrantyMonths: 241 })).toBe(false);
+  });
+  test("quantityOffers accepts valid tiers and rejects out-of-range values", () => {
+    const offers = [
+      { minQty: 3, percentage: 5 },
+      { minQty: 5, percentage: 10 },
+    ];
+    expect(Value.Check(createProductDto, { ...validProduct, quantityOffers: offers })).toBe(true);
+    expect(Value.Check(updateProductDto, { quantityOffers: offers })).toBe(true);
+    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 1, percentage: 5 }] })).toBe(false);
+    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 3, percentage: 0 }] })).toBe(false);
+    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 3, percentage: 101 }] })).toBe(false);
+    expect(Value.Check(updateProductDto, { quantityOffers: Array(11).fill({ minQty: 3, percentage: 5 }) })).toBe(
+      false,
+    );
+  });
+});
+
+describe("updateOrderDto", () => {
+  test("only the five known statuses pass", () => {
+    expect(Value.Check(updateOrderDto, { status: "On the way" })).toBe(true);
+    expect(Value.Check(updateOrderDto, { status: "Shipped" })).toBe(false);
+  });
+
+  test("prepared-by can be set or explicitly cleared", () => {
+    expect(Value.Check(updateOrderDto, { preparedById: "stf_123" })).toBe(true);
+    expect(Value.Check(updateOrderDto, { preparedById: null })).toBe(true);
+    expect(Value.Check(updateOrderDto, { preparedById: 7 })).toBe(false);
+  });
+
+  test("both fields are optional at the schema level", () => {
+    // The handler rejects an empty body with 400 — the schema can't express
+    // "at least one of", and doing it here would block a future third field.
+    expect(Value.Check(updateOrderDto, {})).toBe(true);
+  });
+});
+
+describe("staff DTOs", () => {
+  test("usernames are shape-checked", () => {
+    const staff = {
+      name: "Test Person",
+      username: "test.user-1",
+      password: "secret1",
+      roleId: "manager",
+    };
+    expect(Value.Check(createStaffDto, staff)).toBe(true);
+    expect(Value.Check(createStaffDto, { ...staff, username: "bad name!" })).toBe(false);
+    expect(Value.Check(createStaffDto, { ...staff, password: "short" })).toBe(false);
+  });
+  test("permission values are restricted to none/view/manage", () => {
+    expect(Value.Check(permissionsDto, { orders: "view", staff: "manage" })).toBe(true);
+    expect(Value.Check(permissionsDto, { orders: "admin" })).toBe(false);
+  });
+});
+
+describe("updatePaymentMethodDto", () => {
+  test("partial updates pass, unknown enum values fail", () => {
+    expect(Value.Check(updatePaymentMethodDto, { enabled: false })).toBe(true);
+    expect(Value.Check(updatePaymentMethodDto, { environment: "Staging" })).toBe(false);
+  });
+});

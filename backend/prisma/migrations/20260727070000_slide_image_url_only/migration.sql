@@ -1,0 +1,12 @@
+-- Hero slide images are media-storage URLs, not inline data.
+--
+-- The old admin panel base64-inlined the picked file into HeroSlide.image
+-- (which then shipped inside every public /api/site-config response). Uploads
+-- now go through POST /admin/api/slides/image, and updateSlidesDto caps
+-- `image` at 2000 chars.
+--
+-- Without this cleanup, the next whole-document PUT /admin/api/slides — which
+-- resends existing images — would fail validation on any legacy data-URL row.
+-- Clearing the image is the safe resolution: the slide survives and the admin
+-- can re-upload the artwork.
+UPDATE "HeroSlide" SET image = NULL WHERE image LIKE 'data:%';

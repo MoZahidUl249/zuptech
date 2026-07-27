@@ -1,0 +1,698 @@
+// ZUP TECH backend — Prisma schema (PostgreSQL)
+//
+// Connection URL lives in prisma.config.ts (Prisma 7), sourced from
+// DATABASE_URL. Status fields are plain strings (validated at the API layer
+// with Elysia schemas) so payloads stay byte-identical to the frontend types
+// in BACKEND.md — e.g. "On the way", which Prisma enums can't express.
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+
+/// ===== Catalog =====
+
+/// Top level of the catalog taxonomy — the audience split the storefront's
+/// primary filter uses ("Home", "Industrial"). Sections own categories;
+/// products hang off categories, never off a section directly.
+model Section {
+  id   String @id @default(cuid())
+  name String @unique
+  sort Int    @default(0)
+
+  categories Category[]
+}
+
+/// Merchandising category ("Solar", "Protection", …). `name` is globally
+/// unique, so a category belongs to exactly one section — that is what makes
+/// the section reachable from a product through a single hop.
+model Category {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  svgLogo   String  @default("") // media-storage URL, "" = none
+  sectionId String
+  section   Section @relation(fields: [sectionId], references: [id])
+  sort      Int     @default(0)
+
+  products Product[]
+
+  @@index([sectionId])
+}
+
+/// One row per sellable product. Merges the storefront shape (lib/products.ts)
+/// with the admin extras (AdminProduct) — the API decides which fields each
+/// audience sees.
+model Product {
+  id          String  @id // storefront id, e.g. "ips1000"
+  slug        String  @unique // used in URLs + SEO, keep stable
+  name        String
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  price       Int // BDT
+  minDp       Int     @default(0) // minimum down payment, % of price (0–100)
+  onSale         Boolean @default(false)
+  salePercentage Int     @default(0) // 0–100, only meaningful when onSale
+  rating      Float   @default(0)
+  sold        Int     @default(0)
+  imgHint     String   @default("")
+  specs       String[] @default([]) // 4 bullet points
+  description String   @default("")
+  video       String   @default("") // promo video URL (YouTube etc.), "" = none
+
+  // Admin-side extras
+  sku             String  @unique // e.g. "ZT-IPS-1000"
+  cost            Int     @default(0) // purchase cost (BDT) — drives stock value
+  stock           Int     @default(0) // on hand
+  reserved        Int     @default(0) // allocated to open orders
+  reorderAt       Int     @default(0) // low-stock threshold
+  visible         Boolean  @default(true)
+  photos          String[] @default([]) // ordered gallery URLs, first = cover photo; any count
+
+  // Delivery + installation, BDT per unit, flat two-tier zone pricing
+  deliveryFeeInsideDhaka      Int @default(0)
+  deliveryFeeOutsideDhaka     Int @default(0)
+  installationFeeInsideDhaka  Int @default(0)
+  installationFeeOutsideDhaka Int @default(0)
+  freeDeliveryMinQty          Int @default(0) // 0 = disabled; qty ≥ this on a line zeroes its delivery fee
+
+  warrantyMonths Int @default(0) // 0 = no warranty; drives Warranty rows on delivery
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItems      OrderItem[]
+  purchaseOrders  PurchaseOrder[]
+  movements       StockMovement[]
+  quantityOffers  QuantityOffer[]
+  warranties      Warranty[]
+  landingPages    LandingPage[]
+
+  @@index([categoryId])
+}
+
+/// A "buy N+, save X%" tier on a product. A product may have several tiers;
+/// the highest minQty a cart line's qty satisfies wins — see rules.ts
+/// `bestQuantityOffer`. Discount is computed off the base price and compared
+/// against the flat sale price; the customer always gets whichever is lower
+/// (never stacked — see rules.ts `effectiveUnitPrice`).
+model QuantityOffer {
+  id         Int     @id @default(autoincrement())
+  productId  String
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQty     Int // qty threshold, e.g. 3 = "buy 3 or more"
+  percentage Int // 1–100, % off product.price per unit at this tier
+
+  @@unique([productId, minQty])
+  @@index([productId])
+}
+
+/// ===== Orders & customers =====
+
+model Customer {
+  id       String   @id @default(cuid())
+  name     String
+  phone    String   @unique // normalized 01XXXXXXXXX — this IS the login identity
+  address  String   @default("") // last-used delivery address (free text) — prefills checkout
+  insideDhaka Boolean @default(true) // last-used delivery zone — drives per-product delivery/installation fee
+  joinedAt DateTime @default(now())
+
+  orders Order[]
+  cart   Cart?
+}
+
+/// One saved cart per customer, synced across devices so a signed-in
+/// customer's cart survives beyond browser localStorage. Items are raw
+/// id+qty pairs (same shape as the checkout payload) — never priced here;
+/// money is always recomputed live via /api/pricing/quote.
+model Cart {
+  customerId String   @id
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items      Json     @default("[]")
+  updatedAt  DateTime @updatedAt
+}
+
+model Order {
+  id              String   @id // display id, e.g. "ZT-10241"
+  number          Int      @unique // sequential part of the id, for ordering
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id])
+  name            String // recipient full name as entered at checkout
+  phone           String
+  address         String // free text, frozen with the delivery zone label appended at order time
+  insideDhaka     Boolean // delivery zone at order time, frozen
+  subtotal        Int
+  deliveryFee     Int
+  installationFee Int      @default(0) // Σ product installation fee (zone-specific) × qty
+  total           Int
+  pay             String // chosen payment method name
+  status          String   @default("Processing") // Processing|Confirmed|On the way|Delivered|Cancelled
+  /// Staff member accountable for fulfilling this order. Null until someone
+  /// claims or is assigned it; SetNull so removing a staff row never deletes
+  /// order history (the OrderEvent trail keeps their name either way).
+  preparedById    String?
+  preparedBy      Staff?   @relation("OrderPreparedBy", fields: [preparedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items      OrderItem[]
+  events     OrderEvent[]
+  invoice    Invoice?
+  warranties Warranty[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([preparedById])
+}
+
+model OrderItem {
+  id              Int     @id @default(autoincrement())
+  orderId         String
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product @relation(fields: [productId], references: [id])
+  qty             Int
+  unitPrice       Int // BDT at time of purchase
+  deliveryFee     Int     @default(0) // per-unit delivery fee (zone-specific), snapshot at time of purchase
+  installationFee Int     @default(0) // per-unit installation fee (zone-specific), snapshot at time of purchase
+
+  warranties Warranty[]
+}
+
+/// Append-only trail of everything that happened to an order — who changed
+/// the status, who claimed it, when its invoice was issued. Same shape of
+/// audit as StockMovement: the actor is frozen as text so the row still reads
+/// correctly after a staff member is renamed or deleted.
+model OrderEvent {
+  id      String   @id @default(cuid())
+  orderId String
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  at      DateTime @default(now())
+  kind    String // placed|status|prepared-by|invoice|warranty|note
+  detail  String // human-readable, e.g. "Processing → Confirmed"
+  by      String // staff username, or "customer"
+  byName  String // display name, frozen
+
+  @@index([orderId, at])
+}
+
+/// One invoice per order. Deliberately stores no money: Order.subtotal /
+/// deliveryFee / installationFee / total and OrderItem.unitPrice are already
+/// frozen snapshots taken at checkout, so the document derives its amounts
+/// from the order and can never drift out of sync with it.
+model Invoice {
+  id         String    @id // "INV-1001"
+  number     Int       @unique
+  orderId    String    @unique
+  order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status     String    @default("Draft") // Draft|Issued|Paid|Void
+  issuedAt   DateTime?
+  paidAt     DateTime?
+  notes      String    @default("")
+  issuedById String?
+  issuedBy   Staff?    @relation("InvoiceIssuedBy", fields: [issuedById], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([status])
+}
+
+/// Warranty registry — one row per delivered order line whose product has a
+/// warranty period. Created automatically when an order reaches "Delivered"
+/// (see lib/warranty.ts) and thereafter edited by staff to record serials and
+/// claims.
+model Warranty {
+  id          String    @id // "WR-4401"
+  number      Int       @unique
+  orderId     String
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItemId Int       @unique
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  sku         String // denormalized for display, survives product edits
+  qty         Int
+  serialNo    String    @default("") // free text; comma-separate multiple units
+  months      Int
+  startsAt    DateTime
+  endsAt      DateTime
+  status      String    @default("Active") // Active|Expired|Claimed|Replaced|Void
+  claimNote   String    @default("")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@index([serialNo])
+}
+
+/// Monotonic counters for human-friendly sequential ids (ZT-10242, PO-2212,
+/// INV-1001, WR-4401…).
+model Counter {
+  id    String @id // "order" | "po" | "invoice" | "warranty"
+  value Int
+}
+
+/// ===== Leads & contact =====
+
+model ServiceLead {
+  id        String   @id @default(cuid())
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id])
+  customer  String
+  city      String
+  phone     String   @default("")
+  notes     String   @default("")
+  status    String   @default("New") // New|Contacted|Survey booked|Quoted|Won|Lost
+  createdAt DateTime @default(now())
+
+  @@index([serviceId])
+}
+
+/// Per-page hero art. One row per page, keyed by `pageKey` — the homepage
+/// carousel keeps its own `HeroSlide` model (it is a different thing: a
+/// promo slider with per-slide CTAs), whereas this is the *backing* of a
+/// page's headline block.
+///
+/// Kept separate from SiteConfig's copy columns because the art is per-page
+/// and repeating (a poster list), which flat copy columns can't express.
+model PageHero {
+  id String @id @default(cuid())
+  /// "home" | "services" | "industrial" | "contact" | "shop" — see
+  /// PAGE_HERO_KEYS in src/lib/rules.ts, which is the list of record.
+  pageKey String @unique
+
+  /// "plain"   — no art, the existing flat/gradient background
+  /// "image"   — one still background
+  /// "posters" — the `posters` list below, rotated by the frontend
+  mode String @default("plain")
+
+  /// media-storage URL used when mode = "image". "" = none.
+  background String @default("")
+
+  /// 0–100 dark scrim over the art. Hero copy is light-on-dark, so without a
+  /// scrim a bright photo makes the headline unreadable — this is the knob
+  /// that keeps contrast usable per image rather than per design system.
+  overlay Int @default(55)
+
+  posters HeroPoster[]
+
+  updatedAt DateTime @updatedAt
+}
+
+/// One poster in a PageHero's rotation (mode = "posters").
+model HeroPoster {
+  id     String   @id @default(cuid())
+  heroId String
+  hero   PageHero @relation(fields: [heroId], references: [id], onDelete: Cascade)
+
+  /// media-storage URL — required; a poster with no art is not a poster.
+  image String
+  /// Alt text. Empty means decorative, and the frontend marks it aria-hidden.
+  alt   String @default("")
+  /// Optional click-through for the poster.
+  href  String @default("")
+  sort  Int    @default(0)
+
+  @@index([heroId])
+}
+
+/// Unlisted single-product campaign page for ad traffic (`/lp/:slug`), used
+/// to sell via Facebook ad hyperlinks. Never linked from the store nav, never
+/// in the sitemap, never crawlable — the share link is the only way in.
+///
+/// The point of the model is that a campaign can sell a product that is NOT
+/// live on the storefront (`Product.visible = false`): the landing page is
+/// then the only place it is purchasable. See `orderableProductWhere()` in
+/// lib/rules.ts — a product is orderable when it is visible OR carried by at
+/// least one *published* landing page.
+model LandingPage {
+  id        String  @id @default(cuid())
+  /// Internal name shown in the admin list — never rendered publicly.
+  title     String
+  /// The public <h1> on /lp/:slug. Blank falls back to the product name, so
+  /// a page created from the admin's "New landing page" button can never
+  /// headline ad traffic with the internal placeholder.
+  headline  String  @default("")
+  slug      String  @unique
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  /// Campaign price shown to the visitor, and the struck-through reference
+  /// beside it. Display only — the order still prices from the catalog via
+  /// priceCart(), so a landing page can never move real money on its own.
+  offerPrice     Int
+  compareAtPrice Int
+
+  ribbonText     String   @default("")
+  buttonLabel    String   @default("Buy Now")
+  footerNote     String   @default("")
+  benefitBullets String[] @default([])
+  imageHint      String   @default("")
+  /// This page's own GTM container, so ad spend is tracked separately from
+  /// the main site's.
+  gtmId          String   @default("")
+
+  /// false = the public route 404s, and the product loses its landing-page
+  /// route to orderability.
+  published Boolean @default(false)
+
+  viewCount  Int      @default(0)
+  orderCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([productId])
+  @@index([published])
+}
+
+/// B2B enquiry from the /industrial page. Deliberately NOT a flag on
+/// ServiceLead: an industrial deal captures a different fact set (company,
+/// sector, connected load, scope, budget), runs a longer pipeline
+/// (INDUSTRIAL_LEAD_STATUSES, not LEAD_STATUSES) and is worked by a different
+/// team, so the two are listed and reported on separately in the admin.
+model IndustrialLead {
+  id String @id @default(cuid())
+
+  /// Nullable FK, NOT required: /industrial renders DB-backed
+  /// IndustrialService cards but falls back to the static list in
+  /// ../fronend/lib/industrial.ts when the API is down. A submission made
+  /// against a fallback card carries an id with no row behind it, so the
+  /// link is best-effort and `serviceName` below is the source of truth.
+  industrialServiceId String?
+  industrialService   IndustrialService? @relation(fields: [industrialServiceId], references: [id], onDelete: SetNull)
+  /// Snapshot of the requested service label — always populated, and kept
+  /// even if the IndustrialService row is later renamed or deleted.
+  serviceName         String
+
+  company     String
+  contactName String
+  designation String @default("")
+  phone       String
+  email       String @default("")
+
+  sector       String // INDUSTRIAL_SECTORS
+  scope        String // INDUSTRIAL_SCOPES
+  timeline     String // INDUSTRIAL_TIMELINES
+  siteLocation String @default("")
+  /// Free text ("850 kVA", "2.1 MW") — units vary by client, so no numeric
+  /// column; sales reads it, nothing computes on it.
+  load         String @default("")
+  budget       String @default("")
+  notes        String @default("")
+
+  status    String   @default("New") // INDUSTRIAL_LEAD_STATUSES
+  createdAt DateTime @default(now())
+
+  @@index([industrialServiceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @default("")
+  email     String   @default("")
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+/// ===== Staff & RBAC =====
+
+/// Permissions is a JSON record: { [module]: "none" | "view" | "manage" }
+/// Modules: dashboard, analytics, orders, invoices, warranty, products,
+/// inventory, leads, customers, homepage, landingpages, sitecontent,
+/// payments, pricing, staff. The list of record is ADMIN_MODULES in
+/// src/lib/rbac.ts — keep this comment in step with it.
+model Role {
+  id          String  @id
+  name        String  @unique
+  permissions Json // Record<Module, "none" | "view" | "manage">
+  isSystem    Boolean @default(false) // Super Admin — cannot be edited/deleted
+
+  staff Staff[]
+}
+
+/// Staff profile. Credentials (username/password) live in Better Auth's
+/// User/Account tables; this row carries the business data + role link.
+model Staff {
+  id       String @id @default(cuid())
+  name     String
+  phone    String @default("")
+  username String @unique // mirrors the Better Auth username for easy lookup
+  roleId   String
+  role     Role   @relation(fields: [roleId], references: [id])
+  userId   String @unique // -> User.id (Better Auth)
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  preparedOrders Order[]   @relation("OrderPreparedBy")
+  issuedInvoices Invoice[] @relation("InvoiceIssuedBy")
+}
+
+/// ===== Inventory =====
+
+model Supplier {
+  id      String @id @default(cuid())
+  name    String
+  contact String @default("")
+  phone   String @default("")
+  items   String @default("") // free-text "what they supply"
+
+  purchaseOrders PurchaseOrder[]
+}
+
+model PurchaseOrder {
+  id         String   @id // display id, e.g. "PO-2211"
+  number     Int      @unique
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  qty        Int
+  value      Int // total BDT
+  eta        DateTime
+  status     String   @default("Confirmed") // Confirmed|In transit|Received|Cancelled
+  createdAt  DateTime @default(now())
+}
+
+/// Append-only audit trail of every stock change.
+model StockMovement {
+  id        String   @id @default(cuid())
+  date      DateTime @default(now())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  sku       String // denormalized for display, survives product edits
+  change    Int // +/- units
+  reason    String
+  by        String // staff username or "system"
+
+  @@index([date])
+}
+
+/// ===== Site content (admin-managed, publicly readable) =====
+
+model HeroSlide {
+  id     String  @id @default(cuid())
+  image  String? // URL — only active slides WITH an image render
+  cta    String
+  href   String
+  active Boolean @default(true)
+  fit    String  @default("cover") // "cover" | "contain"
+  bg     String  @default("")
+  sort   Int     @default(0)
+}
+
+/// The /solutions page's engineering-service cards (Lighting Automation,
+/// Sub-Station, BMS, etc.). `image` is a media-storage URL uploaded through
+/// POST /admin/api/services/:id/image — replaced the fixed Lucide icon key
+/// the frontend's SolutionIcon component used to require.
+model Service {
+  id       String   @id @default(cuid())
+  slug     String   @unique
+  name     String
+  dsc      String
+  image    String   @default("") // media-storage URL, "" = none
+  features String[] @default([])
+  sort     Int      @default(0)
+
+  leads ServiceLead[]
+}
+
+/// Same card shape as Service, but for the industrial/EPC offering — kept as
+/// its own model (not a flag on Service) because the two lists are edited and
+/// rendered separately. Service is booked via ServiceLead; this one via
+/// IndustrialLead, which captures a different (B2B) fact set.
+model IndustrialService {
+  id       String   @id @default(cuid())
+  slug     String   @unique
+  name     String
+  dsc      String
+  image    String   @default("") // media-storage URL, "" = none
+  features String[] @default([])
+  sort     Int      @default(0)
+
+  leads IndustrialLead[]
+}
+
+/// Singleton (id = 1): featured list, site copy, contact info, integrations.
+model SiteConfig {
+  id Int @id @default(1)
+
+  featuredIds String[] @default([]) // product ids, ORDER matters (home page row)
+
+  // Copy.
+  //
+  // Flat named columns rather than a JSON blob: keeps per-field validation in
+  // the DTO, needs no backfill (every column has a default), and lets
+  // PUT /admin/api/copy keep writing the body straight through.
+  //
+  // Only singular headings/paragraphs live here. Repeating card lists are NOT
+  // modelled as copy1/copy2/… columns — they either have their own model
+  // (Service, IndustrialService) or stay static in the frontend.
+  //
+  // Blank ("") means "use the frontend's built-in default" — resolveCopy() in
+  // lib/admin-bridge.ts coalesces empty strings back to DEFAULT_COPY.
+  featuredHeading   String @default("Featured products")
+  servicesHeading   String @default("Our services")
+  servicesSubtitle  String @default("")
+  footerDescription String @default("")
+
+  // Home page
+  homeHeroEyebrow         String @default("")
+  homeHeroHeadline        String @default("")
+  homeHeroSubhead         String @default("")
+  homeIndustrialEyebrow   String @default("")
+  homeIndustrialHeading   String @default("")
+  homeCapabilitiesEyebrow String @default("")
+  homeCapabilitiesHeading String @default("")
+  homeCtaHeading          String @default("")
+  homeCtaSubtext          String @default("")
+  homeCtaButton           String @default("")
+
+  // Industrial page
+  industrialHeroEyebrow      String @default("")
+  industrialHeroHeadline     String @default("")
+  industrialHeroSubhead      String @default("")
+  industrialGridHeading      String @default("")
+  industrialGridBody         String @default("")
+  industrialServicesHeading  String @default("")
+  industrialServicesSubtitle String @default("")
+  industrialStandardsHeading String @default("")
+  industrialStandardsBody    String @default("")
+
+  // Contact page
+  contactHeading      String @default("")
+  contactFormHeading  String @default("")
+  contactOfficeHeading String @default("")
+  contactTeamHeading  String @default("")
+  contactServiceLine  String @default("")
+  contactTendersEmail String @default("")
+
+  // Contact
+  phone        String @default("")
+  phoneDisplay String @default("")
+  hotline      String @default("")
+  email        String @default("")
+  whatsapp     String @default("") // digits only
+  street       String @default("")
+  city         String @default("")
+  postalCode   String @default("")
+  hours        String @default("")
+
+  // Integrations
+  gtmId      String  @default("") // validated ^GTM-[A-Z0-9]{4,10}$
+  gtmEnabled Boolean @default(false)
+}
+
+model PaymentMethod {
+  id          String  @id
+  name        String
+  kind        String // "Mobile wallet" | "Card gateway" | "Offline"
+  provider    String
+  providers   String[] @default([]) // selectable provider options
+  enabled     Boolean @default(true)
+  environment String  @default("Test") // "Live" | "Test"
+  apiKey      String  @default("")
+  apiSecret   String  @default("") // never returned by the API
+  webhookUrl  String  @default("")
+  isGateway   Boolean @default(false)
+  sort        Int     @default(0)
+}
+
+/// ===== Better Auth (session/credential store) =====
+/// Standard Better Auth models plus the fields added by the `username`
+/// plugin (staff login) and the custom `phoneNumber` field (customer login
+/// identity — email/password under the hood via a synthetic email, see
+/// lib/rules.ts `customerEmail`).
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // username plugin (staff)
+  username        String? @unique
+  displayUsername String?
+
+  // customer login identity (see comment above)
+  phoneNumber String? @unique
+
+  sessions Session[]
+  accounts Account[]
+  staff    Staff?
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String? // hashed by Better Auth (scrypt)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}

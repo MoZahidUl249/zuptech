@@ -1,0 +1,33 @@
+{
+  "name": "zuptech",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "fronend",
+    "storage"
+  ],
+  "scripts": {
+    "predev": "bash scripts/free-ports.sh",
+    "dev": "bun run --filter '*' dev",
+    "build": "bun run --filter '*' build",
+    "start": "bun run --filter '*' start",
+    "test": "bun run --filter '*' test",
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "bun run --filter fronend lint",
+
+    "dev:backend": "bun run --filter backend dev",
+    "dev:frontend": "bun run --filter fronend dev",
+    "dev:storage": "bun run --filter media-storage-service dev",
+
+    "db:migrate": "bun run --filter backend db:migrate && bun run --filter media-storage-service migrate",
+    "db:generate": "bun run --filter backend db:generate",
+    "db:seed": "bun run --filter backend db:seed",
+    "db:studio": "bun run --filter backend db:studio",
+
+    "setup": "bun install && bun run db:generate && bun run db:migrate",
+    "health": "bash scripts/health.sh"
+  },
+  "engines": {
+    "bun": ">=1.3.13"
+  }
+}

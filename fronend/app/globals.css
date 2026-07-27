@@ -1,0 +1,310 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* ZUP TECH brand palette (from ZUP TECH.dc.html design) */
+  --color-zup-blue: #0b4fe0;
+  --color-zup-blue-dark: #0a43bc;
+  --color-zup-orange: #e85320;
+  --color-zup-orange-dark: #d34a1c;
+  --color-zup-ink: #15181e;
+  --color-zup-red: #c62828;
+  --color-zup-red-dark: #a91f1f;
+  --color-zup-green: #1fa855;
+  --color-zup-green-dark: #178f47;
+  --color-zup-body: #22262e;
+  --color-zup-mid: #40454e;
+  --color-zup-gray: #6b7078;
+  --color-zup-soft: #8a8f98;
+  --color-zup-faint: #9aa0a8;
+  --color-zup-bg: #fafafb;
+  --color-zup-sky: #9fb8f5;
+}
+
+:root {
+  --background: #fafafb;
+  --foreground: #22262e;
+  --card: #ffffff;
+  --card-foreground: #22262e;
+  --popover: #ffffff;
+  --popover-foreground: #22262e;
+  --primary: #0b4fe0;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f4f7;
+  --secondary-foreground: #22262e;
+  --muted: #f2f4f7;
+  --muted-foreground: #6b7078;
+  --accent: rgba(11, 79, 224, 0.07);
+  --accent-foreground: #0b4fe0;
+  --destructive: #c62828;
+  --border: rgba(34, 38, 46, 0.08);
+  --input: rgba(34, 38, 46, 0.1);
+  --ring: #0b4fe0;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+  }
+  html {
+    @apply font-sans scroll-smooth;
+  }
+}
+
+/* ===== ZUP TECH motion system (from design) ===== */
+@keyframes zupFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+@keyframes zupFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes zupGlow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+@keyframes zupShimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+@keyframes zupPop {
+  0% {
+    transform: translateY(60px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes zupKen {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.05);
+  }
+}
+@keyframes zupRevealUp {
+  from {
+    opacity: 0;
+    transform: translateY(46px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes zupRevealScale {
+  from {
+    opacity: 0;
+    transform: scale(0.93) translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.zup-fade-up {
+  animation: zupFadeUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.zup-pop {
+  animation: zupPop 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.zup-ken {
+  animation: zupKen 14s ease-in-out infinite alternate;
+}
+.zup-glow {
+  animation: zupGlow 6s ease-in-out infinite;
+}
+
+/* Scroll-linked reveals with graceful fallback */
+.zr {
+  animation: zupRevealUp both linear;
+  animation-timeline: view();
+  animation-range: entry 0% cover 34%;
+}
+.zr-s {
+  animation: zupRevealScale both linear;
+  animation-timeline: view();
+  animation-range: entry 4% cover 36%;
+}
+@supports not (animation-timeline: view()) {
+  .zr,
+  .zr-s {
+    animation: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zr,
+  .zr-s,
+  .zup-fade-up,
+  .zup-pop,
+  .zup-ken,
+  .zup-glow {
+    animation: none !important;
+    opacity: 1;
+  }
+  /* `scroll-smooth` above turns every anchor jump and scrollIntoView into an
+     animation, which is exactly what this preference asks us not to do. */
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Hide horizontal scrollbars on carousels (as in design) */
+.zup-scroll-row {
+  scrollbar-width: none;
+}
+.zup-scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===== Print: admin invoices =====
+   The admin panel is one client tree with no separate print route, so instead
+   of building a parallel document we hide the whole app and reveal only the
+   element marked .print-doc. `visibility` (not `display`) is deliberate — it
+   keeps the document's layout intact while collapsing everything around it. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-doc,
+  .print-doc * {
+    visibility: visible;
+  }
+  .print-doc {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    box-shadow: none;
+    border: 0;
+  }
+  .no-print {
+    display: none !important;
+  }
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+}

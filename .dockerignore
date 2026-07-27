@@ -1,0 +1,25 @@
+# Build context hygiene: everything here is either rebuilt in the image,
+# environment-specific, or secret.
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+**/*.tsbuildinfo
+
+# Secrets — these MUST never enter an image layer.
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Local state
+storage/data
+**/.git
+**/.github
+**/.vscode
+**/.idea
+**/*.log
+
+# Generated Prisma client — regenerated in the build stage against the
+# schema that ships with the image, so a stale local copy can't leak in.
+backend/src/generated

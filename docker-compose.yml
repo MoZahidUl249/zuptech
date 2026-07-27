@@ -1,0 +1,126 @@
+# Production stack for a single VPS.
+#
+#   docker compose --env-file .env.production up -d
+#
+# Nothing except nginx publishes a host port — the app services are reachable
+# only on the internal network, so the reverse proxy is the single ingress and
+# there is no way to bypass TLS by hitting :3000 directly.
+
+name: zuptech
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      # Consumed by the init script below.
+      ZUPTECH_DB_PASSWORD: ${ZUPTECH_DB_PASSWORD:?set ZUPTECH_DB_PASSWORD}
+      MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD:?set MEDIA_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Only executed when pgdata is empty — adding a database later means
+      # running the SQL by hand, not editing this file and restarting.
+      - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  storage:
+    image: ${REGISTRY:-ghcr.io/OWNER/REPO}/storage:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: storage/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 3100
+      HOST: 0.0.0.0
+      API_KEY: ${STORAGE_API_KEY:?set STORAGE_API_KEY}
+      DATABASE_URL: postgres://media_storage:${MEDIA_DB_PASSWORD}@db:5432/media_storage
+      STORAGE_ROOT: /data
+      MAX_UPLOAD_SIZE_BYTES: ${MAX_UPLOAD_SIZE_BYTES:-524288000}
+    volumes:
+      # The uploaded originals live here. This volume plus a pg_dump is the
+      # complete backup set — losing either one loses the media library.
+      - media_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    image: ${REGISTRY:-ghcr.io/OWNER/REPO}/backend:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://zuptech:${ZUPTECH_DB_PASSWORD}@db:5432/zuptech
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS}
+      # In-network for server-side uploads…
+      STORAGE_URL: http://storage:3100
+      STORAGE_API_KEY: ${STORAGE_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+      storage:
+        condition: service_started
+
+  frontend:
+    image: ${REGISTRY:-ghcr.io/OWNER/REPO}/frontend:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: fronend/Dockerfile
+      args:
+        # …but the BROWSER fetches media directly, so this one must be the
+        # public https origin, and it is baked in at build time.
+        NEXT_PUBLIC_STORAGE_URL: ${NEXT_PUBLIC_STORAGE_URL:?set NEXT_PUBLIC_STORAGE_URL}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
+      BACKEND_URL: http://backend:3000
+    depends_on:
+      backend:
+        condition: service_started
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - frontend
+      - backend
+      - storage
+    # Picks up renewed certificates without a manual restart.
+    command: >
+      /bin/sh -c "while :; do sleep 12h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: >
+      /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done"
+
+volumes:
+  pgdata:
+  media_data:
+  certbot_conf:
+  certbot_www:
