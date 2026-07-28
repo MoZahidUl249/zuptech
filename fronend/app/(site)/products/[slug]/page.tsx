@@ -63,12 +63,32 @@ export default async function ProductPage({
       "@type": "Offer",
       url: `${site.url}/products/${product.slug}`,
       priceCurrency: "BDT",
-      price: product.price,
+      price: product.salePrice ?? product.price,
       availability: outOfStock
         ? "https://schema.org/OutOfStock"
         : "https://schema.org/InStock",
       itemCondition: "https://schema.org/NewCondition",
       seller: { "@id": `${site.url}/#organization` },
+      // Quantity tiers, so the promotions are machine-readable too. Computed
+      // from the product's own percentages the same way the server does
+      // (floor), which is safe here because it's metadata, not a rendered
+      // price — the cart still reprices through /api/pricing/quote.
+      ...(product.quantityOffers?.length
+        ? {
+            priceSpecification: [...product.quantityOffers]
+              .sort((a, b) => a.minQty - b.minQty)
+              .map((tier) => ({
+                "@type": "UnitPriceSpecification",
+                priceCurrency: "BDT",
+                price: product.price - Math.floor((product.price * tier.percentage) / 100),
+                eligibleQuantity: {
+                  "@type": "QuantitativeValue",
+                  minValue: tier.minQty,
+                  unitCode: "C62", // UN/CEFACT code for "one" (a countable item)
+                },
+              })),
+          }
+        : {}),
     },
   };
 

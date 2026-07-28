@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { PiggyBank } from "lucide-react";
 import { formatBDT } from "@/lib/site";
 import type { Product } from "@/lib/products";
 import { cn } from "@/lib/utils";
+import { OfferLadder } from "./offer-ladder";
 
 export function ProductImagePlaceholder({
   label,
@@ -38,6 +40,13 @@ export function ProductCard({
   // salePrice is server-computed (PublicProductDto) — never derived here.
   const hasSale =
     product.salePrice !== undefined && product.salePrice < product.price;
+  // Display-only arithmetic over two server-given numbers: the gap between
+  // them, and that gap as a percentage when the server didn't label one. No
+  // charged amount is derived here (cal-bk.md) — the card only names the
+  // difference between the two prices it was handed.
+  const saving = hasSale ? product.price - product.salePrice! : 0;
+  const savingPct =
+    product.salePercentage ?? (hasSale ? Math.round((saving / product.price) * 100) : 0);
 
   return (
     <Link
@@ -63,9 +72,12 @@ export function ProductCard({
             Out of stock
           </span>
         )}
-        {product.onSale && (product.salePercentage ?? 0) > 0 && (
-          <span className="absolute right-2.5 top-2.5 rounded-full bg-zup-orange px-2.5 py-1 text-[11px] font-bold text-white">
-            −{product.salePercentage}%
+        {/* Gated on hasSale, same as the price block below — so the stamp and
+            the prices can never tell two different stories. */}
+        {hasSale && savingPct > 0 && (
+          <span className="absolute right-2 top-2 flex flex-col items-center rounded-xl bg-zup-orange px-2 py-1 text-white shadow-[0_4px_12px_rgba(232,83,32,.35)]">
+            <span className="text-[15px] font-extrabold leading-none">{savingPct}%</span>
+            <span className="text-[8.5px] font-bold uppercase tracking-[0.12em]">off</span>
           </span>
         )}
       </div>
@@ -78,26 +90,41 @@ export function ProductCard({
         <h3 className="min-h-9 text-sm font-semibold leading-tight text-zup-body">
           {product.name}
         </h3>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="flex items-baseline gap-1.5">
-            <span className="text-[15px] font-bold">
-              {formatBDT(product.salePrice ?? product.price)}
-            </span>
-            {hasSale ? (
-              <span className="text-[12px] text-zup-soft line-through">
-                {formatBDT(product.price)}
+        {/* The three facts of a deal, in the order they're asked: what it costs
+            now, what it cost before, what you keep. Each is labelled in words —
+            a struck-through number on its own asks the reader to infer both
+            that there is a discount and what it's worth. */}
+        {hasSale ? (
+          <div className="mt-0.5 rounded-xl bg-zup-orange/8 px-2.5 py-2 ring-1 ring-zup-orange/15">
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.07em] text-zup-orange-dark">
+                Now
               </span>
-            ) : null}
+              <span className="text-[19px] font-extrabold leading-none tracking-[-0.01em] text-zup-orange-dark">
+                {formatBDT(product.salePrice!)}
+              </span>
+            </span>
+            <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+              <span className="text-[11px] text-zup-soft">
+                Was <span className="line-through">{formatBDT(product.price)}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-zup-green px-1.5 py-[2px] text-[10.5px] font-bold text-white">
+                <PiggyBank className="h-3 w-3" strokeWidth={2.2} aria-hidden />
+                Save {formatBDT(saving)}
+              </span>
+            </span>
+          </div>
+        ) : (
+          <span className="text-[16px] font-bold text-zup-body">
+            {formatBDT(product.price)}
           </span>
-          <span className="text-[11.5px] text-zup-soft">
-            ★ {product.rating} · {product.sold} sold
-          </span>
-        </div>
-        {(product.freeDeliveryMinQty ?? 0) > 0 ? (
-          <span className="text-[11px] font-semibold text-zup-green-dark">
-            Free delivery on {product.freeDeliveryMinQty}+
-          </span>
-        ) : null}
+        )}
+        <span className="text-[11.5px] text-zup-soft">
+          ★ {product.rating} · {product.sold} sold
+        </span>
+        {/* No qty here — the card advertises what's available, it doesn't
+            claim anything is applied. */}
+        <OfferLadder product={product} variant="badges" />
       </div>
     </Link>
   );

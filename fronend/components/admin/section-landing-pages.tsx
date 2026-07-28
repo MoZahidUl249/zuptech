@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Eye, Copy, ExternalLink } from "lucide-react";
-import { useAdmin, taka, type AdminProduct } from "@/lib/admin";
+import { useAdmin, taka, tempId, type AdminProduct } from "@/lib/admin";
 import {
   useLandingPages,
   createLandingPage,
@@ -45,7 +45,7 @@ export function LandingPagesSection() {
       const created = await createLandingPage({
         title: "New landing page",
         headline: "",
-        slug: `lp-${Date.now()}`,
+        slug: tempId("lp"),
         productId: firstProduct.id,
         offerPrice: firstProduct.price,
         compareAtPrice: firstProduct.price,
@@ -80,7 +80,7 @@ export function LandingPagesSection() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-[560px] text-[13px] leading-relaxed text-zup-gray">
+        <p className="max-w-[560px] text-ui-sm leading-relaxed text-zup-gray">
           Product-specific campaign pages. They are never linked from the store,
           never appear in search or navigation — the only way in is the share
           link. Each page carries its own GTM container so ad spend is tracked
@@ -96,7 +96,7 @@ export function LandingPagesSection() {
       {loading ? (
         <p className="text-sm text-zup-gray">Loading…</p>
       ) : error ? (
-        <p className="text-sm text-[#D32F2F]">Couldn&apos;t load landing pages.</p>
+        <p className="text-sm text-destructive">Couldn&apos;t load landing pages.</p>
       ) : pages.length === 0 ? (
         <Card className="px-6 py-8 text-center text-sm text-zup-gray">
           No landing pages yet.
@@ -113,12 +113,12 @@ export function LandingPagesSection() {
                 <Badge variant={page.published ? "default" : "secondary"} className="mb-2">
                   {page.published ? "Live via link" : "Draft"}
                 </Badge>
-                <p className="text-[15px] font-bold">{page.title}</p>
-                <p className="text-[13px] text-zup-gray">
+                <p className="text-ui-base font-bold">{page.title}</p>
+                <p className="text-ui-sm text-zup-gray">
                   {page.productName}
                   {!page.productVisible ? (
                     <span
-                      className="ml-2 rounded-full bg-[#FDF3DC] px-2 py-0.5 text-[10.5px] font-bold text-[#B7791F]"
+                      className="ml-2 rounded-full bg-warn-bg px-2 py-0.5 text-ui-micro font-bold text-warn-fg"
                       title="This product is not on the storefront — this landing page is the only way to buy it."
                     >
                       Off-catalogue
@@ -130,7 +130,7 @@ export function LandingPagesSection() {
                   {page.orderCount.toLocaleString()} orders
                 </p>
               </div>
-              <span className="whitespace-nowrap text-[15px] font-bold">
+              <span className="whitespace-nowrap text-ui-base font-bold">
                 {taka(page.offerPrice)}
               </span>
             </div>
@@ -287,9 +287,9 @@ function LandingPageEditor({
       </div>
 
       <Card
-        className={`px-5 py-4 sm:px-6 ${draft.published ? "ring-[#1fa855]/30" : "ring-transparent"}`}
+        className={`px-5 py-4 sm:px-6 ${draft.published ? "ring-zup-green/30" : "ring-transparent"}`}
       >
-        <p className="mb-2 text-[13px] font-bold text-zup-gray">
+        <p className="mb-2 text-ui-sm font-bold text-zup-gray">
           {draft.published ? (
             <span className="text-zup-green">Live — anyone with the link can order</span>
           ) : (
@@ -297,7 +297,7 @@ function LandingPageEditor({
           )}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded-lg bg-secondary px-3 py-2 text-[12.5px]">
+          <code className="min-w-0 flex-1 truncate rounded-lg bg-secondary px-3 py-2 text-ui-xs">
             {shareUrl(draft.slug)}
           </code>
           <Button type="button" variant="outline" size="sm" onClick={() => void copyLink()}>
@@ -334,7 +334,7 @@ function LandingPageEditor({
               placeholder={page.productName}
               onChange={(e) => set("headline", e.target.value)}
             />
-            <p className="mt-1 text-[11.5px] leading-snug text-zup-soft">
+            <p className="mt-1 text-ui-micro leading-snug text-zup-soft">
               The &lt;h1&gt; visitors see. Leave blank to use the product name.
               The internal title above is never shown publicly.
             </p>
@@ -383,7 +383,7 @@ function LandingPageEditor({
                 a campaign can advertise a price the cart silently won't
                 honour, which is a refund conversation, not a bug report. */}
             {Number(draft.offerPrice) !== page.productSellingPrice ? (
-              <p className="mt-1 text-[11.5px] font-semibold leading-snug text-[#B7791F]">
+              <p className="mt-1 text-ui-micro font-semibold leading-snug text-warn-fg">
                 Checkout will charge {taka(page.productSellingPrice)} — set the
                 product&apos;s sale price to match, or buyers see one price and pay
                 another.

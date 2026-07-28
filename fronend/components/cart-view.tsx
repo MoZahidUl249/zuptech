@@ -8,12 +8,12 @@ import { formatBDT } from "@/lib/site";
 import { cartToItems, useQuote, type QuoteLine } from "@/lib/quote";
 import { useDeliveryZone } from "@/lib/zone";
 import { ZonePicker } from "@/components/zone-picker";
+import { OfferLadder } from "@/components/offer-ladder";
 import {
   cartSavings,
   discountReason,
   freeDeliveryState,
   lineSavings,
-  nextQuantityOffer,
 } from "@/lib/pricing-display";
 
 export function CartView({ products }: { products: Product[] }) {
@@ -207,8 +207,8 @@ function LinePricing({
   const discounted = line.unitPrice < product.price;
   const reason = discountReason(product, line);
   const saved = lineSavings(product, line);
-  const delivery = freeDeliveryState(product, line);
-  const nextOffer = nextQuantityOffer(product.quantityOffers, qty);
+  // Server truth: the fee is actually zero on this line, whatever the tiers say.
+  const deliveryFree = freeDeliveryState(product, line).free;
 
   return (
     <>
@@ -239,23 +239,15 @@ function LinePricing({
         </span>
       ) : null}
 
-      {delivery.free ? (
+      {deliveryFree ? (
         <span className="flex items-center gap-1 text-[11.5px] font-semibold text-zup-green-dark">
           <Truck className="h-3 w-3" strokeWidth={2} aria-hidden />
           Free delivery
         </span>
-      ) : delivery.unitsAway ? (
-        <span className="flex items-center gap-1 text-[11.5px] text-zup-gray">
-          <Truck className="h-3 w-3" strokeWidth={1.8} aria-hidden />
-          Add {delivery.unitsAway} more for free delivery
-        </span>
       ) : null}
 
-      {nextOffer ? (
-        <span className="text-[11.5px] text-zup-gray">
-          Add {nextOffer.minQty - qty} more to save {nextOffer.percentage}%
-        </span>
-      ) : null}
+      {/* Which tiers this quantity has earned, and the nearest one it hasn't. */}
+      <OfferLadder product={product} qty={qty} variant="line" />
     </>
   );
 }

@@ -77,19 +77,19 @@ model Product {
   deliveryFeeOutsideDhaka     Int @default(0)
   installationFeeInsideDhaka  Int @default(0)
   installationFeeOutsideDhaka Int @default(0)
-  freeDeliveryMinQty          Int @default(0) // 0 = disabled; qty ≥ this on a line zeroes its delivery fee
 
   warrantyMonths Int @default(0) // 0 = no warranty; drives Warranty rows on delivery
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orderItems      OrderItem[]
-  purchaseOrders  PurchaseOrder[]
-  movements       StockMovement[]
-  quantityOffers  QuantityOffer[]
-  warranties      Warranty[]
-  landingPages    LandingPage[]
+  orderItems         OrderItem[]
+  purchaseOrders     PurchaseOrder[]
+  movements          StockMovement[]
+  quantityOffers     QuantityOffer[]
+  freeDeliveryOffers FreeDeliveryOffer[]
+  warranties         Warranty[]
+  landingPages       LandingPage[]
 
   @@index([categoryId])
 }
@@ -110,12 +110,34 @@ model QuantityOffer {
   @@index([productId])
 }
 
+/// A "buy N+, delivery X% off" tier on a product. Same shape and same
+/// resolution rule as QuantityOffer: the highest minQty a cart line's qty
+/// satisfies wins, tiers never stack — see rules.ts `deliveryDiscountPercent`.
+/// The discount applies to whichever zone fee the order resolves to
+/// (deliveryFeeInsideDhaka / deliveryFeeOutsideDhaka), so `percentage: 100`
+/// is "free delivery" and anything less is a partial break.
+model FreeDeliveryOffer {
+  id         Int     @id @default(autoincrement())
+  productId  String
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQty     Int // qty threshold, e.g. 3 = "buy 3 or more"
+  percentage Int // 1–100, % off the per-unit zone delivery fee at this tier
+
+  @@unique([productId, minQty])
+  @@index([productId])
+}
+
 /// ===== Orders & customers =====
 
 model Customer {
   id       String   @id @default(cuid())
   name     String
   phone    String   @unique // normalized 01XXXXXXXXX — this IS the login identity
+  /// Real, deliverable address — where password-reset OTPs are sent. Distinct
+  /// from User.email, which holds the synthetic `{phone}@customers.zuptech.local`
+  /// identifier Better Auth signs in with. Null on guest-checkout rows and on
+  /// accounts created before email was collected; those can't self-reset.
+  email    String?  @unique
   address  String   @default("") // last-used delivery address (free text) — prefills checkout
   insideDhaka Boolean @default(true) // last-used delivery zone — drives per-product delivery/installation fee
   joinedAt DateTime @default(now())
@@ -444,6 +466,10 @@ model Staff {
   id       String @id @default(cuid())
   name     String
   phone    String @default("")
+  /// Real, deliverable address for password-reset OTPs. User.email holds the
+  /// synthetic `{username}@staff.zuptech.local` identifier instead — see
+  /// Customer.email for the same split on the storefront side.
+  email    String? @unique
   username String @unique // mirrors the Better Auth username for easy lookup
   roleId   String
   role     Role   @relation(fields: [roleId], references: [id])

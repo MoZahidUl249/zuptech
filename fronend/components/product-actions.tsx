@@ -3,23 +3,27 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Wrench } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { type Product } from "@/lib/products";
-import { offerTiersLabel } from "@/lib/pricing-display";
 import { formatBDT } from "@/lib/site";
-import { cn } from "@/lib/utils";
+import { OfferLadder } from "./offer-ladder";
 
 export function ProductActions({
   product,
   ctaLabel = "Buy Now",
+  offersTitle,
 }: {
   product: Product;
   /** Overrides the primary "Buy Now" label — used by campaign landing pages
    *  with their own admin-configured button copy. */
   ctaLabel?: string;
+  /** Heading over the offer ladder. Landing pages retitle it, because there
+   *  the headline price is campaign copy and these are the catalog offers the
+   *  cart will actually honour. */
+  offersTitle?: string;
 }) {
   const [qty, setQty] = useState(1);
-  const [withSetup, setWithSetup] = useState(true);
   const { add } = useCart();
   const router = useRouter();
 
@@ -29,15 +33,20 @@ export function ProductActions({
     typeof product.available === "number" ? Math.min(99, Math.max(1, product.available)) : 99;
 
   // salePrice is server-computed (PublicProductDto); the client never derives
-  // a discount. Quantity offers are shown as available tiers rather than an
-  // applied price — the charged amount still comes from the quote at checkout.
+  // a discount. The offer ladder below reads `qty` to show which tiers this
+  // quantity has reached — it still shows no money; the charged amount comes
+  // from the quote at checkout.
   const hasSale = product.salePrice !== undefined && product.salePrice < product.price;
   const effectivePrice = product.salePrice ?? product.price;
-  const tiers = offerTiersLabel(product.quantityOffers);
+
+  // Either zone having a fee means this product ships with installation.
+  const hasInstallation = Boolean(
+    product.installationFeeInsideDhaka || product.installationFeeOutsideDhaka,
+  );
 
   const addToCart = () => {
     add(product.id, qty);
-    toast.success(`Added to cart ✓${withSetup ? " (with setup)" : ""}`);
+    toast.success("Added to cart ✓");
   };
 
   const buyNow = () => {
@@ -83,50 +92,27 @@ export function ProductActions({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <span className="text-xs font-bold uppercase tracking-[0.06em] text-zup-soft">
-          Setup
-        </span>
-        <div className="flex flex-wrap gap-2.5">
-          <button
-            type="button"
-            onClick={() => setWithSetup(true)}
-            className={cn(
-              "flex flex-col items-start gap-0.5 rounded-[14px] border-2 px-4 py-[11px] text-left transition-colors hover:border-zup-blue",
-              withSetup ? "border-zup-blue bg-zup-blue/5" : "border-zup-body/12 bg-white",
-            )}
-          >
-            <span className="text-sm font-bold text-zup-body">With setup</span>
-            <span className="text-xs text-zup-gray">
-              Engineer installs it · fee confirmed by phone
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setWithSetup(false)}
-            className={cn(
-              "flex flex-col items-start gap-0.5 rounded-[14px] border-2 px-4 py-[11px] text-left transition-colors hover:border-zup-blue",
-              !withSetup ? "border-zup-blue bg-zup-blue/5" : "border-zup-body/12 bg-white",
-            )}
-          >
-            <span className="text-sm font-bold text-zup-body">Without setup</span>
-            <span className="text-xs text-zup-gray">Product only, self-install</span>
-          </button>
-        </div>
-      </div>
+      {/*
+        This was a "With setup / Without setup" toggle. It was a fake choice:
+        the value was never sent anywhere, and the backend prices installation
+        from the delivery zone and the product's own fee alone
+        (backend/src/lib/pricing.ts). Someone picking "Without setup" was
+        charged for it anyway. It's now a statement of fact, shown only when
+        this product actually carries an installation fee — the exact amount
+        depends on the zone and appears in the checkout total.
+      */}
+      {hasInstallation ? (
+        <p className="flex items-start gap-2 rounded-[14px] border border-zup-body/10 bg-white px-4 py-3 text-[13px] leading-relaxed text-zup-mid">
+          <Wrench className="mt-0.5 h-4 w-4 flex-none text-zup-blue" strokeWidth={1.8} aria-hidden />
+          <span>
+            <strong className="font-bold">Installation included.</strong> Our engineer
+            fits it for you — the fee depends on your area and is shown before you pay.
+          </span>
+        </p>
+      ) : null}
 
-      {(tiers || (product.freeDeliveryMinQty ?? 0) > 0) && (
-        <div className="flex flex-col gap-1 rounded-[14px] bg-zup-green/8 px-4 py-3">
-          {tiers ? (
-            <span className="text-[12.5px] font-semibold text-zup-green-dark">{tiers}</span>
-          ) : null}
-          {(product.freeDeliveryMinQty ?? 0) > 0 ? (
-            <span className="text-[12.5px] font-semibold text-zup-green-dark">
-              Free delivery on {product.freeDeliveryMinQty}+ units
-            </span>
-          ) : null}
-        </div>
-      )}
+      {/* Live: rungs light up as the stepper crosses each threshold. */}
+      <OfferLadder product={product} qty={qty} variant="panel" title={offersTitle} />
 
       {/* Desktop buttons */}
       <div className="hidden flex-col gap-2.5 md:flex">

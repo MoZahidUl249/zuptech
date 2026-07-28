@@ -12,15 +12,20 @@ import {
   type InvoiceStatus,
   type OrderDetail,
   type OrderEvent,
+  type AdminOrder,
   type OrderStatus,
   type SiteContact,
   type WarrantyStatus,
 } from "@/lib/admin";
-import { getOrderDetail } from "@/lib/admin-api";
+import { getOrderDetail, setOrderPreparedBy } from "@/lib/admin-api";
+import { useFilterParams } from "./primitives/filter-params";
+import { FilterBar, FilterTabs } from "./primitives/filter-bar";
+import { PageHeader } from "./primitives";
 import { createInvoice, patchInvoice } from "@/lib/admin-invoices";
 import { generateWarranties, patchWarranty } from "@/lib/admin-warranty";
 import { cn } from "@/lib/utils";
 import {
+  BtnDanger,
   BtnGhost,
   BtnPrimary,
   Card,
@@ -33,9 +38,35 @@ import {
   selectCls,
   warrantyStatusTone,
 } from "./ui";
+import { ConfirmDialog } from "./confirm-dialog";
 import { InvoiceDocument } from "./invoice-document";
 
-const UNASSIGNED = "__unassigned__";
+// Reads as a sentence in the URL: /admin/orders?owner=unassigned
+const UNASSIGNED = "unassigned";
+
+/**
+ * What deleting this particular order will actually cost.
+ *
+ * Deliberately specific: an order isn't one row. Its invoice and warranty
+ * records go with it, a live order's reserved stock comes back, and a
+ * delivered one's revenue leaves the reports. "This can't be undone" doesn't
+ * tell anyone which of those applies to the order in front of them.
+ */
+function deleteWarning(o: AdminOrder): string {
+  const parts = [`${o.customer} · ${taka(o.total)}`];
+  if (o.invoiceId) parts.push(`Bill ${o.invoiceId} will be deleted too`);
+  if (o.warrantyCount > 0) {
+    parts.push(
+      `${o.warrantyCount} warranty record${o.warrantyCount === 1 ? "" : "s"} will be deleted`,
+    );
+  }
+  if (o.status === "Delivered") {
+    parts.push("The stock goes back and this sale leaves your reports");
+  } else if (o.status !== "Cancelled") {
+    parts.push("The stock it was holding is released");
+  }
+  return `${parts.join(". ")}. This can't be undone.`;
+}
 
 function shortDate(iso: string): string {
   const d = new Date(iso);
@@ -57,11 +88,17 @@ export function OrdersSection() {
   const { state, update, can } = useAdmin();
   const readOnly = can("orders") !== "manage";
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All statuses");
-  const [ownerFilter, setOwnerFilter] = useState("All staff");
-  const [totalMin, setTotalMin] = useState("");
-  const [totalMax, setTotalMax] = useState("");
+
+  // Filters live in the URL, not in state, so Today can deep-link straight to
+  // "?status=Processing" or "?owner=unassigned" and land on a screen already
+  // showing the right rows — and so a filtered view can be bookmarked or sent
+  // to someone else.
+  const { get, set, clear, active: filtersActive } = useFilterParams();
+  const q = get("q");
+  const statusFilter = get("status", "All statuses");
+  const ownerFilter = get("owner", "All staff");
+  const totalMin = get("min");
+  const totalMax = get("max");
 
   // The detail view owns its own fetch, so the list stays a pure projection of
   // AdminState and nothing here needs to know about events or invoices.
@@ -87,53 +124,58 @@ export function OrdersSection() {
     return matchQ && matchStatus && matchOwner && matchTotalMin && matchTotalMax;
   });
 
-  const filtersActive =
-    q.trim() !== "" ||
-    statusFilter !== "All statuses" ||
-    ownerFilter !== "All staff" ||
-    totalMin !== "" ||
-    totalMax !== "";
-
-  const resetFilters = () => {
-    setQ("");
-    setStatusFilter("All statuses");
-    setOwnerFilter("All staff");
-    setTotalMin("");
-    setTotalMax("");
-  };
-
-  const unclaimed = state.orders.filter((o) => o.preparedById === null).length;
+  const unclaimed = state.orders.filter(
+    (o) => o.preparedById === null && o.status !== "Cancelled" && o.status !== "Delivered",
+  ).length;
+  const byStatus = (s: OrderStatus) => state.orders.filter((o) => o.status === s).length;
 
   const head = ["Order", "Placed", "Customer", "Prepared by", "Total", "Invoice", "Status", ""];
 
+  // Plain-language names for the stages. "Processing" is what the database
+  // calls a brand-new order; "Needs confirming" is what it means to whoever
+  // has to deal with it.
+  const STAGES = [
+    { value: "All statuses", label: "All", count: state.orders.length },
+    { value: "Processing", label: "Needs confirming", count: byStatus("Processing") },
+    { value: "Confirmed", label: "Being prepared", count: byStatus("Confirmed") },
+    { value: "On the way", label: "On the way", count: byStatus("On the way") },
+    { value: "Delivered", label: "Delivered", count: byStatus("Delivered") },
+    { value: "Cancelled", label: "Cancelled", count: byStatus("Cancelled") },
+  ];
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search order, customer, phone, address or preparer…"
-          aria-label="Search orders"
-          className={`${inputCls} max-w-[420px] flex-1 rounded-full`}
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          aria-label="Filter by status"
-          className={selectCls}
-        >
-          {["All statuses", ...ORDER_STATUSES].map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
+    <div className="flex flex-col">
+      <PageHeader
+        title="Orders"
+        help="Every order customers have placed. Pick a stage below to see just those."
+      />
+
+      {/* The stage was one option inside a dropdown of five, next to four other
+          dropdowns. It is the thing people filter by constantly, so it gets to
+          be a row of buttons with counts — one click, and you can see how much
+          work is sitting in each stage without opening anything. */}
+      <FilterTabs
+        label="Filter by stage"
+        value={statusFilter}
+        onChange={(v) => set({ status: v === "All statuses" ? null : v })}
+        options={STAGES}
+      />
+
+      <FilterBar
+        search={q}
+        onSearchChange={(v) => set({ q: v })}
+        searchPlaceholder="Search order, customer, phone or address…"
+        activeCount={[ownerFilter !== "All staff", totalMin, totalMax].filter(Boolean).length}
+        onReset={filtersActive ? clear : undefined}
+      >
         <select
           value={ownerFilter}
-          onChange={(e) => setOwnerFilter(e.target.value)}
-          aria-label="Filter by who prepared the order"
+          onChange={(e) => set({ owner: e.target.value === "All staff" ? null : e.target.value })}
+          aria-label="Filter by who is handling the order"
           className={selectCls}
         >
-          <option value="All staff">All staff</option>
-          <option value={UNASSIGNED}>Unassigned{unclaimed ? ` (${unclaimed})` : ""}</option>
+          <option value="All staff">Anyone handling it</option>
+          <option value={UNASSIGNED}>Nobody yet{unclaimed ? ` (${unclaimed})` : ""}</option>
           {state.staff.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
@@ -145,28 +187,27 @@ export function OrdersSection() {
             type="number"
             inputMode="numeric"
             value={totalMin}
-            onChange={(e) => setTotalMin(e.target.value)}
-            placeholder="Min total"
-            aria-label="Minimum total"
+            onChange={(e) => set({ min: e.target.value })}
+            placeholder="Min ৳"
+            aria-label="Smallest order total"
             className={`${inputCls} w-24`}
           />
-          <span className="text-zup-faint">-</span>
+          <span className="text-zup-faint">–</span>
           <input
             type="number"
             inputMode="numeric"
             value={totalMax}
-            onChange={(e) => setTotalMax(e.target.value)}
-            placeholder="Max total"
-            aria-label="Maximum total"
+            onChange={(e) => set({ max: e.target.value })}
+            placeholder="Max ৳"
+            aria-label="Largest order total"
             className={`${inputCls} w-24`}
           />
         </div>
-        {filtersActive ? <BtnGhost onClick={resetFilters}>Reset filters</BtnGhost> : null}
-      </div>
+      </FilterBar>
 
-      <p className="text-[13px] font-semibold text-zup-soft">
+      <p className="mb-3 text-ui-sm font-semibold text-zup-soft">
         {rows.length} of {state.orders.length} orders
-        {unclaimed > 0 ? ` · ${unclaimed} not yet claimed` : ""}
+        {unclaimed > 0 ? ` · ${unclaimed} with nobody looking after them` : ""}
       </p>
 
       <Card className="px-2 py-2">
@@ -174,14 +215,14 @@ export function OrdersSection() {
           {rows.map((o) => (
             <tr key={o.id} className="last:[&>td]:border-0">
               <Td className="font-bold">{o.id}</Td>
-              <Td className="whitespace-nowrap text-[13px] text-zup-gray">
+              <Td className="whitespace-nowrap text-ui-sm text-zup-gray">
                 {shortDate(o.createdAt)}
               </Td>
               <Td className="text-zup-mid">
                 {o.customer}
-                <span className="block text-[12px] text-zup-gray">{o.phone}</span>
+                <span className="block text-ui-xs text-zup-gray">{o.phone}</span>
               </Td>
-              <Td className="whitespace-nowrap text-[13px]">
+              <Td className="whitespace-nowrap text-ui-sm">
                 {o.preparedBy ? (
                   <span className="font-semibold text-zup-mid">{o.preparedBy}</span>
                 ) : (
@@ -189,13 +230,13 @@ export function OrdersSection() {
                 )}
               </Td>
               <Td className="whitespace-nowrap font-bold">{taka(o.total)}</Td>
-              <Td className="whitespace-nowrap text-[13px]">
+              <Td className="whitespace-nowrap text-ui-sm">
                 {o.invoiceId ? (
                   <>
                     <span className="text-zup-mid">{o.invoiceId}</span>
                     <Pill
                       tone={invoiceStatusTone(o.invoiceStatus ?? "")}
-                      className="ml-1.5 px-2 py-0.5 text-[10.5px]"
+                      className="ml-1.5 px-2 py-0.5 text-ui-micro"
                     >
                       {o.invoiceStatus}
                     </Pill>
@@ -228,7 +269,23 @@ export function OrdersSection() {
                 )}
               </Td>
               <Td>
-                <BtnGhost onClick={() => setSelectedId(o.id)}>Open</BtnGhost>
+                <div className="flex items-center justify-end gap-1.5">
+                  <BtnGhost onClick={() => setSelectedId(o.id)}>Open</BtnGhost>
+                  {readOnly ? null : (
+                    <ConfirmDialog
+                      trigger={
+                        <BtnDanger className="min-h-9 px-3">Delete</BtnDanger>
+                      }
+                      title={`Delete order ${o.id}?`}
+                      description={deleteWarning(o)}
+                      confirmLabel="Delete for good"
+                      onConfirm={() => {
+                        update({ orders: state.orders.filter((x) => x.id !== o.id) });
+                        toast(`${o.id} deleted`);
+                      }}
+                    />
+                  )}
+                </div>
               </Td>
             </tr>
           ))}
@@ -296,23 +353,11 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
     }
   };
 
-  const patchOrder = (body: { status?: OrderStatus; preparedById?: string | null }) =>
-    fetch(`/admin/api/orders/${encodeURIComponent(orderId)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }).then(async (res) => {
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error ?? `Update failed (${res.status})`);
-      }
-    });
-
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
         <BtnGhost onClick={onBack}>← Back to orders</BtnGhost>
-        <Card className="px-5 py-10 text-center text-[13px] text-zup-soft">Loading order…</Card>
+        <Card className="px-5 py-10 text-center text-ui-sm text-zup-soft">Loading order…</Card>
       </div>
     );
   }
@@ -322,7 +367,7 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
       <div className="flex flex-col gap-4">
         <BtnGhost onClick={onBack}>← Back to orders</BtnGhost>
         <Card className="px-5 py-10 text-center">
-          <p className="text-[14px] font-semibold text-[#D32F2F]">
+          <p className="text-ui-base font-semibold text-destructive">
             {error || "Order not found"}
           </p>
           <div className="mt-4">
@@ -341,14 +386,14 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
         <button
           type="button"
           onClick={onBack}
-          className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full bg-secondary px-3.5 text-[13px] font-bold text-zup-mid transition-colors hover:bg-zup-body/10"
+          className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full bg-secondary px-3.5 text-ui-sm font-bold text-zup-mid transition-colors hover:bg-zup-body/10"
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           Back to orders
         </button>
-        <h2 className="text-[18px] font-extrabold tracking-[-0.015em]">{order.id}</h2>
+        <h2 className="text-ui-lg font-extrabold tracking-[-0.015em]">{order.id}</h2>
         <Pill tone={orderStatusTone(order.status)}>{order.status}</Pill>
-        <span className="text-[12.5px] text-zup-soft">{shortDateTime(order.createdAt)}</span>
+        <span className="text-ui-xs text-zup-soft">{shortDateTime(order.createdAt)}</span>
       </div>
 
       <div className="no-print grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -357,19 +402,19 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
           <Card className="px-5 py-5 sm:px-6">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <p className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-zup-gray">
+                <p className="text-ui-micro font-bold uppercase tracking-[0.16em] text-zup-gray">
                   Customer
                 </p>
-                <p className="mt-1.5 text-[14.5px] font-bold">{order.customer}</p>
-                <p className="text-[13px] text-zup-mid">{order.phone}</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-zup-gray">{order.address}</p>
+                <p className="mt-1.5 text-ui-base font-bold">{order.customer}</p>
+                <p className="text-ui-sm text-zup-mid">{order.phone}</p>
+                <p className="mt-1 text-ui-sm leading-relaxed text-zup-gray">{order.address}</p>
               </div>
               <div>
-                <p className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-zup-gray">
+                <p className="text-ui-micro font-bold uppercase tracking-[0.16em] text-zup-gray">
                   Payment
                 </p>
-                <p className="mt-1.5 text-[14px] font-semibold">{order.pay}</p>
-                <p className="mt-1 text-[13px] text-zup-gray">
+                <p className="mt-1.5 text-ui-base font-semibold">{order.pay}</p>
+                <p className="mt-1 text-ui-sm text-zup-gray">
                   {order.insideDhaka ? "Inside Dhaka" : "Outside Dhaka"}
                 </p>
               </div>
@@ -380,7 +425,7 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
                 {order.items.map((item) => (
                   <tr key={item.productId} className="last:[&>td]:border-0">
                     <Td className="font-semibold">{item.name}</Td>
-                    <Td className="text-[12.5px] text-zup-gray">{item.sku}</Td>
+                    <Td className="text-ui-xs text-zup-gray">{item.sku}</Td>
                     <Td>{item.qty}</Td>
                     <Td>{taka(item.unitPrice)}</Td>
                     <Td className="font-bold">{taka(item.lineTotal)}</Td>
@@ -390,7 +435,7 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
             </div>
 
             <div className="mt-4 flex justify-end">
-              <div className="flex w-full max-w-[240px] flex-col gap-1.5 text-[13px]">
+              <div className="flex w-full max-w-[240px] flex-col gap-1.5 text-ui-sm">
                 <div className="flex justify-between text-zup-gray">
                   <span>Goods</span>
                   <span>{taka(goodsTotal)}</span>
@@ -403,7 +448,7 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
                   <span>Installation</span>
                   <span>{taka(order.installationFee)}</span>
                 </div>
-                <div className="mt-1 flex justify-between border-t border-zup-body/10 pt-2 text-[15px] font-extrabold">
+                <div className="mt-1 flex justify-between border-t border-zup-body/10 pt-2 text-ui-base font-extrabold">
                   <span>Total</span>
                   <span>{taka(order.total)}</span>
                 </div>
@@ -438,10 +483,10 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
         {/* Accountability sidebar */}
         <div className="flex flex-col gap-4">
           <Card className="px-5 py-5">
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-zup-gray">
+            <p className="text-ui-micro font-bold uppercase tracking-[0.16em] text-zup-gray">
               Prepared by
             </p>
-            <p className="mt-2 text-[15px] font-bold">
+            <p className="mt-2 text-ui-base font-bold">
               {order.preparedBy ?? <span className="text-zup-faint">Unassigned</span>}
             </p>
             {readOnly ? null : (
@@ -452,7 +497,7 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
                   aria-label="Assign who prepared this order"
                   onChange={(e) =>
                     void run("Prepared by updated", () =>
-                      patchOrder({ preparedById: e.target.value || null }),
+                      setOrderPreparedBy(orderId, e.target.value || null),
                     )
                   }
                   className={`${selectCls} w-full`}
@@ -469,7 +514,7 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
                     disabled={busy}
                     onClick={() =>
                       void run("You are now the preparer", () =>
-                        patchOrder({ preparedById: user.id }),
+                        setOrderPreparedBy(orderId, user.id),
                       )
                     }
                   >
@@ -481,11 +526,11 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
           </Card>
 
           <Card className="px-5 py-5">
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-zup-gray">
+            <p className="text-ui-micro font-bold uppercase tracking-[0.16em] text-zup-gray">
               Timeline
             </p>
             {order.events.length === 0 ? (
-              <p className="mt-3 text-[13px] text-zup-soft">No activity recorded yet.</p>
+              <p className="mt-3 text-ui-sm text-zup-soft">No activity recorded yet.</p>
             ) : (
               <ol className="mt-3 flex flex-col gap-3.5">
                 {order.events.map((e) => (
@@ -505,8 +550,8 @@ const EVENT_DOTS: Record<string, string> = {
   placed: "bg-zup-blue",
   status: "bg-zup-green",
   "prepared-by": "bg-zup-orange",
-  invoice: "bg-[#6B46C1]",
-  warranty: "bg-[#B7791F]",
+  invoice: "bg-note-fg",
+  warranty: "bg-warn-fg",
   note: "bg-zup-soft",
 };
 
@@ -521,8 +566,8 @@ function TimelineEntry({ event }: { event: OrderEvent }) {
         )}
       />
       <div className="min-w-0">
-        <p className="text-[13px] font-semibold leading-snug text-zup-body">{event.detail}</p>
-        <p className="text-[11.5px] text-zup-soft">
+        <p className="text-ui-sm font-semibold leading-snug text-zup-body">{event.detail}</p>
+        <p className="text-ui-micro text-zup-soft">
           {shortDateTime(event.at)} · {event.byName}
         </p>
       </div>
@@ -555,10 +600,10 @@ function InvoiceCard({
   return (
     <Card className="px-5 py-5 sm:px-6">
       <div className="flex flex-wrap items-center gap-2.5">
-        <p className="text-[15px] font-bold">Invoice</p>
+        <p className="text-ui-base font-bold">Invoice</p>
         {invoice ? (
           <>
-            <span className="text-[13px] font-semibold text-zup-mid">{invoice.id}</span>
+            <span className="text-ui-sm font-semibold text-zup-mid">{invoice.id}</span>
             <Pill tone={invoiceStatusTone(invoice.status)}>{invoice.status}</Pill>
           </>
         ) : null}
@@ -571,7 +616,7 @@ function InvoiceCard({
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full bg-secondary px-3.5 text-[13px] font-bold text-zup-mid transition-colors hover:bg-zup-body/10"
+                className="flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full bg-secondary px-3.5 text-ui-sm font-bold text-zup-mid transition-colors hover:bg-zup-body/10"
               >
                 <Printer className="h-3.5 w-3.5" aria-hidden />
                 Print
@@ -599,14 +644,14 @@ function InvoiceCard({
       </div>
 
       {invoice ? (
-        <p className="mt-2 text-[12.5px] text-zup-gray">
+        <p className="mt-2 text-ui-xs text-zup-gray">
           Raised {shortDate(invoice.createdAt)}
           {invoice.issuedAt ? ` · issued ${shortDate(invoice.issuedAt)}` : ""}
           {invoice.paidAt ? ` · paid ${shortDate(invoice.paidAt)}` : ""}
           {invoice.issuedBy ? ` · by ${invoice.issuedBy}` : ""}
         </p>
       ) : (
-        <p className="mt-2 text-[12.5px] text-zup-gray">
+        <p className="mt-2 text-ui-xs text-zup-gray">
           No invoice raised for this order yet.
         </p>
       )}
@@ -647,8 +692,8 @@ function WarrantyCard({
   return (
     <Card className="px-5 py-5 sm:px-6">
       <div className="flex flex-wrap items-center gap-2.5">
-        <p className="text-[15px] font-bold">Warranty</p>
-        <span className="text-[12.5px] text-zup-soft">
+        <p className="text-ui-base font-bold">Warranty</p>
+        <span className="text-ui-xs text-zup-soft">
           {order.warranties.length} record{order.warranties.length === 1 ? "" : "s"}
         </span>
         {editable && delivered ? (
@@ -661,7 +706,7 @@ function WarrantyCard({
       </div>
 
       {order.warranties.length === 0 ? (
-        <p className="mt-2 text-[12.5px] text-zup-gray">
+        <p className="mt-2 text-ui-xs text-zup-gray">
           {delivered
             ? "No warranty records — none of these products has a warranty period set."
             : "Warranty cover starts at delivery, so nothing is registered yet."}
@@ -671,14 +716,14 @@ function WarrantyCard({
           {order.warranties.map((w) => (
             <li key={w.id} className="py-3.5 first:pt-0 last:pb-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[13.5px] font-bold">{w.id}</span>
-                <span className="text-[13px] text-zup-mid">{w.productName}</span>
-                <span className="text-[12px] text-zup-gray">×{w.qty}</span>
+                <span className="text-ui-sm font-bold">{w.id}</span>
+                <span className="text-ui-sm text-zup-mid">{w.productName}</span>
+                <span className="text-ui-xs text-zup-gray">×{w.qty}</span>
                 <Pill tone={warrantyStatusTone(w.status)} className="ml-auto">
                   {w.status}
                 </Pill>
               </div>
-              <p className="mt-1 text-[12px] text-zup-gray">
+              <p className="mt-1 text-ui-xs text-zup-gray">
                 {w.months} months · {shortDate(w.startsAt)} → {shortDate(w.endsAt)}
               </p>
               {editable ? (
@@ -708,10 +753,10 @@ function WarrantyCard({
                   </select>
                 </div>
               ) : w.serialNo ? (
-                <p className="mt-1 text-[12px] text-zup-mid">Serial: {w.serialNo}</p>
+                <p className="mt-1 text-ui-xs text-zup-mid">Serial: {w.serialNo}</p>
               ) : null}
               {w.claimNote ? (
-                <p className="mt-1.5 text-[12px] leading-relaxed text-zup-gray">{w.claimNote}</p>
+                <p className="mt-1.5 text-ui-xs leading-relaxed text-zup-gray">{w.claimNote}</p>
               ) : null}
             </li>
           ))}

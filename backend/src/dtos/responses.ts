@@ -13,6 +13,13 @@ export interface QuantityOfferDto {
   percentage: number;
 }
 
+/** A "buy N+, X% off delivery" tier — see rules.ts `deliveryDiscountPercent`.
+ *  100 means the line ships free at that quantity. */
+export interface FreeDeliveryOfferDto {
+  minQty: number;
+  percentage: number;
+}
+
 export interface PublicProductDto {
   id: string;
   slug: string;
@@ -31,7 +38,7 @@ export interface PublicProductDto {
   deliveryFeeOutsideDhaka: number; // BDT, per unit
   installationFeeInsideDhaka: number; // BDT, per unit
   installationFeeOutsideDhaka: number; // BDT, per unit
-  freeDeliveryMinQty: number; // 0 = disabled; qty ≥ this on a line makes delivery free
+  freeDeliveryOffers: FreeDeliveryOfferDto[]; // "buy N+, X% off delivery" tiers, ordered by minQty ascending
   rating: number;
   sold: number;
   imgHint: string;
@@ -216,6 +223,9 @@ export interface CustomerProfileDto {
   id: string;
   name: string;
   phone: string;
+  /** Real address the reset code goes to; "" when none is on file (guest
+   *  checkout, or an account created before it was collected). */
+  email: string;
   address: string;
   insideDhaka: boolean;
 }
@@ -313,6 +323,9 @@ export interface PublicLandingPageDto {
   compareAtPrice: number;
   /** Derived server-side so the page and the ad creative can't disagree. */
   discountPercentage: number;
+  /** compareAtPrice − offerPrice, 0 when there's nothing to compare against.
+   *  Derived here for the same reason: the page renders it, never recomputes it. */
+  youSave: number;
   ribbonText: string;
   buttonLabel: string;
   footerNote: string;

@@ -64,6 +64,56 @@
   --color-zup-faint: #9aa0a8;
   --color-zup-bg: #fafafb;
   --color-zup-sky: #9fb8f5;
+
+  /* ===== Admin UI scale =====
+   * Deliberately namespaced `ui-*` rather than overriding Tailwind's own
+   * --text-sm / --text-base, which would silently restyle the whole
+   * storefront. Replaces ~270 arbitrary `text-[13.5px]`-style values across
+   * components/admin/. Body sits at 15px (was 14) and nothing goes below
+   * 11px — legibility is the point of the admin redesign. */
+  --text-ui-micro: 0.6875rem; /* 11px — uppercase eyebrows, table heads */
+  --text-ui-micro--line-height: 1.45;
+  --text-ui-xs: 0.75rem; /* 12px — secondary metadata */
+  --text-ui-xs--line-height: 1.5;
+  --text-ui-sm: 0.8125rem; /* 13px — dense table cells, help text */
+  --text-ui-sm--line-height: 1.55;
+  --text-ui-base: 0.9375rem; /* 15px — body, labels, buttons, inputs */
+  --text-ui-base--line-height: 1.55;
+  --text-ui-lg: 1.125rem; /* 18px — card and section titles */
+  --text-ui-lg--line-height: 1.35;
+  --text-ui-xl: 1.375rem; /* 22px — page title */
+  --text-ui-xl--line-height: 1.2;
+  --text-ui-2xl: 1.75rem; /* 28px — KPI numerals */
+  --text-ui-2xl--line-height: 1.02;
+
+  /* Status tones. These back PILL_TONES in components/admin/ui.tsx and every
+   * inline status colour that used to be a loose hex literal. */
+  --color-ok-bg: #e6f4ea;
+  --color-ok-fg: #2e7d32;
+  --color-info-bg: #e7edfc;
+  --color-info-fg: #0b4fe0;
+  --color-info-tint: #f4f7fe;
+  --color-warn-bg: #fdf3dc;
+  --color-warn-fg: #b7791f;
+  --color-note-bg: #efeafb;
+  --color-note-fg: #6b46c1;
+
+  /* Admin surfaces */
+  --color-canvas: #f2f3f6;
+  --color-surface-sunken: #fafbfc;
+  --color-surface-head: #f7f8fa;
+
+  /* The dark navigation rail and the admin login screen */
+  --color-rail: #0f1420;
+  --color-rail-active: #1d2739;
+  --color-rail-screen: #12161d;
+  --color-rail-fg: #98a0ad;
+  --color-rail-muted: #8a93a5;
+  --color-rail-dim: #6b7382;
+
+  /* Chart accents */
+  --color-chart-bar: #4d7ce8;
+  --color-star: #f0a32e;
 }
 
 :root {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { req } from "@/lib/admin-http";
 
 /** Row shape of GET /admin/api/landing-pages (LandingPageDto). */
 export interface LandingPage {
@@ -51,24 +52,6 @@ export interface LandingPage {
  * these paths, so the clean REST shape below works as documented.
  */
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    let message = `${method} ${path} → ${res.status}`;
-    try {
-      const data = (await res.json()) as { error?: string };
-      if (data.error) message = data.error;
-    } catch {
-      // keep status message
-    }
-    throw new Error(message);
-  }
-  return res.json();
-}
 
 export const listLandingPages = () => req<LandingPage[]>("GET", "/admin/api/landing-pages");
 

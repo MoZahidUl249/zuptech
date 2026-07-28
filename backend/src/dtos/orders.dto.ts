@@ -1,15 +1,25 @@
 import { t } from "elysia";
 import { cartItemsDto, orderStatusDto } from "./common";
 
-/** Guest checkout payload (cal-bk.md §2.2) — no money fields exist here;
- *  totals are recomputed server-side, never trusted. */
+/**
+ * Checkout payload (cal-bk.md §2.2) — no money fields exist here; totals are
+ * recomputed server-side, never trusted.
+ *
+ * `name`/`phone`/`address` are optional at the schema level because a
+ * signed-in customer checks out with nothing but `{ items, pay, insideDhaka }`
+ * — their identity and saved address come from the session, not the body.
+ * For a guest all three are required, which the handler enforces (it has to
+ * anyway: `address` needs a trimmed-length check the schema can't express).
+ */
 export const createOrderDto = t.Object({
-  name: t.String({ minLength: 2, maxLength: 120 }),
-  phone: t.String(),
-  address: t.String({ maxLength: 500 }),
+  name: t.Optional(t.String({ maxLength: 120 })),
+  phone: t.Optional(t.String()),
+  address: t.Optional(t.String({ maxLength: 500 })),
   insideDhaka: t.Boolean(),
   pay: t.String({ minLength: 1, maxLength: 40 }),
   items: cartItemsDto,
+  /** Signed-in only: persist this address/zone as the account's new default. */
+  saveAddress: t.Optional(t.Boolean()),
 });
 
 export const listOrdersQueryDto = t.Object({

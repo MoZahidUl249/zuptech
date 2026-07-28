@@ -69,12 +69,12 @@ export function InvoicesSection() {
           <button
             type="button"
             onClick={() => setSelectedId(null)}
-            className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full bg-secondary px-3.5 text-[13px] font-bold text-zup-mid transition-colors hover:bg-zup-body/10"
+            className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full bg-secondary px-3.5 text-ui-sm font-bold text-zup-mid transition-colors hover:bg-zup-body/10"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
             Back to invoices
           </button>
-          <h2 className="text-[18px] font-extrabold tracking-[-0.015em]">{selected.id}</h2>
+          <h2 className="text-ui-lg font-extrabold tracking-[-0.015em]">{selected.id}</h2>
           <Pill tone={invoiceStatusTone(selected.status)}>{selected.status}</Pill>
           <div className="ml-auto flex items-center gap-2">
             {readOnly ? null : (
@@ -93,7 +93,7 @@ export function InvoicesSection() {
             <button
               type="button"
               onClick={() => window.print()}
-              className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full bg-zup-ink px-4 text-[13px] font-bold text-white transition-colors hover:bg-zup-body"
+              className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full bg-zup-ink px-4 text-ui-sm font-bold text-white transition-colors hover:bg-zup-body"
             >
               <Printer className="h-3.5 w-3.5" aria-hidden />
               Print
@@ -156,14 +156,14 @@ export function InvoicesSection() {
         ) : null}
       </div>
 
-      <p className="text-[13px] font-semibold text-zup-soft">
+      <p className="text-ui-sm font-semibold text-zup-soft">
         {rows.length} of {list.length} invoices
         {outstanding > 0 ? ` · ${taka(outstanding)} issued and unpaid` : ""}
       </p>
 
       {error ? (
         <Card className="px-5 py-8 text-center">
-          <p className="text-[14px] font-semibold text-[#D32F2F]">Could not load invoices.</p>
+          <p className="text-ui-base font-semibold text-destructive">Could not load invoices.</p>
           <div className="mt-3">
             <BtnGhost onClick={() => void reload()}>Try again</BtnGhost>
           </div>
@@ -177,9 +177,9 @@ export function InvoicesSection() {
                 <Td className="text-zup-mid">{i.orderId}</Td>
                 <Td className="text-zup-mid">
                   {i.customer}
-                  <span className="block text-[12px] text-zup-gray">{i.phone}</span>
+                  <span className="block text-ui-xs text-zup-gray">{i.phone}</span>
                 </Td>
-                <Td className="whitespace-nowrap text-[13px] text-zup-gray">
+                <Td className="whitespace-nowrap text-ui-sm text-zup-gray">
                   {shortDate(i.createdAt)}
                 </Td>
                 <Td className="whitespace-nowrap font-bold">{taka(i.total)}</Td>

@@ -178,4 +178,45 @@ export const adminOrders = new Elysia({ name: "routes/admin/orders", detail: { t
       }
     },
     { body: updateOrderDto },
-  );
+  )
+
+  /**
+   * Permanently delete an order — for clearing out test and junk rows.
+   *
+   * Two things have to happen before the row goes, or the books stop matching
+   * the warehouse:
+   *
+   * 1. **Give the stock back.** A Processing/Confirmed/On-the-way order holds
+   *    `reserved` units; a Delivered one has already consumed physical stock
+   *    and counted toward `sold`. Deleting the row alone would strand those
+   *    numbers forever — the product would show fewer available units than it
+   *    has, with no order left to explain why. Running the same
+   *    Cancelled transition the status route uses unwinds whichever case
+   *    applies and writes the StockMovement that accounts for it.
+   *
+   * 2. **Let the cascades run.** OrderItem, OrderEvent, Invoice and Warranty
+   *    are all `onDelete: Cascade`, so the invoice and any warranty records
+   *    for this order go with it. That is a real loss of history, which is why
+   *    the admin asks first and spells out what will disappear.
+   *
+   * `preparedById` is SetNull, so deleting never touches a staff row.
+   */
+  .delete("/admin/api/orders/:id", async ({ params, staffCtx }) => {
+    assertCan(staffCtx, "orders", "manage");
+
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: params.id },
+        include: { items: true },
+      });
+      if (!order) throw notFound("Order");
+
+      const from = parseOrderStatus(order.status);
+      // Cancelled orders already hold no claim on stock, so this is a no-op
+      // for them (applyStatusTransition returns early when the state matches).
+      await applyStatusTransition(tx, order, from, "Cancelled", staffCtx.staff.username);
+
+      await tx.order.delete({ where: { id: order.id } });
+      return { ok: true, id: order.id };
+    });
+  });

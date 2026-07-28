@@ -9,9 +9,15 @@ export const permissionValueDto = t.Union([
 /** Keys are validated against ADMIN_MODULES in the route (unknown ⇒ 400). */
 export const permissionsDto = t.Record(t.String(), permissionValueDto);
 
+/** Real address for password-reset codes — not a sign-in identity (staff sign
+ *  in with a username). Optional: a staff member without one simply can't
+ *  self-recover, an admin still resets their password for them. "" clears it. */
+const staffEmailField = t.String({ maxLength: 200, pattern: "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$" });
+
 export const createStaffDto = t.Object({
   name: t.String({ minLength: 2, maxLength: 120 }),
   phone: t.Optional(t.String({ maxLength: 20 })),
+  email: t.Optional(staffEmailField),
   username: t.String({ minLength: 3, maxLength: 50, pattern: "^[a-zA-Z0-9_.-]+$" }),
   password: t.String({ minLength: 6, maxLength: 200 }),
   roleId: t.String(),
@@ -21,6 +27,7 @@ export const updateStaffDto = t.Partial(
   t.Object({
     name: t.String({ minLength: 2, maxLength: 120 }),
     phone: t.String({ maxLength: 20 }),
+    email: staffEmailField,
     roleId: t.String(),
     password: t.String({ minLength: 6, maxLength: 200 }),
   }),

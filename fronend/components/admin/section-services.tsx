@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Image as ImageIcon, Plus } from "lucide-react";
-import { useAdmin } from "@/lib/admin";
+import { useAdmin, tempId } from "@/lib/admin";
 import {
   createService,
   deleteService,
@@ -83,7 +83,7 @@ function ServiceCatalogueCard({
       // POST immediately rather than holding a client-only draft: the row needs
       // a server id before its image can be uploaded.
       const row = await createService(kind, {
-        slug: `new-service-${Date.now()}`,
+        slug: tempId("new-service"),
         name: "New service",
         dsc: "Describe this service…",
         features: [],
@@ -140,7 +140,7 @@ function ServiceCatalogueCard({
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-extrabold text-zup-body">{title}</h3>
-          <p className="mt-1 max-w-prose text-[13px] text-zup-gray">{blurb}</p>
+          <p className="mt-1 max-w-prose text-ui-sm text-zup-gray">{blurb}</p>
         </div>
         {!readOnly ? (
           <BtnPrimary onClick={add} disabled={adding || loading}>
@@ -353,7 +353,7 @@ function ServiceImageSlot({
             disabled={inert}
             onClick={() => fileRef.current?.click()}
             className={cn(
-              "cursor-pointer text-[11px] text-zup-blue underline disabled:cursor-not-allowed disabled:text-zup-faint disabled:no-underline",
+              "cursor-pointer text-ui-micro text-zup-blue underline disabled:cursor-not-allowed disabled:text-zup-faint disabled:no-underline",
               s.image &&
                 "absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-white no-underline",
             )}
@@ -391,7 +391,7 @@ function ServiceImageSlot({
           }}
         />
       </div>
-      <p className="max-w-28 text-[11px] leading-tight text-zup-faint">
+      <p className="max-w-28 text-ui-micro leading-tight text-zup-faint">
         {caption ?? `Square, 800×800+. ${IMAGE_FORMATS_LABEL}, under 8 MB.`}
       </p>
     </div>

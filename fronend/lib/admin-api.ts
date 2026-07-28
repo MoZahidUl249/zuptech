@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { get, postForm, req } from "@/lib/admin-http";
+import { emptyState } from "@/lib/admin";
 import type {
   AdminCustomer,
   AdminModule,
@@ -35,31 +37,12 @@ import type {
  * the backend, so the better-auth staff session cookie applies.
  */
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    let message = `${method} ${path} → ${res.status}`;
-    try {
-      const data = (await res.json()) as { error?: string };
-      if (data.error) message = data.error;
-    } catch {
-      // keep status message
-    }
-    throw new Error(message);
-  }
-  return res.json();
-}
 
-const get = <T,>(path: string) => req<T>("GET", path);
 
 /* ===== Auth / session ===== */
 
 export interface AdminMe {
-  staff: { id: string; name: string; username: string; phone: string };
+  staff: { id: string; name: string; username: string; phone: string; email: string };
   role: { id: string; name: string; isSystem?: boolean };
   permissions: Record<AdminModule, Permission>;
 }
@@ -72,6 +55,15 @@ export async function adminLogin(username: string, password: string): Promise<bo
   });
   return res.ok;
 }
+
+/** Mails a 6-digit reset code. Always resolves, whether or not the address
+ *  belongs to a staff account — the server won't say, and neither do we. */
+export const adminForgotPassword = (email: string) =>
+  req<{ ok: boolean }>("POST", "/admin/api/forgot-password", { email });
+
+/** Consumes the code from adminForgotPassword and sets the new password. */
+export const adminResetPassword = (email: string, otp: string, password: string) =>
+  req("POST", "/admin/api/reset-password", { email, otp, password });
 
 export async function adminLogout(): Promise<void> {
   await fetch("/admin/api/logout", { method: "POST" });
@@ -112,10 +104,10 @@ export function toAdminProduct(p: AdminProduct & { photos?: (string | null)[] })
     photos: (p.photos ?? []).filter((x): x is string => Boolean(x)),
     specs: p.specs ?? [],
     quantityOffers: p.quantityOffers ?? [],
+    freeDeliveryOffers: p.freeDeliveryOffers ?? [],
     categoryId: p.categoryId ?? "",
     category: p.category ?? "",
     section: p.section ?? "",
-    freeDeliveryMinQty: p.freeDeliveryMinQty ?? 0,
   };
 }
 
@@ -126,8 +118,60 @@ interface PublicSiteConfig {
   gtm: string | { id: string } | null;
 }
 
-/** Assemble the whole admin state from the backend's granular endpoints. */
-export async function loadAdminState(): Promise<AdminState> {
+/** One collection that couldn't be loaded, surfaced in the shell as a banner
+ *  rather than silently blanking the screen. */
+export interface LoadError {
+  label: string;
+  message: string;
+}
+
+export interface LoadResult {
+  state: AdminState;
+  errors: LoadError[];
+}
+
+/**
+ * Assemble the whole admin state from the backend's granular endpoints.
+ *
+ * Two rules, both learned the hard way:
+ *
+ * 1. **Don't request what this role can't have.** Most of these endpoints are
+ *    RBAC-gated and answer 403 to a role without `view` on their module. The
+ *    seeded Manager has `staff: none` and Support has seven modules at `none`,
+ *    so an unconditional fetch of all sixteen guaranteed several 403s.
+ *
+ * 2. **One failure must not empty the admin.** These used to run under a
+ *    single `Promise.all`, so the first 403 rejected the lot, `loadAll()`
+ *    threw, and state stayed at `emptyState()` — every non-super staff member
+ *    saw a completely blank admin with "0 of 0 orders" on a role that had
+ *    `orders: manage`. `allSettled` means a broken Stock endpoint costs Stock,
+ *    not the whole panel.
+ */
+export async function loadAdminState(
+  perms: Record<AdminModule, Permission>,
+): Promise<LoadResult> {
+  const errors: LoadError[] = [];
+
+  /** Fetch only if the role can see the module; fall back to `empty` on 403
+   *  or failure, recording anything that wasn't simply "not allowed". */
+  const slice = async <T,>(
+    module: AdminModule | null,
+    label: string,
+    fetcher: () => Promise<T>,
+    empty: T,
+  ): Promise<T> => {
+    if (module && perms[module] === "none") return empty;
+    try {
+      return await fetcher();
+    } catch (err) {
+      errors.push({
+        label,
+        message: err instanceof Error ? err.message : "Request failed",
+      });
+      return empty;
+    }
+  };
+
   const [
     roles,
     staff,
@@ -146,51 +190,96 @@ export async function loadAdminState(): Promise<AdminState> {
     messages,
     config,
   ] = await Promise.all([
-    get<Role[]>("/admin/api/roles"),
-    get<StaffMember[]>("/admin/api/staff"),
-    get<AdminProduct[]>("/admin/api/products"),
-    get<AdminSection[]>("/admin/api/sections"),
-    get<AdminCategory[]>("/admin/api/categories"),
-    get<AdminOrder[]>("/admin/api/orders"),
-    get<ServiceLead[]>("/admin/api/leads"),
-    get<IndustrialLead[]>("/admin/api/industrial-leads"),
-    get<(AdminCustomer & { joined: string })[]>("/admin/api/customers"),
-    get<HeroSlide[]>("/admin/api/slides"),
-    get<PaymentMethod[]>("/admin/api/payment-methods"),
-    get<Supplier[]>("/admin/api/suppliers"),
-    get<(PurchaseOrder & { eta: string })[]>("/admin/api/purchase-orders"),
-    get<(StockMovement & { date: string })[]>("/admin/api/movements"),
-    get<(ContactMessage & { createdAt: string })[]>("/admin/api/messages"),
-    get<PublicSiteConfig>("/api/site-config"),
+    slice("staff", "Staff roles", () => get<Role[]>("/admin/api/roles"), []),
+    slice("staff", "Staff", () => get<StaffMember[]>("/admin/api/staff"), []),
+    slice("products", "Products", () => get<AdminProduct[]>("/admin/api/products"), []),
+    slice("products", "Sections", () => get<AdminSection[]>("/admin/api/sections"), []),
+    slice("products", "Categories", () => get<AdminCategory[]>("/admin/api/categories"), []),
+    slice("orders", "Orders", () => get<AdminOrder[]>("/admin/api/orders"), []),
+    slice("leads", "Service requests", () => get<ServiceLead[]>("/admin/api/leads"), []),
+    slice(
+      "leads",
+      "Business enquiries",
+      () => get<IndustrialLead[]>("/admin/api/industrial-leads"),
+      [],
+    ),
+    slice(
+      "customers",
+      "Customers",
+      () => get<(AdminCustomer & { joined: string })[]>("/admin/api/customers"),
+      [],
+    ),
+    slice("homepage", "Home page", () => get<HeroSlide[]>("/admin/api/slides"), []),
+    slice(
+      "payments",
+      "Payment methods",
+      () => get<PaymentMethod[]>("/admin/api/payment-methods"),
+      [],
+    ),
+    slice("inventory", "Suppliers", () => get<Supplier[]>("/admin/api/suppliers"), []),
+    slice(
+      "inventory",
+      "Purchase orders",
+      () => get<(PurchaseOrder & { eta: string })[]>("/admin/api/purchase-orders"),
+      [],
+    ),
+    slice(
+      "inventory",
+      "Stock movements",
+      () => get<(StockMovement & { date: string })[]>("/admin/api/movements"),
+      [],
+    ),
+    slice(
+      "leads",
+      "Contact messages",
+      () => get<(ContactMessage & { createdAt: string })[]>("/admin/api/messages"),
+      [],
+    ),
+    // Public endpoint — no module gate, every role needs the site copy.
+    slice<PublicSiteConfig>("sitecontent", "Site content", () => get("/api/site-config"), {
+      featuredIds: [],
+      copy: emptyState().copy,
+      contact: emptyState().contact,
+      gtm: null,
+    }),
   ]);
 
   const gtmId = typeof config.gtm === "string" ? config.gtm : (config.gtm?.id ?? "");
   const integrations: Integrations = { gtmId, gtmEnabled: Boolean(gtmId) };
 
   return {
-    roles,
-    staff,
-    products: products.map(toAdminProduct),
-    sections,
-    categories,
-    featuredIds: config.featuredIds,
-    orders,
-    leads,
-    industrialLeads,
-    customers: customers.map((c) => ({ ...c, joined: shortDate(c.joined) })),
-    messages: messages.map((m) => ({ ...m, createdAt: shortDateTime(m.createdAt) })),
-    slides,
-    copy: config.copy,
-    contact: config.contact,
-    integrations,
-    payments,
-    suppliers,
-    purchaseOrders: purchaseOrders.map((po) => ({ ...po, eta: shortDate(po.eta) })),
-    movements: movements.map((m) => ({ ...m, date: shortDateTime(m.date) })),
+    errors,
+    state: {
+      roles,
+      staff,
+      products: products.map(toAdminProduct),
+      sections,
+      categories,
+      featuredIds: config.featuredIds,
+      orders,
+      leads,
+      industrialLeads,
+      customers: customers.map((c) => ({ ...c, joined: shortDate(c.joined) })),
+      messages: messages.map((m) => ({ ...m, createdAt: shortDateTime(m.createdAt) })),
+      slides,
+      copy: config.copy,
+      contact: config.contact,
+      integrations,
+      payments,
+      suppliers,
+      purchaseOrders: purchaseOrders.map((po) => ({ ...po, eta: shortDate(po.eta) })),
+      movements: movements.map((m) => ({ ...m, date: shortDateTime(m.date) })),
+    },
   };
 }
 
-/** Re-fetch a subset of collections after mutations that change server state. */
+/**
+ * Re-fetch a subset of collections after mutations that change server state.
+ *
+ * No permission guard here, unlike loadAdminState: a reloader only ever runs
+ * for a collection the user just successfully wrote to, which already proves
+ * `manage` on its module.
+ */
 export const reloaders = {
   products: async () =>
     (await get<AdminProduct[]>("/admin/api/products")).map(toAdminProduct),
@@ -217,6 +306,11 @@ export const reloaders = {
 
 /* ===== Mutations ===== */
 
+/** Permanently delete an order. The backend releases any stock it was holding
+ *  and cascades to its invoice and warranty records — see the route comment. */
+export const deleteOrder = (id: string) =>
+  req<{ ok: boolean }>("DELETE", `/admin/api/orders/${encodeURIComponent(id)}`);
+
 export const setOrderStatus = (id: string, status: OrderStatus) =>
   req("PATCH", `/admin/api/orders/${encodeURIComponent(id)}`, { status });
 
@@ -236,6 +330,12 @@ export const setIndustrialLeadStatus = (id: string, status: IndustrialLeadStatus
 
 export const deleteIndustrialLead = (id: string) =>
   req("DELETE", `/admin/api/industrial-leads/${encodeURIComponent(id)}`);
+
+/** Mark a contact message read or unread. The endpoint has existed since the
+ *  messages route was written; the admin had simply never called it, so every
+ *  message looked identical whether or not someone had dealt with it. */
+export const setMessageRead = (id: string, read: boolean) =>
+  req("PATCH", `/admin/api/messages/${encodeURIComponent(id)}`, { read });
 
 export const setFeatured = (ids: string[]) =>
   req("PATCH", "/admin/api/products/featured", { ids });
@@ -362,27 +462,6 @@ export const putPaymentMethod = (id: string, body: Partial<PaymentMethod>) =>
 
 /* ===== Location tree (delivery/installation pricing) ===== */
 
-export interface AdminLocationNode {
-  id: string;
-  type: "DIVISION" | "DISTRICT" | "CITY_CORPORATION" | "UPAZILA" | "THANA" | "CITY_CORP_AREA" | "UNION" | "WARD";
-  name: string;
-  parentId: string | null;
-  deliveryCost: number;
-  installationCost: number;
-  sort: number;
-  isLeaf: boolean;
-  hasChildren: boolean;
-}
-
-export const getLocationChildren = (parentId: string | null) =>
-  get<AdminLocationNode[]>(
-    `/admin/api/locations${parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""}`,
-  );
-
-export const patchLocationNode = (
-  id: string,
-  body: Partial<{ name: string; deliveryCost: number; installationCost: number; sort: number }>,
-) => req<AdminLocationNode>("PATCH", `/admin/api/locations/${encodeURIComponent(id)}`, body);
 
 /** Fields the backend accepts for product create/update (rest is computed). */
 function productBody(p: AdminProduct) {
@@ -398,10 +477,10 @@ function productBody(p: AdminProduct) {
     deliveryFeeOutsideDhaka: p.deliveryFeeOutsideDhaka,
     installationFeeInsideDhaka: p.installationFeeInsideDhaka,
     installationFeeOutsideDhaka: p.installationFeeOutsideDhaka,
-    freeDeliveryMinQty: p.freeDeliveryMinQty,
-    // A nested relation write, not a column — the backend replaces the whole
-    // tier list with whatever is sent, so always send the current one.
+    // Nested relation writes, not columns — the backend replaces each whole
+    // tier list with whatever is sent, so always send the current ones.
     quantityOffers: p.quantityOffers,
+    freeDeliveryOffers: p.freeDeliveryOffers,
     warrantyMonths: p.warrantyMonths,
     imgHint: p.imgHint,
     specs: p.specs.filter((s) => s.trim() !== ""),
@@ -430,20 +509,6 @@ export const patchProduct = (p: AdminProduct) =>
 export const deleteProduct = (id: string) =>
   req("DELETE", `/admin/api/products/${encodeURIComponent(id)}`);
 
-async function postForm<T>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(path, { method: "POST", body: form });
-  if (!res.ok) {
-    let message = `POST ${path} → ${res.status}`;
-    try {
-      const data = (await res.json()) as { error?: string };
-      if (data.error) message = data.error;
-    } catch {
-      // keep status message
-    }
-    throw new Error(message);
-  }
-  return res.json();
-}
 
 /** Append one photo to a product's gallery (goes to the media-storage
  *  service server-side; the API key never reaches the browser). */
@@ -606,6 +671,7 @@ export const createStaff = (s: StaffMember) =>
   req("POST", "/admin/api/staff", {
     name: s.name,
     phone: s.phone,
+    email: s.email ?? "",
     username: s.username,
     password: s.password ?? "",
     roleId: s.roleId,
@@ -615,6 +681,7 @@ export const patchStaff = (s: StaffMember) =>
   req("PATCH", `/admin/api/staff/${encodeURIComponent(s.id)}`, {
     name: s.name,
     phone: s.phone,
+    email: s.email ?? "",
     roleId: s.roleId,
     ...(s.password ? { password: s.password } : {}),
   });

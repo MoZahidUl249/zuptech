@@ -72,7 +72,6 @@ const validProduct = {
   deliveryFeeOutsideDhaka: 150,
   installationFeeInsideDhaka: 0,
   installationFeeOutsideDhaka: 0,
-  freeDeliveryMinQty: 0,
   warrantyMonths: 12,
   imgHint: "voltage protector photo",
   specs: ["Cuts off on high/low voltage"],
@@ -107,14 +106,6 @@ describe("product DTOs", () => {
     expect(Value.Check(updateProductDto, { categoryId: "cat_solar" })).toBe(true);
     expect(Value.Check(updateProductDto, { price: 100 })).toBe(true);
   });
-  test("freeDeliveryMinQty accepts a non-negative threshold, 0 disables it", () => {
-    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: 0 })).toBe(true);
-    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: 4 })).toBe(true);
-    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: -1 })).toBe(false);
-    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: 1000 })).toBe(false);
-    expect(Value.Check(updateProductDto, { freeDeliveryMinQty: 1.5 })).toBe(false);
-  });
-
   test("warrantyMonths accepts a period in months, 0 means no warranty", () => {
     expect(Value.Check(updateProductDto, { warrantyMonths: 0 })).toBe(true);
     expect(Value.Check(updateProductDto, { warrantyMonths: 24 })).toBe(true);
@@ -134,6 +125,26 @@ describe("product DTOs", () => {
     expect(Value.Check(updateProductDto, { quantityOffers: Array(11).fill({ minQty: 3, percentage: 5 }) })).toBe(
       false,
     );
+  });
+  test("freeDeliveryOffers accepts valid tiers and rejects out-of-range values", () => {
+    const tiers = [
+      { minQty: 2, percentage: 50 },
+      { minQty: 5, percentage: 100 }, // 100% = free delivery
+    ];
+    expect(Value.Check(createProductDto, { ...validProduct, freeDeliveryOffers: tiers })).toBe(true);
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: tiers })).toBe(true);
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [] })).toBe(true); // clears the ladder
+    // A 1-unit "tier" is the base fee, not an offer.
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 1, percentage: 50 }] })).toBe(false);
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 2, percentage: 0 }] })).toBe(false);
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 2, percentage: 101 }] })).toBe(false);
+    expect(
+      Value.Check(updateProductDto, { freeDeliveryOffers: Array(11).fill({ minQty: 2, percentage: 50 }) }),
+    ).toBe(false);
+  });
+  test("the two ladders are independent — sending one leaves the other alone", () => {
+    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 3, percentage: 5 }] })).toBe(true);
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 3, percentage: 100 }] })).toBe(true);
   });
 });
 

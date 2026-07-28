@@ -10,6 +10,13 @@ export interface QuantityOffer {
   percentage: number;
 }
 
+/** One free-delivery tier: buy `minQty`+ and `percentage`% comes off the
+ *  delivery fee. 100 = the line ships free. */
+export interface FreeDeliveryOffer {
+  minQty: number;
+  percentage: number;
+}
+
 export interface Product {
   id: string;
   slug: string;
@@ -53,8 +60,7 @@ export interface Product {
   deliveryFeeOutsideDhaka?: number;
   installationFeeInsideDhaka?: number;
   installationFeeOutsideDhaka?: number;
-  /** Order this many units or more and delivery is free (0 = never). */
-  freeDeliveryMinQty?: number;
+  freeDeliveryOffers?: FreeDeliveryOffer[];
 }
 
 /*

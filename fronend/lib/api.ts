@@ -158,6 +158,9 @@ export interface Customer {
   name: string;
   /** Login identity — never editable from the profile form. */
   phone: string;
+  /** Where password-reset codes are delivered. "" on accounts created before
+   *  it was collected, and on guest-checkout rows — those can't self-reset. */
+  email: string;
   address: string;
   /** Delivery zone — the backend prices delivery/installation as a two-tier
    *  inside/outside-Dhaka boolean. */
@@ -167,26 +170,39 @@ export interface Customer {
 export async function registerCustomer(
   name: string,
   phone: string,
+  email: string,
   password: string,
 ): Promise<void> {
-  await postJson("/api/auth/register", { name, phone, password });
+  await postJson("/api/auth/register", { name, phone, email, password });
 }
 
 export async function loginCustomer(phone: string, password: string): Promise<void> {
   await postJson("/api/auth/login", { phone, password });
 }
 
-/** Always succeeds (never reveals whether the phone has an account). devToken
- *  is only populated outside production, while no SMS gateway is wired up. */
-export async function requestPasswordReset(
+/**
+ * Set a password on the number a guest just ordered with, offered on the
+ * order success screen. Only works for a phone that has ordered but has no
+ * account yet — the backend answers the same way for every other case, so
+ * don't try to distinguish them here.
+ */
+export async function claimAccount(
   phone: string,
-): Promise<{ ok: boolean; devToken?: string }> {
-  return postJson("/api/auth/forgot-password", { phone });
+  password: string,
+  email?: string,
+): Promise<void> {
+  await postJson("/api/auth/claim", { phone, password, ...(email ? { email } : {}) });
+}
+
+/** Mails a 6-digit code. Always succeeds — the response never reveals whether
+ *  the address belongs to an account, and the code only travels by email. */
+export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
+  return postJson("/api/auth/forgot-password", { email });
 }
 
 /** otp is the 6-digit code from requestPasswordReset. */
-export async function resetPassword(phone: string, otp: string, password: string): Promise<void> {
-  await postJson("/api/auth/reset-password", { phone, otp, password });
+export async function resetPassword(email: string, otp: string, password: string): Promise<void> {
+  await postJson("/api/auth/reset-password", { email, otp, password });
 }
 
 /** The signed-in customer, or null when there is no session. */
@@ -244,6 +260,37 @@ export async function getMyOrders(): Promise<MyOrder[]> {
   return getJson<MyOrder[]>("/api/my/orders");
 }
 
+/**
+ * Checkout payload. No amounts — the server reprices the whole cart from the
+ * catalog and returns the authoritative order (see cal-bk.md).
+ *
+ * `name`/`phone`/`address` are omitted entirely by a signed-in customer
+ * ordering to their saved address: the backend takes identity from the session
+ * cookie, so sending them would be at best redundant and at worst a way to
+ * post against someone else's account. `saveAddress` asks the backend to make
+ * this the account's new default — it is ignored for guests, who have no
+ * account to save to.
+ */
+export interface PlaceOrderInput {
+  name?: string;
+  phone?: string;
+  address?: string;
+  insideDhaka: boolean;
+  pay: string;
+  items: { productId: string; qty: number }[];
+  saveAddress?: boolean;
+}
+
+export interface PlacedOrder {
+  orderId: string;
+  total: number;
+  status: OrderStatus;
+}
+
+export async function placeOrder(input: PlaceOrderInput): Promise<PlacedOrder> {
+  return postJson<PlacedOrder>("/api/orders", input);
+}
+
 /* ===== Page heroes (admin-editable hero art) ===== */
 
 export const PAGE_HERO_KEYS = ["home", "shop", "services", "industrial", "contact"] as const;
@@ -294,6 +341,8 @@ export interface PublicLandingPage {
   compareAtPrice: number;
   /** Derived server-side so the page and the ad creative can't disagree. */
   discountPercentage: number;
+  /** compareAtPrice − offerPrice. Rendered, never recomputed here. */
+  youSave: number;
   ribbonText: string;
   buttonLabel: string;
   footerNote: string;

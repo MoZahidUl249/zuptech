@@ -1,17 +1,8 @@
-import type { Metadata, Viewport } from "next";
-import { AdminApp } from "@/components/admin/admin-app";
+import type { Metadata } from "next";
+import { TodaySection } from "@/components/admin/today/today-section";
 
-export const metadata: Metadata = {
-  title: "Admin",
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = { title: "Today" };
 
-export const viewport: Viewport = {
-  themeColor: "#12161d",
-  width: "device-width",
-  initialScale: 1,
-};
-
-export default function AdminPage() {
-  return <AdminApp />;
+export default function Page() {
+  return <TodaySection />;
 }

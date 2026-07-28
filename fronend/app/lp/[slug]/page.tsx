@@ -72,9 +72,11 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
           </>
         ) : null}
       </div>
-      {pub.compareAtPrice > pub.offerPrice ? (
+      {pub.youSave > 0 ? (
+        // Server-derived (LANDING-PAGES.md §3) — the page renders the figure,
+        // it never subtracts one itself.
         <p className="-mt-4 mb-6 text-sm font-semibold text-zup-green">
-          Save {formatBDT(pub.compareAtPrice - pub.offerPrice)} today
+          Save {formatBDT(pub.youSave)} today
         </p>
       ) : null}
 
@@ -94,7 +96,14 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
       ) : null}
 
       <div className="flex flex-col gap-3.5 pb-24 md:pb-0">
-        <ProductActions product={product} ctaLabel={pub.buttonLabel || "Buy Now"} />
+        {/* The headline price above is campaign copy; checkout reprices from
+            the catalog (LANDING-PAGES.md §3). Retitling the ladder keeps the
+            two from reading as contradictory claims about the same order. */}
+        <ProductActions
+          product={product}
+          ctaLabel={pub.buttonLabel || "Buy Now"}
+          offersTitle="Additional offers applied at checkout"
+        />
       </div>
 
       {pub.footerNote ? (

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CheckoutFlow } from "@/components/checkout-flow";
+import { CheckoutFlow } from "@/components/checkout/checkout-flow";
 
 export const metadata: Metadata = {
   title: "Checkout",

@@ -70,11 +70,24 @@ customers sign in with phone + password — Better Auth still needs an email
 internally, so phone maps to a deterministic synthetic address
 (`lib/rules.ts` `customerEmail`, never sent anywhere). Guest checkout still
 auto-creates a `Customer` row by phone with no account attached; registering
-links a real login to that identity. Password reset uses Better Auth's
-official `emailOTP` plugin (6-digit code, 10-minute TTL, 5 attempts,
-single-use — atomic verify/consume) rather than a link/token. While no SMS
-gateway is wired up, `/api/auth/forgot-password` echoes a `devToken` outside
-production and logs it on the server.
+links a real login to that identity.
+
+**Password reset** uses Better Auth's official `emailOTP` plugin (6-digit
+code, 10-minute TTL, 5 attempts, single-use — atomic verify/consume) rather
+than a link/token, and is keyed on a *real* email address. Note the two kinds
+of address: `User.email` is the synthetic sign-in identifier
+(`{phone}@customers.zuptech.local`, `{username}@staff.zuptech.local`), while
+`Customer.email` / `Staff.email` hold the deliverable inbox. Forgot-password
+takes the real address, resolves it to the account, and `sendVerificationOTP`
+(`lib/auth.ts`) translates back the other way to find where to send. Both
+audiences have the same pair of endpoints (`/api/auth/*`,
+`/admin/api/*`); both always return `{ok: true}` so the response is never an
+account-existence oracle, and the code only ever travels by email — it is
+never echoed in a response body. Delivery goes through `lib/mail.ts` (SMTP,
+`nodemailer`); with `SMTP_HOST` unset the message is logged to the server
+console instead, which is how the flow is tested locally. Accounts with no
+address on file (guest checkout, pre-existing rows) can't self-reset — staff
+are reset by another admin via `PATCH /admin/api/staff/:id`.
 
 **RBAC.** Every `/admin/api/*` route resolves the staff session, then checks
 the role's `{module: none|view|manage}` matrix server-side (`assertCan`).
@@ -104,15 +117,16 @@ OpenAPI 3 spec at **`/openapi/json`** — generated from the DTO schemas in
 | `GET /api/industrial-services` | Industrial/EPC cards; the `id` is what `POST /api/industrial-leads` optionally links against |
 | `GET /api/site-config` | Featured ids, slides, copy, contact, `gtm`, payment options — never secrets |
 | `POST /api/pricing/quote` | Price a cart for display (`items` + optional `insideDhaka`) — `deliveryFee`/`installationFee`/`total` are `null` until the zone is sent; each line's fee comes straight off the product's inside/outside-Dhaka fields; contract in `../fronend/cal-bk.md` §2.1 |
-| `POST /api/orders` | Guest checkout (`cal-bk.md` §2.2): body carries `insideDhaka` + ids/qty only (client money fields ignored), recomputes totals (Σ per-product zone-specific delivery + installation fee × qty), reserves stock, auto-creates/updates customer (name+address+insideDhaka saved for next time), sequential `ZT-` id, rate-limited |
+| `POST /api/orders` | Checkout (`cal-bk.md` §2.2): body carries `insideDhaka` + ids/qty only (client money fields ignored), recomputes totals (Σ per-product zone-specific delivery + installation fee × qty), reserves stock, sequential `ZT-` id, rate-limited. **Signed in:** identity comes from the session, never the body — `name`/`phone`/`address` may be omitted entirely, and `saveAddress: true` stores the address/zone as the account's new default. **Guest:** all three required; a Customer row is created on first purchase but an *existing* profile is never overwritten, since nothing proves the caller owns that number |
 | `GET /api/my/orders` | Requires customer session |
-| `GET /api/me` | Session's customer profile incl. saved `address`/`insideDhaka` (or `{customer: null}`) — lets the storefront prefill checkout |
+| `GET /api/me` | Session's customer profile incl. saved `address`/`insideDhaka` (or `{customer: null}`) — what checkout renders instead of a form |
 | `PATCH /api/me` | Edit the saved profile (`name`/`address`/`insideDhaka`) directly; requires customer session |
 | `GET /api/cart` / `PUT /api/cart` | Signed-in customer's server-synced cart (`items: [{productId, qty}]`) — survives across devices, not just localStorage |
-| `POST /api/auth/register` | Create a customer account (`name`, `phone`, `password`), signs in |
+| `POST /api/auth/register` | Create a customer account (`name`, `phone`, `email`, `password`), signs in. `email` is required and unique — it's the reset destination, not a login identity |
 | `POST /api/auth/login` | Phone + password login (rate-limited) |
-| `POST /api/auth/forgot-password` | Request a 6-digit password-reset OTP for a phone (no enumeration; rate-limited) |
-| `POST /api/auth/reset-password` | Set a new password from `phone` + `otp` |
+| `POST /api/auth/claim` | Set a password on a number that has ordered as a guest but has no account yet, and sign in (`phone`, `password`, optional `email`). Offered on the order success screen. Answers the same 400 for "never ordered" as for "already registered", so it can't be used to probe which numbers are customers; rate-limited |
+| `POST /api/auth/forgot-password` | Email a 6-digit reset code to `email` (always `{ok: true}` — no enumeration; rate-limited) |
+| `POST /api/auth/reset-password` | Set a new password from `email` + `otp` |
 | `POST /api/auth/logout` | Clear customer session |
 | `POST /api/leads` | Home-service booking form on /services — takes a `serviceId` (404 if unknown), not free text |
 | `POST /api/industrial-leads` | Industrial enquiry form on /industrial — B2B fact set (company, sector, scope, timeline, connected load). `industrialServiceId` is optional and best-effort: an id with no row behind it stores an unlinked lead rather than 404ing, because the page can render a static fallback list. `sector`/`scope`/`timeline` are closed vocabularies (`INDUSTRIAL_SECTORS`/`_SCOPES`/`_TIMELINES` in `lib/rules.ts`) |
@@ -125,12 +139,12 @@ OpenAPI 3 spec at **`/openapi/json`** — generated from the DTO schemas in
 
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /login`, `POST /logout`, `GET /me` |
+| Auth | `POST /login`, `POST /logout`, `GET /me`, `POST /forgot-password {email}`, `POST /reset-password {email, otp, password}` — the reset pair is unauthenticated and mirrors the customer flow |
 | Dashboard | `GET /metrics?period=week\|month\|year` — KPIs, 14-day revenue, series vs previous period, revenue split by section |
-| Orders | `GET /orders?q=&status=&preparedById=` (`preparedById=none` lists unclaimed), `GET /orders/:id` (lines + audit trail + invoice + warranties), `PATCH /orders/:id {status?, preparedById?}` — every change is written to the order's `OrderEvent` trail; reaching `Delivered` also generates the warranty records |
+| Orders | `GET /orders?q=&status=&preparedById=` (`preparedById=none` lists unclaimed), `GET /orders/:id` (lines + audit trail + invoice + warranties), `PATCH /orders/:id {status?, preparedById?}` — every change is written to the order's `OrderEvent` trail; reaching `Delivered` also generates the warranty records, `DELETE /orders/:id` — permanently removes an order for cleanup. Releases whatever stock it held first (a live order's `reserved`, a delivered one's physical stock and `sold`, with a StockMovement to account for it), then cascades to its OrderItems, OrderEvents, Invoice and Warranty rows. Deleting a delivered order removes its revenue from the reports |
 | Invoices | `GET /invoices?q=&status=`, `GET /invoices/:id`, `POST /invoices {orderId, notes?}` (one per order, 409 otherwise), `PATCH /invoices/:id {status?, notes?}`. No DELETE — a raised invoice is `Void`ed. Amounts are derived from the order, never stored twice |
 | Warranty | `GET /warranties?q=&status=`, `POST /warranties {orderId}` (idempotent backfill for orders delivered before the registry existed; 400 unless delivered), `PATCH /warranties/:id {serialNo?, status?, claimNote?, months?}` |
-| Products | `GET/POST /products`, `PATCH/DELETE /products/:id`, `PATCH /products/featured {ids}` — delivery/installation fees (`deliveryFeeInsideDhaka`/`deliveryFeeOutsideDhaka`/`installationFeeInsideDhaka`/`installationFeeOutsideDhaka`) are edited per-product, no separate pricing area |
+| Products | `GET/POST /products`, `PATCH/DELETE /products/:id`, `PATCH /products/featured {ids}` — delivery/installation fees (`deliveryFeeInsideDhaka`/`deliveryFeeOutsideDhaka`/`installationFeeInsideDhaka`/`installationFeeOutsideDhaka`) are edited per-product, no separate pricing area. `quantityOffers` and `freeDeliveryOffers` are `{minQty, percentage}[]` relations, not columns: sending one **replaces that whole ladder**, omitting it leaves it untouched, and a repeated `minQty` in either is a 400 |
 | Inventory | `PATCH /stock/:productId {onHand, reason}`, `GET/POST /purchase-orders`, `POST /purchase-orders/:id/receive\|cancel`, suppliers CRUD, `GET /movements` |
 | Taxonomy | `GET/POST /sections`, `PATCH/DELETE /sections/:id`, `GET/POST /categories`, `PATCH/DELETE /categories/:id`, `PUT /categories/:id/logo {svg}` — per-item CRUD (`products` module). Deletes 409 while categories/products still reference the row |
 | Leads/customers | `GET /leads`, `PATCH /leads/:id {status}`, `DELETE /leads/:id`, `GET /customers?q=`, `GET /messages`, `PATCH/DELETE /messages/:id` |
@@ -149,7 +163,8 @@ Errors are always `{ "error": "message" }` with a meaningful status
 
 - [ ] Set a strong `BETTER_AUTH_SECRET`; real `DATABASE_URL`; `NODE_ENV=production`
 - [ ] `bun run db:deploy && bun run db:seed` on first deploy
-- [ ] Wire an SMS gateway into `sendVerificationOTP` (src/lib/auth.ts) — dev token echo turns off automatically in production
+- [ ] Set `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`/`MAIL_FROM` — without them `lib/mail.ts` only logs the reset code and nobody can recover a password
+- [ ] Give every staff member a real `email`, or they can't use "Forgot password?"
 - [ ] Implement real gateway verification in `routes/public/webhooks.ts` + a payment-initiation step
 - [ ] Move product photos to object storage (currently URL/data-URL strings)
 - [ ] Change the seeded demo staff passwords

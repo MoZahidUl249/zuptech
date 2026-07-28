@@ -71,8 +71,8 @@ export function TaxonomySection() {
   return (
     <div className="flex flex-col gap-5">
       <Card className="px-5 py-5 sm:px-6">
-        <h2 className="text-[15px] font-bold">Catalog structure</h2>
-        <p className="mt-0.5 max-w-prose text-[13px] text-zup-gray">
+        <h2 className="text-ui-base font-bold">Catalog structure</h2>
+        <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">
           Every product belongs to exactly one category, and reaches its
           section through it. A category can only be deleted once nothing
           points at it.
@@ -116,7 +116,7 @@ export function TaxonomySection() {
               value={section.name}
               readOnly={disabled}
               label={`Section ${section.name}`}
-              className="text-[15px] font-bold"
+              className="text-ui-base font-bold"
               onSave={(name) => run(() => patchSection(section.id, { name }), "Section renamed")}
             />
             {readOnly ? null : (
@@ -129,7 +129,7 @@ export function TaxonomySection() {
                 }
                 trigger={
                   <BtnGhost aria-label={`Delete section ${section.name}`} disabled={disabled}>
-                    <Trash2 className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
+                    <Trash2 className="h-3.5 w-3.5 text-destructive" aria-hidden />
                   </BtnGhost>
                 }
               />
@@ -137,7 +137,7 @@ export function TaxonomySection() {
           </div>
 
           {section.categories.length === 0 ? (
-            <p className="mt-3 text-[13px] text-zup-soft">No categories in this section.</p>
+            <p className="mt-3 text-ui-sm text-zup-soft">No categories in this section.</p>
           ) : (
             <ul className="mt-4 flex flex-col gap-2">
               {section.categories.map((cat) => {
@@ -155,12 +155,12 @@ export function TaxonomySection() {
                         value={cat.name}
                         readOnly={disabled}
                         label={`Category ${cat.name}`}
-                        className="text-[14px] font-bold"
+                        className="text-ui-base font-bold"
                         onSave={(name) =>
                           run(() => patchCategory(cat.id, { name }), "Category renamed")
                         }
                       />
-                      <span className="mt-0.5 block text-[11.5px] text-zup-soft">
+                      <span className="mt-0.5 block text-ui-micro text-zup-soft">
                         {productCount} product{productCount === 1 ? "" : "s"}
                       </span>
                     </span>
@@ -189,7 +189,7 @@ export function TaxonomySection() {
                               aria-label={`Delete category ${cat.name}`}
                               disabled={disabled}
                             >
-                              <Trash2 className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" aria-hidden />
                             </BtnGhost>
                           }
                         />
@@ -205,7 +205,7 @@ export function TaxonomySection() {
 
       {!readOnly && state.sections.length > 0 ? (
         <Card className="px-5 py-5 sm:px-6">
-          <h3 className="text-[14px] font-bold">Add a category</h3>
+          <h3 className="text-ui-base font-bold">Add a category</h3>
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <Field label="Name" className="min-w-[200px]">
               <input
@@ -250,7 +250,7 @@ export function TaxonomySection() {
               <Plus className="h-4 w-4" strokeWidth={2.6} aria-hidden /> Add category
             </BtnPrimary>
           </div>
-          <p className="mt-2 text-[12px] text-zup-soft">
+          <p className="mt-2 text-ui-xs text-zup-soft">
             Category names are globally unique — that is what lets a product
             reach its section in one hop.
           </p>
@@ -280,7 +280,7 @@ function LogoPreview({ svg, name }: { svg: string; name: string }) {
   if (!svg) {
     return (
       <span
-        className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-zup-body/6 text-[10px] font-bold text-zup-faint"
+        className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-zup-body/6 text-ui-micro font-bold text-zup-faint"
         aria-hidden
       >
         —
@@ -318,12 +318,12 @@ function LogoEditor({
   return (
     <Card className="px-5 py-5 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-[14px] font-bold">Logo — {category.name}</h3>
+        <h3 className="text-ui-base font-bold">Logo — {category.name}</h3>
         <BtnGhost aria-label="Close logo editor" onClick={onClose}>
           <X className="h-3.5 w-3.5" aria-hidden />
         </BtnGhost>
       </div>
-      <p className="mt-1 max-w-prose text-[12.5px] text-zup-gray">
+      <p className="mt-1 max-w-prose text-ui-xs text-zup-gray">
         Paste SVG <b>markup</b>, not a URL or a file — the storefront renders
         it inline. Scripts, external references and embedded HTML are rejected
         on save. Empty clears the logo.
@@ -337,10 +337,10 @@ function LogoEditor({
           rows={8}
           spellCheck={false}
           placeholder={'<svg viewBox="0 0 24 24">…</svg>'}
-          className={`${inputCls} min-w-[280px] flex-1 resize-y font-mono text-[12px]`}
+          className={`${inputCls} min-w-[280px] flex-1 resize-y font-mono text-ui-xs`}
         />
         <div className="flex flex-col items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-zup-soft">
+          <span className="text-ui-micro font-bold uppercase tracking-[0.06em] text-zup-soft">
             Preview
           </span>
           <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-zup-body/10 bg-white">
@@ -351,20 +351,20 @@ function LogoEditor({
                 dangerouslySetInnerHTML={{ __html: svg }}
               />
             ) : (
-              <span className="text-[11px] text-zup-faint">none</span>
+              <span className="text-ui-micro text-zup-faint">none</span>
             )}
           </div>
         </div>
       </div>
 
       {tooBig ? (
-        <p className="mt-2 text-[12px] font-semibold text-[#D32F2F]">
+        <p className="mt-2 text-ui-xs font-semibold text-destructive">
           {(bytes / 1024).toFixed(1)} KB — the limit is {MAX_SVG_LOGO_BYTES / 1024} KB.
           Simplify the paths or export at a smaller precision.
         </p>
       ) : null}
       {!looksLikeSvg ? (
-        <p className="mt-2 text-[12px] font-semibold text-[#B7791F]">
+        <p className="mt-2 text-ui-xs font-semibold text-warn-fg">
           This doesn&apos;t start with &lt;svg — paste the markup itself.
         </p>
       ) : null}

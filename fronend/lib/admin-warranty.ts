@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Warranty, WarrantyStatus } from "@/lib/admin";
+import { req } from "@/lib/admin-http";
 
 /*
  * Typed client for /admin/api/warranties. Kept out of the AdminState diff-sync
@@ -10,24 +11,6 @@ import type { Warranty, WarrantyStatus } from "@/lib/admin";
  * diff.
  */
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    let message = `${method} ${path} → ${res.status}`;
-    try {
-      const data = (await res.json()) as { error?: string };
-      if (data.error) message = data.error;
-    } catch {
-      // keep status message
-    }
-    throw new Error(message);
-  }
-  return res.json();
-}
 
 export const getWarranties = () => req<Warranty[]>("GET", "/admin/api/warranties");
 

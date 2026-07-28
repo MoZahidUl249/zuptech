@@ -34,11 +34,13 @@ async function nextSku(): Promise<string> {
   }
 }
 
-function assertNoDuplicateMinQty(offers: { minQty: number }[] | undefined) {
+/** Both tier ladders are keyed @@unique([productId, minQty]), so a repeated
+ *  threshold is a 400 rather than a Prisma constraint error. */
+function assertNoDuplicateMinQty(field: string, offers: { minQty: number }[] | undefined) {
   if (!offers) return;
   const seen = new Set<number>();
   for (const { minQty } of offers) {
-    if (seen.has(minQty)) throw badRequest(`Duplicate quantityOffers tier for minQty ${minQty}`);
+    if (seen.has(minQty)) throw badRequest(`Duplicate ${field} tier for minQty ${minQty}`);
     seen.add(minQty);
   }
 }
@@ -61,8 +63,9 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
     async ({ body, staffCtx, set }) => {
       assertCan(staffCtx, "products", "manage");
 
-      const { quantityOffers, ...fields } = body;
-      assertNoDuplicateMinQty(quantityOffers);
+      const { quantityOffers, freeDeliveryOffers, ...fields } = body;
+      assertNoDuplicateMinQty("quantityOffers", quantityOffers);
+      assertNoDuplicateMinQty("freeDeliveryOffers", freeDeliveryOffers);
 
       const id = fields.id ?? fields.slug.replace(/-/g, "").slice(0, 20);
       const clash = await prisma.product.findFirst({
@@ -78,6 +81,7 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
           id,
           sku,
           ...(quantityOffers ? { quantityOffers: { create: quantityOffers } } : {}),
+          ...(freeDeliveryOffers ? { freeDeliveryOffers: { create: freeDeliveryOffers } } : {}),
         },
         include: productInclude,
       });
@@ -92,8 +96,9 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
     async ({ params, body, staffCtx }) => {
       assertCan(staffCtx, "products", "manage");
 
-      const { quantityOffers, ...fields } = body;
-      assertNoDuplicateMinQty(quantityOffers);
+      const { quantityOffers, freeDeliveryOffers, ...fields } = body;
+      assertNoDuplicateMinQty("quantityOffers", quantityOffers);
+      assertNoDuplicateMinQty("freeDeliveryOffers", freeDeliveryOffers);
 
       const existing = await prisma.product.findUnique({ where: { id: params.id } });
       if (!existing) throw notFound("Product");
@@ -105,13 +110,18 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
       }
 
       const product = await prisma.$transaction(async (tx) => {
-        // Replace-all semantics for tiers, same as the featured list.
+        // Replace-all semantics for tiers, same as the featured list: sending
+        // a ladder swaps the whole thing, omitting it leaves the ladder alone.
         if (quantityOffers) await tx.quantityOffer.deleteMany({ where: { productId: params.id } });
+        if (freeDeliveryOffers) {
+          await tx.freeDeliveryOffer.deleteMany({ where: { productId: params.id } });
+        }
         return tx.product.update({
           where: { id: params.id },
           data: {
             ...fields,
             ...(quantityOffers ? { quantityOffers: { create: quantityOffers } } : {}),
+            ...(freeDeliveryOffers ? { freeDeliveryOffers: { create: freeDeliveryOffers } } : {}),
           },
           include: productInclude,
         });

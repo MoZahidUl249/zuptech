@@ -32,7 +32,7 @@ export function AnalyticsSection() {
 
   if (!data) {
     return (
-      <Card className="px-5 py-10 text-center text-[13.5px] text-zup-gray">
+      <Card className="px-5 py-10 text-center text-ui-sm text-zup-gray">
         {error ? "Couldn't load analytics from the server." : "Loading analytics…"}
       </Card>
     );
@@ -121,18 +121,18 @@ export function AnalyticsSection() {
             className={cn(
               "rounded-2xl border bg-white px-5 py-4.5 text-left shadow-[0_1px_2px_rgba(21,24,30,.04)] transition-colors",
               metric === c.id
-                ? "border-zup-blue bg-[#F4F7FE]"
+                ? "border-zup-blue bg-info-tint"
                 : "border-zup-body/6 hover:border-zup-body/15",
             )}
           >
             <p className="text-xs font-medium text-zup-gray">{c.label}</p>
-            <p className="mt-1.5 text-[22px] font-extrabold leading-none tracking-[-0.02em] sm:text-[26px]">
+            <p className="mt-1.5 text-ui-xl font-extrabold leading-none tracking-[-0.02em] sm:text-ui-2xl">
               {c.value}
             </p>
             <p
               className={cn(
                 "mt-2 text-xs font-semibold",
-                c.delta >= 0 ? "text-zup-green" : "text-[#D32F2F]",
+                c.delta >= 0 ? "text-zup-green" : "text-destructive",
               )}
             >
               {c.delta >= 0 ? "▲" : "▼"} {c.delta >= 0 ? "+" : ""}
@@ -144,7 +144,7 @@ export function AnalyticsSection() {
 
       <Card className="px-5 py-4.5 sm:px-6">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-[15px] font-bold">
+          <h2 className="text-ui-base font-bold">
             {metricLabel} · this {period}
           </h2>
           <span className="flex items-center gap-1.5 text-xs text-zup-gray">
@@ -161,11 +161,11 @@ export function AnalyticsSection() {
 
       <div className="grid gap-5 lg:grid-cols-[2fr_2.2fr]">
         <Card className="px-5 py-4.5 sm:px-6">
-          <h2 className="mb-4 text-[15px] font-bold">Revenue by category</h2>
+          <h2 className="mb-4 text-ui-base font-bold">Revenue by category</h2>
           <Donut segments={catSegments} />
         </Card>
         <Card className="px-5 py-4.5 sm:px-6">
-          <h2 className="mb-3 text-[15px] font-bold">Detailed analysis</h2>
+          <h2 className="mb-3 text-ui-base font-bold">Detailed analysis</h2>
           <ul className="flex flex-col gap-2.5 text-sm leading-relaxed text-zup-mid">
             <Bullet>
               Revenue is {totals.revenue >= previousTotals.revenue ? "up" : "down"}{" "}

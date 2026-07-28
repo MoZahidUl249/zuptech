@@ -1,5 +1,13 @@
 # ZUP TECH — Backend Specification
 
+> **Historical.** This was the spec written *before* the backend existed, and
+> the backend has since been built and moved past it in places. For what the
+> API actually does today, read `../backend/README.md` — it is the current
+> contract. Auth in particular has changed: sign-in is phone **+ password**
+> (never a phone OTP), and password reset is a 6-digit code emailed to a real
+> address. The `POST /api/auth/otp` / `/api/auth/verify` pair described below
+> was never built.
+
 This document describes everything a backend needs to power the ZUP TECH site
 (storefront + `/admin` panel). The frontend is a complete, working Next.js 16
 app in this repo; **all data currently lives client-side in `localStorage` as a

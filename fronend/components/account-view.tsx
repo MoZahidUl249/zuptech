@@ -9,10 +9,9 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  Landmark,
   Lock,
   LogOut,
-  MapPin,
+  Mail,
   Package,
   Phone,
   ShieldCheck,
@@ -25,9 +24,9 @@ import {
   getPhoneServerSnapshot,
   setAuthPhone,
 } from "@/lib/orders";
-import { composeAddress, stripComposedAddress } from "@/lib/locations";
+import { composeAddress, stripComposedAddress } from "@/lib/address";
 import { useDeliveryZone } from "@/lib/zone";
-import { ZonePicker } from "@/components/zone-picker";
+import { DeliveryFields } from "@/components/checkout/delivery-fields";
 import { useCustomer, setCustomer } from "@/lib/customer";
 import {
   ApiError,
@@ -61,6 +60,10 @@ function orderStage(status: MyOrder["status"]): number {
 
 type Mode = "signin" | "register" | "forgot-request" | "forgot-reset";
 
+/** Client-side shape check only — the backend validates properly. Just enough
+ *  to catch a typo before a reset code is sent somewhere unreachable. */
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 const copy: Record<Mode, { title: string; subtitle: string }> = {
   signin: {
     title: "Welcome back",
@@ -72,11 +75,11 @@ const copy: Record<Mode, { title: string; subtitle: string }> = {
   },
   "forgot-request": {
     title: "Reset your password",
-    subtitle: "Enter your phone number and we'll send you a 6-digit OTP.",
+    subtitle: "Enter your email address and we'll send you a 6-digit code.",
   },
   "forgot-reset": {
     title: "Choose a new password",
-    subtitle: "Enter the OTP we sent you along with your new password.",
+    subtitle: "Enter the code we emailed you, along with your new password.",
   },
 };
 
@@ -229,7 +232,6 @@ function ProfileSection({
   pwCodeSent,
   pwCode,
   onPwCodeChange,
-  pwDevToken,
   pwNewPassword,
   onPwNewPasswordChange,
   pwConfirmPassword,
@@ -258,7 +260,6 @@ function ProfileSection({
   pwCodeSent: boolean;
   pwCode: string;
   onPwCodeChange: (v: string) => void;
-  pwDevToken: string | null;
   pwNewPassword: string;
   onPwNewPasswordChange: (v: string) => void;
   pwConfirmPassword: string;
@@ -328,52 +329,18 @@ function ProfileSection({
           </p>
         </div>
 
-        <ZonePicker value={zone} onChange={onSelectZone} />
-
-        <div className="flex flex-col gap-2">
-          <label htmlFor="profile-address" className="text-[13px] font-semibold text-zup-mid">
-            Delivery address
-          </label>
-          <div className="relative">
-            <MapPin
-              className="pointer-events-none absolute left-4 top-4.5 h-4.5 w-4.5 text-zup-soft"
-              strokeWidth={1.8}
-              aria-hidden
-            />
-            <textarea
-              id="profile-address"
-              value={address}
-              onChange={(e) => onAddressChange(e.target.value)}
-              autoComplete="street-address"
-              placeholder="House/Flat no., Road no., Area — e.g. House 4, Road 7, Dhanmondi"
-              rows={3}
-              className="w-full resize-none rounded-2xl border border-zup-body/12 bg-zup-bg py-3.5 pr-4 pl-11.5 text-base outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-zup-faint focus:border-zup-blue focus:ring-4 focus:ring-zup-blue/12"
-            />
-          </div>
-          <p className="text-[12px] text-zup-faint">
-            Include house/flat, road no. and area so our rider can find you.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <label htmlFor="profile-landmark" className="text-[13px] font-semibold text-zup-mid">
-            Landmark <span className="font-normal text-zup-faint">(optional)</span>
-          </label>
-          <div className="relative">
-            <Landmark
-              className="pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-zup-soft"
-              strokeWidth={1.8}
-              aria-hidden
-            />
-            <input
-              id="profile-landmark"
-              value={landmark}
-              onChange={(e) => onLandmarkChange(e.target.value)}
-              placeholder="e.g. near Al-Amin Mosque, opposite City Bank"
-              className="w-full rounded-2xl border border-zup-body/12 bg-zup-bg py-3.5 pr-4 pl-11.5 text-base outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-zup-faint focus:border-zup-blue focus:ring-4 focus:ring-zup-blue/12"
-            />
-          </div>
-        </div>
+        {/* Same component checkout renders, so the address a customer saves
+            here and the one they confirm at checkout can never diverge. */}
+        <DeliveryFields
+          insideDhaka={zone}
+          address={address}
+          landmark={landmark}
+          onZoneChange={onSelectZone}
+          onAddressChange={onAddressChange}
+          onLandmarkChange={onLandmarkChange}
+          errors={{}}
+          idPrefix="profile"
+        />
 
         {error && (
           <p role="alert" className="flex items-center gap-1.5 text-[12.5px] font-medium text-zup-red">
@@ -403,7 +370,10 @@ function ProfileSection({
               <p className="text-[12.5px] text-zup-soft">Keep your account secure</p>
             </div>
           </div>
-          {!pwOpen ? (
+          {/* The code goes to the address on file, so there's nothing to offer
+              an account that has none (guest checkout, or a signup from before
+              email was collected). */}
+          {!pwOpen && customer.email ? (
             <button
               type="button"
               onClick={onOpenPasswordChange}
@@ -413,6 +383,13 @@ function ProfileSection({
             </button>
           ) : null}
         </div>
+
+        {!customer.email ? (
+          <p className="mt-3 rounded-xl bg-zup-blue/6 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-zup-mid">
+            There&apos;s no email address on this account, so we can&apos;t send you a
+            verification code. Contact support to add one and change your password.
+          </p>
+        ) : null}
 
         {pwOpen ? (
           <form
@@ -427,14 +404,14 @@ function ProfileSection({
           >
             {!pwCodeSent ? (
               <p className="text-[13px] leading-relaxed text-zup-gray">
-                We&apos;ll send a 6-digit OTP to <strong>{customer.phone}</strong> to confirm
+                We&apos;ll email a 6-digit code to <strong>{customer.email}</strong> to confirm
                 it&apos;s you before changing your password.
               </p>
             ) : (
               <>
                 <div className="flex flex-col gap-2">
                   <label htmlFor="pw-otp" className="text-[13px] font-semibold text-zup-mid">
-                    Enter the 6-digit OTP
+                    Enter the 6-digit code sent to {customer.email}
                   </label>
                   <OtpInput
                     id="pw-otp"
@@ -442,11 +419,6 @@ function ProfileSection({
                     onChange={onPwCodeChange}
                     error={Boolean(pwError)}
                   />
-                  {pwDevToken ? (
-                    <p className="text-[12.5px] text-zup-soft">
-                      Demo environment — your OTP is <strong>{pwDevToken}</strong>.
-                    </p>
-                  ) : null}
                 </div>
                 <PasswordField
                   id="pw-new-password"
@@ -485,7 +457,7 @@ function ProfileSection({
                   ? "Please wait…"
                   : pwCodeSent
                     ? "Update password"
-                    : "Send OTP"}
+                    : "Email me a code"}
               </button>
               <button
                 type="button"
@@ -526,10 +498,12 @@ export function AccountView({ productNames }: { productNames: Record<string, str
   const [phoneInput, setPhoneInput] = useState<string | null>(null);
   const phone = phoneInput ?? savedPhone ?? "";
   const [name, setName] = useState("");
+  // Collected at registration and used as the reset identifier — not a login
+  // identity; sign-in is still phone + password.
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetToken, setResetToken] = useState("");
-  const [devToken, setDevToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -565,7 +539,6 @@ export function AccountView({ productNames }: { productNames: Record<string, str
   const [pwOpen, setPwOpen] = useState(false);
   const [pwCodeSent, setPwCodeSent] = useState(false);
   const [pwCode, setPwCode] = useState("");
-  const [pwDevToken, setPwDevToken] = useState<string | null>(null);
   const [pwNewPassword, setPwNewPassword] = useState("");
   const [pwConfirmPassword, setPwConfirmPassword] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
@@ -595,6 +568,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
   }
 
   const cleanPhone = phone.replace(/[\s-]/g, "");
+  const cleanEmail = email.trim().toLowerCase();
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -641,6 +615,10 @@ export function AccountView({ productNames }: { productNames: Record<string, str
       setError("Enter a valid 11-digit phone number (01XXXXXXXXX).");
       return;
     }
+    if (!EMAIL_RE.test(cleanEmail)) {
+      setError("Enter a valid email address — it's how you'd reset your password.");
+      return;
+    }
     if (password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
@@ -652,7 +630,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
     setBusy(true);
     setError("");
     try {
-      await registerCustomer(name.trim(), cleanPhone, password);
+      await registerCustomer(name.trim(), cleanPhone, cleanEmail, password);
       setAuthPhone(cleanPhone);
       const me = await getMe();
       setCustomer(me);
@@ -663,7 +641,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
       setError(
         err instanceof ApiError && err.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
           ? "An account with this phone number already exists — sign in instead."
-          : err instanceof ApiError && err.status === 400
+          : err instanceof ApiError && (err.status === 400 || err.status === 409)
             ? err.message
             : "Couldn't create your account — please try again.",
       );
@@ -673,20 +651,21 @@ export function AccountView({ productNames }: { productNames: Record<string, str
   };
 
   const requestReset = async () => {
-    if (!/^01\d{9}$/.test(cleanPhone)) {
-      setError("Enter a valid 11-digit phone number (01XXXXXXXXX).");
+    if (!EMAIL_RE.test(cleanEmail)) {
+      setError("Enter the email address on your account.");
       return;
     }
     setBusy(true);
     setError("");
     try {
-      const res = await requestPasswordReset(cleanPhone);
-      setDevToken(res.devToken ?? null);
-      setResetToken(res.devToken ?? "");
+      await requestPasswordReset(cleanEmail);
+      setResetToken("");
       setMode("forgot-reset");
-      toast.success("If that number has an account, an OTP was sent");
+      // Deliberately unconditional — the server won't say whether the address
+      // has an account, so this message can't either.
+      toast.success("If that email has an account, a code is on its way");
     } catch {
-      setError("Couldn't send an OTP — please try again.");
+      setError("Couldn't send a code — please try again.");
     } finally {
       setBusy(false);
     }
@@ -694,7 +673,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
 
   const confirmReset = async () => {
     if (resetToken.length !== 6) {
-      setError("Enter the 6-digit OTP we sent you.");
+      setError("Enter the 6-digit code we emailed you.");
       return;
     }
     if (password.length < 6) {
@@ -708,15 +687,14 @@ export function AccountView({ productNames }: { productNames: Record<string, str
     setBusy(true);
     setError("");
     try {
-      await resetPassword(cleanPhone, resetToken, password);
+      await resetPassword(cleanEmail, resetToken, password);
       toast.success("Password reset — sign in with your new password");
       setResetToken("");
-      setDevToken(null);
       setPassword("");
       setConfirmPassword("");
       setMode("signin");
     } catch {
-      setError("That OTP didn't work — it may have expired. Request a new one.");
+      setError("That code didn't work — it may have expired. Request a new one.");
     } finally {
       setBusy(false);
     }
@@ -769,33 +747,31 @@ export function AccountView({ productNames }: { productNames: Record<string, str
     setPwOpen(true);
     setPwCodeSent(false);
     setPwCode("");
-    setPwDevToken(null);
     setPwNewPassword("");
     setPwConfirmPassword("");
     setPwError("");
   };
 
   const sendPasswordCode = async () => {
-    if (!customer) return;
+    if (!customer?.email) return;
     setPwBusy(true);
     setPwError("");
     try {
-      const res = await requestPasswordReset(customer.phone);
-      setPwDevToken(res.devToken ?? null);
-      setPwCode(res.devToken ?? "");
+      await requestPasswordReset(customer.email);
+      setPwCode("");
       setPwCodeSent(true);
-      toast.success(`OTP sent to ${customer.phone}`);
+      toast.success(`Code sent to ${customer.email}`);
     } catch {
-      setPwError("Couldn't send an OTP — please try again.");
+      setPwError("Couldn't send a code — please try again.");
     } finally {
       setPwBusy(false);
     }
   };
 
   const savePassword = async () => {
-    if (!customer) return;
+    if (!customer?.email) return;
     if (pwCode.length !== 6) {
-      setPwError("Enter the 6-digit OTP we sent you.");
+      setPwError("Enter the 6-digit code we emailed you.");
       return;
     }
     if (pwNewPassword.length < 6) {
@@ -809,16 +785,15 @@ export function AccountView({ productNames }: { productNames: Record<string, str
     setPwBusy(true);
     setPwError("");
     try {
-      await resetPassword(customer.phone, pwCode, pwNewPassword);
+      await resetPassword(customer.email, pwCode, pwNewPassword);
       toast.success("Password updated");
       setPwOpen(false);
       setPwCodeSent(false);
       setPwCode("");
-      setPwDevToken(null);
       setPwNewPassword("");
       setPwConfirmPassword("");
     } catch {
-      setPwError("That OTP didn't work — it may have expired. Send a new one.");
+      setPwError("That code didn't work — it may have expired. Send a new one.");
     } finally {
       setPwBusy(false);
     }
@@ -887,7 +862,9 @@ export function AccountView({ productNames }: { productNames: Record<string, str
               </div>
             ) : null}
 
-            {mode !== "forgot-reset" ? (
+            {/* Phone is the sign-in identity; reset is keyed on email, so the
+                forgot flow asks for that instead. */}
+            {mode === "signin" || mode === "register" ? (
               <div className="flex flex-col gap-2">
                 <label htmlFor="account-phone" className="text-[13px] font-semibold text-zup-mid">
                   Phone number
@@ -922,6 +899,51 @@ export function AccountView({ productNames }: { productNames: Record<string, str
                     )}
                   />
                 </div>
+              </div>
+            ) : null}
+
+            {mode === "register" || mode === "forgot-request" ? (
+              <div className="flex flex-col gap-2">
+                <label htmlFor="account-email" className="text-[13px] font-semibold text-zup-mid">
+                  Email address
+                </label>
+                <div className="relative">
+                  <Mail
+                    className={cn(
+                      "pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 transition-colors",
+                      error ? "text-zup-red" : "text-zup-soft",
+                    )}
+                    strokeWidth={1.8}
+                    aria-hidden
+                  />
+                  <input
+                    id="account-email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError("");
+                    }}
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    placeholder="you@example.com"
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={error ? "account-form-error" : undefined}
+                    className={cn(
+                      "w-full rounded-2xl border bg-zup-bg py-3.5 pr-4 pl-11.5 text-base outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-zup-faint",
+                      error
+                        ? "border-zup-red focus:ring-4 focus:ring-zup-red/10"
+                        : "border-zup-body/12 focus:border-zup-blue focus:ring-4 focus:ring-zup-blue/12",
+                    )}
+                  />
+                </div>
+                {mode === "register" ? (
+                  <p className="text-[12px] leading-relaxed text-zup-soft">
+                    You&apos;ll sign in with your phone number — this is where we send a
+                    code if you ever need to reset your password.
+                  </p>
+                ) : null}
               </div>
             ) : null}
 
@@ -971,7 +993,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
               <>
                 <div className="flex flex-col gap-2">
                   <label htmlFor="account-reset-otp" className="text-[13px] font-semibold text-zup-mid">
-                    Enter the 6-digit OTP sent to {cleanPhone}
+                    Enter the 6-digit code sent to {cleanEmail}
                   </label>
                   <OtpInput
                     id="account-reset-otp"
@@ -982,11 +1004,6 @@ export function AccountView({ productNames }: { productNames: Record<string, str
                     }}
                     error={Boolean(error)}
                   />
-                  {devToken ? (
-                    <p className="text-[12.5px] text-zup-soft">
-                      Demo environment — your OTP is <strong>{devToken}</strong>.
-                    </p>
-                  ) : null}
                 </div>
                 <PasswordField
                   id="account-new-password"
@@ -1049,7 +1066,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
                     : mode === "register"
                       ? "Create account"
                       : mode === "forgot-request"
-                        ? "Send OTP"
+                        ? "Email me a code"
                         : "Reset password"}
               <ArrowRight
                 className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
@@ -1264,7 +1281,6 @@ export function AccountView({ productNames }: { productNames: Record<string, str
           pwCodeSent={pwCodeSent}
           pwCode={pwCode}
           onPwCodeChange={setPwCode}
-          pwDevToken={pwDevToken}
           pwNewPassword={pwNewPassword}
           onPwNewPasswordChange={setPwNewPassword}
           pwConfirmPassword={pwConfirmPassword}

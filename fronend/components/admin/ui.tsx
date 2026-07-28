@@ -1,20 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/* Shared admin primitives, styled after ZUP Admin.dc.html */
+/*
+ * Shared admin primitives.
+ *
+ * These delegate to the shadcn components in components/ui/ rather than
+ * hand-rolling their own buttons and inputs. The admin used to carry a
+ * complete parallel design system here, which is why Landing pages — the one
+ * screen built on shadcn — looked like a different product.
+ *
+ * Colours and type sizes come from the `--color-*` / `--text-ui-*` tokens in
+ * app/globals.css — no hex literals and no arbitrary pixel type sizes.
+ *
+ * Every export keeps the name and props it always had, so all 19 admin files
+ * kept compiling through the swap. Anything marked @deprecated has a better
+ * replacement in ./primitives and should stop being used in new code.
+ */
 
 export function Card({
   className,
   children,
-}: {
-  className?: string;
-  children: React.ReactNode;
-}) {
+  ...props
+}: React.ComponentProps<"div">) {
   return (
     <div
+      {...props}
       className={cn(
         "rounded-2xl border border-zup-body/6 bg-white shadow-[0_1px_2px_rgba(21,24,30,.04)]",
         className,
@@ -38,29 +52,29 @@ export function KpiCard({
 }) {
   const tones = {
     green: "text-zup-green",
-    red: "text-[#D32F2F]",
-    amber: "text-[#B7791F]",
+    red: "text-destructive",
+    amber: "text-warn-fg",
     muted: "text-zup-gray",
   } as const;
   return (
     <Card className="px-5 py-4.5">
-      <p className="text-xs font-medium text-zup-gray">{label}</p>
-      <p className="mt-1.5 text-[26px] font-extrabold leading-none tracking-[-0.02em] text-zup-body [font-variant-numeric:tabular-nums]">
+      <p className="text-ui-xs font-medium text-zup-gray">{label}</p>
+      <p className="mt-1.5 text-ui-2xl font-extrabold tracking-[-0.02em] text-zup-body [font-variant-numeric:tabular-nums]">
         {value}
       </p>
       {note ? (
-        <p className={cn("mt-2 text-xs font-semibold", tones[tone])}>{note}</p>
+        <p className={cn("mt-2 text-ui-xs font-semibold", tones[tone])}>{note}</p>
       ) : null}
     </Card>
   );
 }
 
 const PILL_TONES = {
-  green: "bg-[#E6F4EA] text-[#2E7D32]",
-  blue: "bg-[#E7EDFC] text-zup-blue",
-  amber: "bg-[#FDF3DC] text-[#B7791F]",
-  purple: "bg-[#EFEAFB] text-[#6B46C1]",
-  red: "bg-[#FDE9E7] text-[#D32F2F]",
+  green: "bg-ok-bg text-ok-fg",
+  blue: "bg-info-bg text-info-fg",
+  amber: "bg-warn-bg text-warn-fg",
+  purple: "bg-note-bg text-note-fg",
+  red: "bg-destructive/10 text-destructive",
   gray: "bg-zup-body/6 text-zup-gray",
 } as const;
 export type PillTone = keyof typeof PILL_TONES;
@@ -77,7 +91,7 @@ export function Pill({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold",
+        "inline-flex items-center rounded-full px-3 py-1 text-ui-xs font-bold",
         PILL_TONES[tone],
         className,
       )}
@@ -86,6 +100,9 @@ export function Pill({
     </span>
   );
 }
+
+/* The three status→tone maps below are domain knowledge, not styling. They
+ * predate the token system and are deliberately unchanged. */
 
 export function orderStatusTone(status: string): PillTone {
   switch (status) {
@@ -136,11 +153,17 @@ export function warrantyStatusTone(status: string): PillTone {
   }
 }
 
+/* Field styling is exported as class strings rather than components because
+ * ~60 call sites spread them onto their own <input>/<select>. The focus ring
+ * matches shadcn's so a form mixing the two looks like one form.
+ * The `text-base` → `sm:text-ui-base` step keeps mobile at 16px; anything
+ * smaller makes iOS zoom the page on focus. */
+
 export const inputCls =
-  "min-h-10 w-full rounded-xl border border-zup-body/10 bg-white px-3.5 py-2 text-base text-zup-body outline-none transition-colors placeholder:text-zup-faint focus:border-zup-blue disabled:cursor-not-allowed disabled:bg-zup-body/3 disabled:text-zup-gray sm:text-sm";
+  "min-h-11 w-full rounded-xl border border-zup-body/10 bg-white px-3.5 py-2 text-base text-zup-body outline-none transition-[border-color,box-shadow] placeholder:text-zup-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-zup-body/3 disabled:text-zup-gray sm:text-ui-base";
 
 export const selectCls =
-  "min-h-10 rounded-xl border border-zup-body/10 bg-white px-3 py-2 text-base font-medium text-zup-body outline-none transition-colors focus:border-zup-blue disabled:cursor-not-allowed disabled:bg-zup-body/3 disabled:text-zup-gray sm:text-sm";
+  "min-h-11 rounded-xl border border-zup-body/10 bg-white px-3 py-2 text-base font-medium text-zup-body outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-zup-body/3 disabled:text-zup-gray sm:text-ui-base";
 
 export function Field({
   label,
@@ -153,68 +176,64 @@ export function Field({
 }) {
   return (
     <label className={cn("flex flex-col gap-1.5", className)}>
-      <span className="text-xs font-semibold text-zup-gray">{label}</span>
+      <span className="text-ui-xs font-semibold text-zup-gray">{label}</span>
       {children}
     </label>
   );
 }
 
-export function BtnPrimary({
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+/* The four button wrappers below are shadcn <Button> with a variant and a
+ * pill radius pinned. They exist only so ~200 existing call sites keep
+ * working; new code should use <Button variant=… size="xl"> directly. */
+
+type BtnProps = React.ComponentProps<typeof Button>;
+
+/** @deprecated Use `<Button size="xl" className="rounded-full">`. */
+export function BtnPrimary({ className, ...props }: BtnProps) {
   return (
-    <button
+    <Button
+      size="xl"
+      {...props}
+      className={cn("rounded-full font-bold disabled:opacity-45", className)}
+    />
+  );
+}
+
+/** @deprecated Use `<Button variant="dark" size="xl" className="rounded-full">`. */
+export function BtnDark({ className, ...props }: BtnProps) {
+  return (
+    <Button
+      variant="dark"
+      size="xl"
+      {...props}
+      className={cn("rounded-full font-bold disabled:opacity-45", className)}
+    />
+  );
+}
+
+/** @deprecated Use `<Button variant="secondary" size="lg" className="rounded-full">`. */
+export function BtnGhost({ className, ...props }: BtnProps) {
+  return (
+    <Button
+      variant="secondary"
+      size="lg"
       {...props}
       className={cn(
-        "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full bg-zup-blue px-5 text-sm font-bold text-white transition-colors hover:bg-zup-blue-dark disabled:cursor-not-allowed disabled:opacity-45",
+        "rounded-full text-ui-sm font-bold text-zup-body disabled:opacity-45",
         className,
       )}
     />
   );
 }
 
-export function BtnDark({
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+/** @deprecated Use `<Button variant="destructive" size="lg" className="rounded-full">`. */
+export function BtnDanger({ className, ...props }: BtnProps) {
   return (
-    <button
+    <Button
+      variant="destructive"
+      size="lg"
       {...props}
-      className={cn(
-        "inline-flex min-h-10 items-center justify-center rounded-full bg-zup-ink px-5 text-sm font-bold text-white transition-colors hover:bg-zup-body disabled:cursor-not-allowed disabled:opacity-45",
-        className,
-      )}
-    />
-  );
-}
-
-export function BtnGhost({
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={cn(
-        "inline-flex min-h-8 items-center justify-center rounded-full bg-secondary px-3.5 text-[13px] font-bold text-zup-body transition-colors hover:bg-zup-body/10 disabled:cursor-not-allowed disabled:opacity-45",
-        className,
-      )}
-    />
-  );
-}
-
-export function BtnDanger({
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={cn(
-        "inline-flex min-h-8 items-center justify-center rounded-full bg-[#FDE9E7] px-3.5 text-[13px] font-bold text-[#D32F2F] transition-colors hover:bg-[#FBD9D5] disabled:cursor-not-allowed disabled:opacity-45",
-        className,
-      )}
+      className={cn("rounded-full text-ui-sm font-bold disabled:opacity-45", className)}
     />
   );
 }
@@ -239,7 +258,7 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!on)}
       className={cn(
-        "relative h-6.5 w-11.5 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+        "relative h-6.5 w-11.5 shrink-0 cursor-pointer rounded-full outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-45",
         on ? "bg-zup-blue" : "bg-zup-body/20",
       )}
     >
@@ -259,37 +278,74 @@ export function Segmented<T extends string>({
   onChange,
   disabled,
   size = "md",
+  label,
 }: {
   options: readonly { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
   disabled?: boolean;
   size?: "sm" | "md";
+  /** Names the group for screen readers. */
+  label?: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // A segmented control is a radio group, not a row of toggle buttons. It used
+  // to announce itself as loose `aria-pressed` buttons and had no keyboard
+  // story at all; now it behaves like the native radio group it imitates —
+  // one tab stop, arrows to move between options.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const dir = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!dir || disabled) return;
+    e.preventDefault();
+    const i = options.findIndex((o) => o.value === value);
+    const next = options[(i + dir + options.length) % options.length];
+    onChange(next.value);
+    // Follow focus, as a real radio group does.
+    const btns = ref.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+    btns?.[options.indexOf(next)]?.focus();
+  };
+
   return (
-    <div className="inline-flex rounded-full bg-zup-body/6 p-1">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          disabled={disabled}
-          aria-pressed={o.value === value}
-          onClick={() => onChange(o.value)}
-          className={cn(
-            "rounded-full font-bold transition-colors disabled:cursor-not-allowed",
-            size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-[13px]",
-            o.value === value
-              ? "bg-zup-ink text-white"
-              : "text-zup-gray hover:text-zup-body disabled:opacity-60",
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
+    <div
+      ref={ref}
+      role="radiogroup"
+      aria-label={label}
+      onKeyDown={onKeyDown}
+      className="inline-flex rounded-full bg-zup-body/6 p-1"
+    >
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            // Roving tabindex: the group is one stop, arrows move within it.
+            tabIndex={active ? 0 : -1}
+            disabled={disabled}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              "cursor-pointer rounded-full font-bold outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed",
+              size === "sm" ? "px-3 py-1 text-ui-xs" : "px-4 py-1.5 text-ui-sm",
+              active
+                ? "bg-zup-ink text-white"
+                : "text-zup-gray hover:text-zup-body disabled:opacity-60",
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
+/**
+ * @deprecated Prefer `DataTable` from ./primitives, which drops `minWidth` in
+ * favour of per-column priorities and a stacked card layout on phones.
+ */
 export function Table({
   head,
   children,
@@ -302,15 +358,15 @@ export function Table({
   return (
     <div className="overflow-x-auto">
       <table
-        className="w-full text-left text-sm [font-variant-numeric:tabular-nums]"
+        className="w-full text-left text-ui-sm [font-variant-numeric:tabular-nums]"
         style={{ minWidth }}
       >
         <thead>
-          <tr className="bg-[#F7F8FA]">
+          <tr className="bg-surface-head">
             {head.map((h) => (
               <th
                 key={h}
-                className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.08em] text-zup-gray first:rounded-l-lg first:pl-5 last:rounded-r-lg"
+                className="px-4 py-3 text-ui-micro font-bold uppercase tracking-[0.08em] text-zup-gray first:rounded-l-lg first:pl-5 last:rounded-r-lg"
               >
                 {h}
               </th>
@@ -323,6 +379,7 @@ export function Table({
   );
 }
 
+/** @deprecated Paired with the deprecated `Table`. */
 export function Td({
   className,
   children,
@@ -360,18 +417,18 @@ export function TagsInput({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-zup-body/12 bg-white px-3 py-2 transition-colors focus-within:border-zup-blue">
+    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-zup-body/12 bg-white px-3 py-2 transition-colors focus-within:border-ring">
       {tags.map((t) => (
         <span
           key={t}
-          className="inline-flex items-center gap-1 rounded-full bg-secondary py-1 pr-1.5 pl-2.5 text-xs font-semibold text-zup-body"
+          className="inline-flex items-center gap-1 rounded-full bg-secondary py-1 pr-1.5 pl-2.5 text-ui-xs font-semibold text-zup-body"
         >
           {t}
           <button
             type="button"
             onClick={() => onChange(tags.filter((x) => x !== t))}
             aria-label={`Remove tag ${t}`}
-            className="flex h-4 w-4 cursor-pointer items-center justify-center rounded-full text-zup-faint hover:bg-zup-body/10 hover:text-zup-red"
+            className="flex h-4 w-4 cursor-pointer items-center justify-center rounded-full text-zup-faint hover:bg-zup-body/10 hover:text-destructive"
           >
             <X className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
           </button>
@@ -391,7 +448,7 @@ export function TagsInput({
         onBlur={commit}
         placeholder={tags.length ? "Add another…" : placeholder}
         aria-label="Add tag"
-        className="min-w-28 flex-1 border-0 bg-transparent py-0.5 text-sm outline-none placeholder:text-zup-faint"
+        className="min-w-28 flex-1 border-0 bg-transparent py-0.5 text-ui-base outline-none placeholder:text-zup-faint"
       />
     </div>
   );

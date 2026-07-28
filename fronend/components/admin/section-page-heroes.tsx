@@ -82,15 +82,15 @@ export function PageHeroesSection() {
   if (loading) return <Card className="px-6 py-8 text-sm text-zup-gray">Loading heroes…</Card>;
   if (error) {
     return (
-      <Card className="px-6 py-8 text-sm text-[#D32F2F]">Couldn&apos;t load page heroes.</Card>
+      <Card className="px-6 py-8 text-sm text-destructive">Couldn&apos;t load page heroes.</Card>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
       <Card className="px-5 py-5 sm:px-6">
-        <h2 className="text-[15px] font-bold">Page heroes</h2>
-        <p className="mt-0.5 text-[13px] text-zup-gray">
+        <h2 className="text-ui-base font-bold">Page heroes</h2>
+        <p className="mt-0.5 text-ui-sm text-zup-gray">
           The art behind each page&apos;s headline. <b>Built-in</b> keeps the coded
           design, <b>Background</b> shows one image, and <b>Posters</b> rotates through
           several. The overlay darkens the art so the headline stays readable.
@@ -154,7 +154,7 @@ function HeroEditor({
   return (
     <Card className="px-5 py-5 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-[15px] font-bold">{PAGE_LABELS[hero.pageKey] ?? hero.pageKey}</h3>
+        <h3 className="text-ui-base font-bold">{PAGE_LABELS[hero.pageKey] ?? hero.pageKey}</h3>
         <Segmented
           options={MODES}
           value={hero.mode}
@@ -164,7 +164,7 @@ function HeroEditor({
       </div>
 
       {hero.mode === "plain" ? (
-        <p className="mt-3 text-[13px] text-zup-soft">
+        <p className="mt-3 text-ui-sm text-zup-soft">
           Using the built-in design. Pick <b>Background</b> or <b>Posters</b> to add art.
         </p>
       ) : (
@@ -197,7 +197,7 @@ function HeroEditor({
 
           {hero.mode === "image" ? (
             <div className="mt-4">
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.06em] text-zup-soft">
+              <p className="mb-2 text-ui-micro font-bold uppercase tracking-[0.06em] text-zup-soft">
                 Background image
               </p>
               {hero.background ? (
@@ -211,7 +211,7 @@ function HeroEditor({
                   />
                 </div>
               ) : (
-                <p className="text-[13px] text-zup-soft">No image yet.</p>
+                <p className="text-ui-sm text-zup-soft">No image yet.</p>
               )}
               <input
                 ref={bgInput}
@@ -238,11 +238,11 @@ function HeroEditor({
             </div>
           ) : (
             <div className="mt-4">
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.06em] text-zup-soft">
+              <p className="mb-2 text-ui-micro font-bold uppercase tracking-[0.06em] text-zup-soft">
                 Posters ({hero.posters.length})
               </p>
               {hero.posters.length === 0 ? (
-                <p className="text-[13px] text-zup-soft">No posters yet.</p>
+                <p className="text-ui-sm text-zup-soft">No posters yet.</p>
               ) : (
                 <ul className="flex flex-col gap-3">
                   {hero.posters.map((poster, i) => (
@@ -312,7 +312,7 @@ function HeroEditor({
                             void run(() => deleteHeroPoster(poster.id), "Poster deleted")
                           }
                         >
-                          <Trash2 className="h-4 w-4 text-[#D32F2F]" aria-hidden />
+                          <Trash2 className="h-4 w-4 text-destructive" aria-hidden />
                         </IconBtn>
                       </div>
                     </li>

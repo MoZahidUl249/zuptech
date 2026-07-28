@@ -36,7 +36,7 @@ export function BarChart({
             >
               <span
                 className={cn(
-                  "mb-1 truncate text-[10px] font-bold sm:text-[11px]",
+                  "mb-1 truncate text-ui-micro font-bold sm:text-ui-micro",
                   hot ? "text-zup-orange" : "text-zup-soft",
                   hot ? "block" : "hidden sm:block",
                 )}
@@ -47,7 +47,7 @@ export function BarChart({
                 style={{ height: `calc((100% - 20px) * ${(v / max).toFixed(4)})` }}
                 className={cn(
                   "w-full max-w-8 rounded-t-md rounded-b-[3px] transition-opacity group-hover:opacity-80",
-                  hot ? "bg-zup-orange" : "bg-[#4d7ce8]",
+                  hot ? "bg-zup-orange" : "bg-chart-bar",
                 )}
               />
             </div>
@@ -59,7 +59,7 @@ export function BarChart({
           <span
             key={i}
             className={cn(
-              "min-w-0 flex-1 truncate text-center text-[9px] text-zup-faint sm:text-[10px]",
+              "min-w-0 flex-1 truncate text-center text-ui-micro text-zup-faint sm:text-ui-micro",
               // On phones, an every-other-label rhythm keeps 14 columns readable
               i % 2 !== 0 && i !== labels.length - 1 && "invisible sm:visible",
             )}
@@ -107,7 +107,7 @@ export function LineChart({
         {/* gridlines */}
         <div className="absolute inset-x-0 top-1/2 border-t border-zup-body/5" aria-hidden />
         <div className="absolute inset-x-0 bottom-0 border-t border-zup-body/10" aria-hidden />
-        <span className="absolute -left-1 bottom-0 -translate-x-full text-[10px] text-zup-faint">
+        <span className="absolute -left-1 bottom-0 -translate-x-full text-ui-micro text-zup-faint">
           0
         </span>
 
@@ -117,7 +117,7 @@ export function LineChart({
               <div key={i} className="flex min-w-0 flex-1 items-end justify-center gap-[2px]">
                 <div
                   style={{ height: `${((v / max) * 96).toFixed(2)}%` }}
-                  className="w-full max-w-5 rounded-t-[4px] bg-[#4d7ce8]"
+                  className="w-full max-w-5 rounded-t-[4px] bg-chart-bar"
                 />
                 {previous ? (
                   <div
@@ -169,7 +169,7 @@ export function LineChart({
           {current.map((v, i) => (
             <div key={i} className="group relative min-w-0 flex-1 cursor-default">
               <div className="absolute inset-y-0 left-1/2 hidden w-px bg-zup-body/15 group-hover:block" />
-              <div className="pointer-events-none absolute left-1/2 top-1 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-zup-ink px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-lg group-hover:block">
+              <div className="pointer-events-none absolute left-1/2 top-1 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-zup-ink px-2.5 py-1.5 text-ui-micro font-semibold text-white shadow-lg group-hover:block">
                 <span className="mr-1 text-white/55">{labels[i]}</span>
                 {format(v)}
                 {previous ? (
@@ -191,7 +191,7 @@ export function LineChart({
                 i === 0 ? "none" : i === n - 1 ? "translateX(-100%)" : "translateX(-50%)",
             }}
             className={cn(
-              "absolute top-0 text-[10px] text-zup-faint",
+              "absolute top-0 text-ui-micro text-zup-faint",
               // thin out crowded month labels on phones
               n > 8 && i % 2 !== 0 && i !== n - 1 && "hidden sm:inline",
             )}
@@ -227,6 +227,9 @@ export function LineChart({
 
 /* ===== Donut ===== */
 
+// Hex rather than tokens because these are SVG `stroke` values, not classes —
+// the categorical series colours, in order. Mirrors zup-blue / zup-orange /
+// zup-green / note-fg / warn-fg; keep them in step if the palette moves.
 const DONUT_COLORS = ["#0b4fe0", "#e85320", "#1fa855", "#6B46C1", "#B7791F"];
 
 export function Donut({

@@ -11,6 +11,7 @@ import {
   type HeroSlide,
   type SiteCopy,
   type SiteContact,
+  tempId,
 } from "@/lib/admin";
 import { uploadSlideImage } from "@/lib/admin-api";
 import { DEFAULT_COPY } from "@/lib/site-copy";
@@ -23,7 +24,6 @@ import {
   readImageDimensions,
 } from "@/lib/image-upload";
 import { cn } from "@/lib/utils";
-import { ServicesSection } from "./section-services";
 import { ConfirmDialog } from "./confirm-dialog";
 import {
   Card,
@@ -34,7 +34,6 @@ import {
   BtnPrimary,
   BtnGhost,
   BtnDanger,
-  BtnDark,
   inputCls,
   selectCls,
 } from "./ui";
@@ -65,7 +64,7 @@ export function HomePageSection() {
       slides: [
         ...state.slides,
         {
-          id: `sl${Date.now()}`,
+          id: tempId("slide"),
           image: null,
           cta: "Shop Now",
           href: "/shop",
@@ -97,8 +96,8 @@ export function HomePageSection() {
     <Card className="px-5 py-5 sm:px-6">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-bold">Hero banner slides</h2>
-          <p className="mt-0.5 max-w-prose text-[13px] text-zup-gray">
+          <h2 className="text-ui-base font-bold">Hero banner slides</h2>
+          <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">
             These slides rotate in the store&apos;s home-page banner, in the order shown
             below. Each is a wide image with one button — 2000×800 works well.{" "}
             {IMAGE_FORMATS_LABEL}, under 8 MB. Banners are served at full resolution, so
@@ -112,7 +111,7 @@ export function HomePageSection() {
         ) : null}
       </div>
       {activeCount === 0 ? (
-        <p className="mt-2 rounded-xl bg-[#FDF3DC] px-3.5 py-2.5 text-[13px] font-semibold text-[#B7791F]">
+        <p className="mt-2 rounded-xl bg-warn-bg px-3.5 py-2.5 text-ui-sm font-semibold text-warn-fg">
           No active slides with an image — the store shows its default banners.
         </p>
       ) : null}
@@ -199,7 +198,7 @@ export function HomePageSection() {
                       disabled={readOnly}
                       onChange={(fit) => setSlide(s.id, { fit })}
                     />
-                    <span className="text-[11px] text-zup-faint">
+                    <span className="text-ui-micro text-zup-faint">
                       {(s.fit ?? "cover") === "cover"
                         ? "Fills the banner, cropping the edges."
                         : "Shows the whole image on the background colour."}
@@ -269,15 +268,15 @@ function FeaturedRowEditor() {
 
   return (
     <Card className="px-5 py-5 sm:px-6">
-      <h2 className="text-[15px] font-bold">Featured products</h2>
-      <p className="mt-0.5 max-w-prose text-[13px] text-zup-gray">
+      <h2 className="text-ui-base font-bold">Featured products</h2>
+      <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">
         The row under the hero banner, shown left to right in the order below.
         Starring a product on the Products screen adds it to the end — reorder
         it here.
       </p>
 
       {featured.length === 0 ? (
-        <p className="mt-4 text-[13px] text-zup-soft">
+        <p className="mt-4 text-ui-sm text-zup-soft">
           Nothing featured yet — the home page hides the row.
         </p>
       ) : (
@@ -287,12 +286,12 @@ function FeaturedRowEditor() {
               key={p.id}
               className="flex flex-wrap items-center gap-3 rounded-xl border border-zup-body/8 px-3.5 py-2.5"
             >
-              <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-zup-body/6 text-[12px] font-bold text-zup-gray">
+              <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-zup-body/6 text-ui-xs font-bold text-zup-gray">
                 {i + 1}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-bold">{p.name}</span>
-                <span className="block text-[11.5px] text-zup-soft">
+                <span className="block truncate text-ui-base font-bold">{p.name}</span>
+                <span className="block text-ui-micro text-zup-soft">
                   {p.category || "—"}
                   {p.visible ? "" : " · hidden from the storefront"}
                 </span>
@@ -320,7 +319,7 @@ function FeaturedRowEditor() {
                       toast(`${p.name} removed from Featured products`);
                     }}
                   >
-                    <X className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
+                    <X className="h-3.5 w-3.5 text-destructive" aria-hidden />
                   </BtnGhost>
                 </span>
               )}
@@ -331,7 +330,7 @@ function FeaturedRowEditor() {
 
       {readOnly ? null : (
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <label htmlFor="feat-add" className="text-[13px] font-semibold text-zup-gray">
+          <label htmlFor="feat-add" className="text-ui-sm font-semibold text-zup-gray">
             Add a product
           </label>
           <select
@@ -449,7 +448,7 @@ function BannerImagePicker({
                   setCaption(null);
                 }}
                 aria-label="Remove banner image"
-                className="absolute right-1 top-1 cursor-pointer rounded-full bg-black/60 px-1.5 text-[10px] font-bold text-white"
+                className="absolute right-1 top-1 cursor-pointer rounded-full bg-black/60 px-1.5 text-ui-micro font-bold text-white"
               >
                 ✕
               </button>
@@ -466,7 +465,7 @@ function BannerImagePicker({
             disabled={busy}
             onClick={() => ref.current?.click()}
             className={cn(
-              "cursor-pointer text-[11px] text-zup-blue underline disabled:cursor-not-allowed disabled:text-zup-faint disabled:no-underline",
+              "cursor-pointer text-ui-micro text-zup-blue underline disabled:cursor-not-allowed disabled:text-zup-faint disabled:no-underline",
               value && "absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-white no-underline",
             )}
           >
@@ -507,7 +506,7 @@ function BannerImagePicker({
           }}
         />
       </div>
-      <p className="text-[11px] leading-tight text-zup-faint">
+      <p className="text-ui-micro leading-tight text-zup-faint">
         {caption ?? `2000×800 recommended · ${IMAGE_FORMATS_LABEL} · under 8 MB`}
       </p>
     </div>
@@ -599,8 +598,8 @@ export function SiteContentSection() {
   return (
     <div className="flex flex-col gap-5">
       <Card className="px-5 py-5 sm:px-6">
-        <h2 className="text-[15px] font-bold">Contact information</h2>
-        <p className="mt-0.5 text-[13px] text-zup-gray">
+        <h2 className="text-ui-base font-bold">Contact information</h2>
+        <p className="mt-0.5 text-ui-sm text-zup-gray">
           Shown in the site footer, the contact page and the floating WhatsApp button.
         </p>
         <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -624,17 +623,17 @@ export function SiteContentSection() {
           ))}
         </div>
         {!readOnly ? (
-          <BtnDark className="mt-5" onClick={() => toast("Contact info saved — live on the store")}>
-            Save changes
-          </BtnDark>
+          <p className="mt-5 text-ui-sm text-zup-soft">
+            Changes save on their own — watch the top of the screen.
+          </p>
         ) : null}
       </Card>
 
       <Card className="px-5 py-5 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-[15px] font-bold">Google Tag Manager</h2>
-            <p className="mt-0.5 text-[13px] text-zup-gray">
+            <h2 className="text-ui-base font-bold">Google Tag Manager</h2>
+            <p className="mt-0.5 text-ui-sm text-zup-gray">
               Paste your container id to load GTM on the storefront. Nothing loads
               while this is off or the id is invalid.
             </p>
@@ -669,7 +668,7 @@ export function SiteContentSection() {
             />
           </Field>
           {gtm.gtmId && !gtmIdOk ? (
-            <p className="mt-1.5 text-[13px] font-medium text-[#D32F2F]" role="alert">
+            <p className="mt-1.5 text-ui-sm font-medium text-destructive" role="alert">
               That doesn&apos;t look like a GTM container id — expected GTM-XXXXXXX.
             </p>
           ) : null}
@@ -677,8 +676,8 @@ export function SiteContentSection() {
       </Card>
 
       <Card className="px-5 py-5 sm:px-6">
-        <h2 className="text-[15px] font-bold">Copywriting</h2>
-        <p className="mt-0.5 max-w-prose text-[13px] text-zup-gray">
+        <h2 className="text-ui-base font-bold">Copywriting</h2>
+        <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">
           Every headline and text block on the store, editable in one place.
           Leave a field blank to use the site&apos;s built-in wording (shown as
           the placeholder).
@@ -719,13 +718,11 @@ export function SiteContentSection() {
           </div>
         ))}
         {!readOnly ? (
-          <BtnDark className="mt-5" onClick={() => toast("Site copy saved")}>
-            Save changes
-          </BtnDark>
+          <p className="mt-5 text-ui-sm text-zup-soft">
+            Changes save on their own — watch the top of the screen.
+          </p>
         ) : null}
       </Card>
-
-      <ServicesSection />
     </div>
   );
 }

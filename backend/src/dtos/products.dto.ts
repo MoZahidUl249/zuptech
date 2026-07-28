@@ -17,7 +17,6 @@ const productFields = {
   deliveryFeeOutsideDhaka: t.Integer({ minimum: 0 }),
   installationFeeInsideDhaka: t.Integer({ minimum: 0 }),
   installationFeeOutsideDhaka: t.Integer({ minimum: 0 }),
-  freeDeliveryMinQty: t.Integer({ minimum: 0, maximum: 999 }),
   // 0 = no warranty. Drives the Warranty rows generated when an order that
   // contains this product is delivered (lib/warranty.ts). Optional so it isn't
   // a new required field on create — the column defaults to 0.
@@ -62,6 +61,14 @@ const quantityOfferDto = t.Object({
 });
 const quantityOffersField = t.Optional(t.Array(quantityOfferDto, { maxItems: 10 }));
 
+/** One "buy N+, X% off delivery" tier — same shape and same relation handling
+ *  as `quantityOfferDto`; 100 means the line ships free. */
+const freeDeliveryOfferDto = t.Object({
+  minQty: t.Integer({ minimum: 2, maximum: 999 }),
+  percentage: t.Integer({ minimum: 1, maximum: 100 }),
+});
+const freeDeliveryOffersField = t.Optional(t.Array(freeDeliveryOfferDto, { maxItems: 10 }));
+
 export const createProductDto = t.Object({
   id: t.Optional(t.String({ minLength: 2, maxLength: 50 })),
   ...productFields,
@@ -70,10 +77,13 @@ export const createProductDto = t.Object({
   // explicitly is still allowed for imports/seeds.
   sku: t.Optional(t.String({ minLength: 2, maxLength: 50 })),
   quantityOffers: quantityOffersField,
+  freeDeliveryOffers: freeDeliveryOffersField,
 });
 export const updateProductDto = t.Intersect([
   t.Partial(t.Object(productFields)),
-  t.Object({ quantityOffers: quantityOffersField }),
+  // Relations sit outside the t.Partial: each is optional on its own, and
+  // sending one replaces that whole tier list (see routes/admin/products.ts).
+  t.Object({ quantityOffers: quantityOffersField, freeDeliveryOffers: freeDeliveryOffersField }),
 ]);
 export const updateFeaturedDto = t.Object({ ids: t.Array(t.String(), { maxItems: 20 }) });
 
@@ -90,6 +100,7 @@ export type ProductsQueryDto = typeof productsQueryDto.static;
 export type CreateProductDto = typeof createProductDto.static;
 export type UpdateProductDto = typeof updateProductDto.static;
 export type QuantityOfferInputDto = typeof quantityOfferDto.static;
+export type FreeDeliveryOfferInputDto = typeof freeDeliveryOfferDto.static;
 export type UpdateFeaturedDto = typeof updateFeaturedDto.static;
 export type UploadProductPhotoDto = typeof uploadProductPhotoDto.static;
 export type UploadProductVideoDto = typeof uploadProductVideoDto.static;

@@ -4,10 +4,12 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useAdmin, WARRANTY_STATUSES, type Warranty, type WarrantyStatus } from "@/lib/admin";
 import { isExpired, isExpiringSoon, patchWarranty, useWarranties } from "@/lib/admin-warranty";
+import { useFilterParams } from "./primitives/filter-params";
 import {
   BtnGhost,
   Card,
   Pill,
+  Segmented,
   Table,
   Td,
   inputCls,
@@ -28,15 +30,28 @@ function shortDate(iso: string): string {
   return `${d.getDate()} ${d.toLocaleString("en", { month: "short" })} ${d.getFullYear()}`;
 }
 
-const EXTRA_FILTERS = ["All statuses", "Expiring soon", "Past expiry"] as const;
+/*
+ * Status and expiry are two independent questions about a warranty, and they
+ * used to share one dropdown: ["All statuses", "Expiring soon", "Past expiry",
+ * ...WARRANTY_STATUSES]. Picking "Expiring soon" therefore cleared the status
+ * filter, so "which Active warranties are about to run out" — the single most
+ * useful question here — could not be asked at all. They are two controls now.
+ */
+const EXPIRY_FILTERS = [
+  { value: "any", label: "Any date" },
+  { value: "soon", label: "Expiring soon" },
+  { value: "past", label: "Past expiry" },
+] as const;
 
 export function WarrantySection() {
   const { can } = useAdmin();
   const readOnly = can("warranty") !== "manage";
   const { list, replace, loading, error, reload } = useWarranties();
 
-  const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("All statuses");
+  const { get, set, clear, active: filtersActive } = useFilterParams();
+  const q = get("q");
+  const statusFilter = get("status", "All statuses");
+  const expiry = get("expiry", "any");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -68,17 +83,12 @@ export function WarrantySection() {
       w.productName.toLowerCase().includes(needle) ||
       w.customer.toLowerCase().includes(needle) ||
       w.phone.replace(/\D/g, "").includes(needle.replace(/\D/g, "") || " ");
-    const matchStatus =
-      statusFilter === "All statuses" ||
-      (statusFilter === "Expiring soon"
-        ? isExpiringSoon(w)
-        : statusFilter === "Past expiry"
-          ? isExpired(w)
-          : w.status === statusFilter);
-    return matchQ && matchStatus;
+    const matchStatus = statusFilter === "All statuses" || w.status === statusFilter;
+    const matchExpiry =
+      expiry === "any" || (expiry === "soon" ? isExpiringSoon(w) : isExpired(w));
+    return matchQ && matchStatus && matchExpiry;
   });
 
-  const filtersActive = q.trim() !== "" || statusFilter !== "All statuses";
   const active = list.filter((w) => w.status === "Active").length;
   const claims = list.filter((w) => w.status === "Claimed").length;
 
@@ -89,41 +99,41 @@ export function WarrantySection() {
       <div className="flex flex-wrap items-center gap-3">
         <input
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => set({ q: e.target.value })}
           placeholder="Search warranty, order, serial, SKU, product, customer or phone…"
           aria-label="Search warranty registry"
           className={`${inputCls} max-w-[460px] flex-1 rounded-full`}
         />
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          aria-label="Filter warranty registry"
+          onChange={(e) =>
+            set({ status: e.target.value === "All statuses" ? null : e.target.value })
+          }
+          aria-label="Filter by status"
           className={selectCls}
         >
-          {[...EXTRA_FILTERS, ...WARRANTY_STATUSES].map((s) => (
+          {["All statuses", ...WARRANTY_STATUSES].map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>
-        {filtersActive ? (
-          <BtnGhost
-            onClick={() => {
-              setQ("");
-              setStatusFilter("All statuses");
-            }}
-          >
-            Reset filters
-          </BtnGhost>
-        ) : null}
+        <Segmented
+          label="Filter by expiry date"
+          size="sm"
+          options={EXPIRY_FILTERS}
+          value={expiry as (typeof EXPIRY_FILTERS)[number]["value"]}
+          onChange={(v) => set({ expiry: v === "any" ? null : v })}
+        />
+        {filtersActive ? <BtnGhost onClick={clear}>Reset filters</BtnGhost> : null}
       </div>
 
-      <p className="text-[13px] font-semibold text-zup-soft">
+      <p className="text-ui-sm font-semibold text-zup-soft">
         {rows.length} of {list.length} records · {active} active
         {claims > 0 ? ` · ${claims} open claim${claims === 1 ? "" : "s"}` : ""}
       </p>
 
       {error ? (
         <Card className="px-5 py-8 text-center">
-          <p className="text-[14px] font-semibold text-[#D32F2F]">
+          <p className="text-ui-base font-semibold text-destructive">
             Could not load the warranty registry.
           </p>
           <div className="mt-3">
@@ -191,17 +201,17 @@ function WarrantyRow({
         <Td className="text-zup-mid">{w.orderId}</Td>
         <Td className="text-zup-mid">
           {w.productName}
-          <span className="block text-[12px] text-zup-gray">
+          <span className="block text-ui-xs text-zup-gray">
             {w.sku} · ×{w.qty}
           </span>
         </Td>
-        <Td className="max-w-[180px] text-[12.5px] leading-snug text-zup-gray">
+        <Td className="max-w-[180px] text-ui-xs leading-snug text-zup-gray">
           {w.serialNo || <span className="text-zup-faint">Not recorded</span>}
         </Td>
-        <Td className="whitespace-nowrap text-[12.5px] text-zup-gray">
+        <Td className="whitespace-nowrap text-ui-xs text-zup-gray">
           {shortDate(w.endsAt)}
           {expiringSoon ? (
-            <span className="block text-[11.5px] font-semibold text-[#B7791F]">
+            <span className="block text-ui-micro font-semibold text-warn-fg">
               Expiring soon
             </span>
           ) : null}
@@ -229,21 +239,21 @@ function WarrantyRow({
       </tr>
       {expanded ? (
         <tr>
-          <Td colSpan={7} className="bg-[#FAFBFC]">
+          <Td colSpan={7} className="bg-surface-sunken">
             <div className="grid gap-3 py-1 sm:grid-cols-2">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-zup-gray">
+                <p className="text-ui-micro font-bold uppercase tracking-[0.12em] text-zup-gray">
                   Customer
                 </p>
-                <p className="mt-1 text-[13.5px] font-semibold">{w.customer}</p>
-                <p className="text-[12.5px] text-zup-gray">{w.phone}</p>
-                <p className="mt-2 text-[12.5px] text-zup-gray">
+                <p className="mt-1 text-ui-sm font-semibold">{w.customer}</p>
+                <p className="text-ui-xs text-zup-gray">{w.phone}</p>
+                <p className="mt-2 text-ui-xs text-zup-gray">
                   {w.months} months · {shortDate(w.startsAt)} → {shortDate(w.endsAt)}
                 </p>
               </div>
               <div className="flex flex-col gap-2">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-zup-gray">
+                  <span className="text-ui-micro font-bold uppercase tracking-[0.12em] text-zup-gray">
                     Serial number(s)
                   </span>
                   <input
@@ -257,7 +267,7 @@ function WarrantyRow({
                   />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-zup-gray">
+                  <span className="text-ui-micro font-bold uppercase tracking-[0.12em] text-zup-gray">
                     Claim note
                   </span>
                   <textarea
