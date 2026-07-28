@@ -22,7 +22,7 @@ export const createPaymentMethodDto = t.Object({
   ...paymentMethodFields,
 });
 
-/** apiSecret is write-only: empty or still-masked values mean "keep stored". */
+/** apiKey/apiSecret are write-only: empty or still-masked values mean "keep stored". */
 export const updatePaymentMethodDto = t.Partial(t.Object(paymentMethodFields));
 
 /** Shared gateway callback shape — see routes/public/webhooks.ts caveats. */

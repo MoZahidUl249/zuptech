@@ -45,12 +45,21 @@ export const adminPayments = new Elysia({ name: "routes/admin/payments", detail:
       const existing = await prisma.paymentMethod.findUnique({ where: { id: params.id } });
       if (!existing) throw notFound("Payment method");
 
-      const { apiSecret, ...rest } = body;
-      const keepStored = apiSecret === undefined || apiSecret === "" || isMaskedSecret(apiSecret);
+      // Both credentials round-trip through the form as masks, so an unchanged
+      // field arrives looking like "••••1234". Writing that back would replace
+      // the credential with its own mask, which is why neither is ever taken
+      // from the body unless it has actually been retyped.
+      const { apiKey, apiSecret, ...rest } = body;
+      const unchanged = (value: string | undefined) =>
+        value === undefined || value === "" || isMaskedSecret(value);
 
       const method = await prisma.paymentMethod.update({
         where: { id: params.id },
-        data: { ...rest, ...(keepStored ? {} : { apiSecret }) },
+        data: {
+          ...rest,
+          ...(unchanged(apiKey) ? {} : { apiKey }),
+          ...(unchanged(apiSecret) ? {} : { apiSecret }),
+        },
       });
       return toPaymentMethod(method);
     },

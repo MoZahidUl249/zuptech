@@ -3,7 +3,12 @@ import { sql } from "../db";
 import { CONFIG } from "../config";
 import { HttpError } from "../lib/errors";
 import { newId } from "../lib/ids";
-import { classifyMimeType, extensionForMimeType } from "../lib/mime";
+import {
+  classifyMimeType,
+  contentMatchesMimeType,
+  extensionForMimeType,
+  SNIFF_BYTES,
+} from "../lib/mime";
 import { validateIdentifier } from "../lib/validate";
 import { absolutePath, deleteMediaDir, ensureMediaDir, variantRelativePath } from "./storage";
 import {
@@ -20,6 +25,40 @@ export interface UploadInput {
   entityType: string;
   entityId: string;
   sortOrder: number;
+}
+
+/**
+ * First `count` bytes of an upload, read off the stream rather than by
+ * buffering the file — MAX_UPLOAD_SIZE_BYTES defaults to 500 MB and a
+ * signature lives in the first handful of bytes. Reads chunk by chunk because
+ * a stream may hand back fewer bytes than asked for.
+ */
+async function readHead(file: File, count: number): Promise<Uint8Array> {
+  const reader = file.stream().getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < count) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        total += value.length;
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+
+  const head = new Uint8Array(Math.min(total, count));
+  let offset = 0;
+  for (const chunk of chunks) {
+    if (offset >= head.length) break;
+    const slice = chunk.subarray(0, head.length - offset);
+    head.set(slice, offset);
+    offset += slice.length;
+  }
+  return head;
 }
 
 async function insertMediaRow(params: {
@@ -85,6 +124,14 @@ export async function uploadMedia(input: UploadInput): Promise<MediaWithVariants
   const mediaType = classifyMimeType(mimeType);
   if (!mediaType) {
     throw new HttpError(415, `unsupported mime type: ${mimeType}`);
+  }
+
+  // The declared type is also the Content-Type this service will serve the
+  // file back with, so it has to be checked against the bytes rather than
+  // taken on trust — otherwise an uploader picks that header.
+  const head = await readHead(input.file, SNIFF_BYTES);
+  if (!contentMatchesMimeType(head, mimeType)) {
+    throw new HttpError(415, `file contents are not a valid ${mimeType}`);
   }
 
   const mediaId = newId();

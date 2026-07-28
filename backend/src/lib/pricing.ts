@@ -1,10 +1,10 @@
-import type { Product, QuantityOffer } from "../generated/client";
+import type { FreeDeliveryOffer, Product, QuantityOffer } from "../generated/client";
 import { badRequest } from "./http";
 import { prisma } from "./db";
 import {
   availableStock,
+  discountedDeliveryFee,
   effectiveUnitPrice,
-  isDeliveryFree,
   orderableProductWhere,
 } from "./rules";
 
@@ -16,11 +16,11 @@ import {
  */
 
 export interface PricedLine {
-  product: Product & { quantityOffers: QuantityOffer[] };
+  product: Product & { quantityOffers: QuantityOffer[]; freeDeliveryOffers: FreeDeliveryOffer[] };
   qty: number;
   unitPrice: number;
   lineTotal: number;
-  deliveryFee: number | null; // per unit, zone-specific; null until insideDhaka is known
+  deliveryFee: number | null; // per unit, zone-specific, after any free-delivery tier; null until insideDhaka is known
   installationFee: number | null; // per unit, zone-specific; null until insideDhaka is known
 }
 
@@ -33,6 +33,27 @@ export interface PricedCart {
   total: number | null; // subtotal + deliveryFee + installationFee
 }
 
+/** Per-product quantity ceiling, mirroring the per-line cap in cartItemsDto. */
+const MAX_QTY_PER_PRODUCT = 99;
+
+/**
+ * Collapse repeated lines for the same product into one.
+ *
+ * The wire format lets a cart carry the same productId on several lines, and
+ * treating those as independent breaks two things at once: the stock check
+ * passes per line rather than per product (three lines of 5 clear a stock of 5,
+ * then reserve 15), and each line resolves its quantity-offer tier on its own
+ * partial qty instead of the total the customer actually bought. Summing first
+ * is what makes both correct, so every caller gets one line per product.
+ */
+function mergeItems(items: { productId: string; qty: number }[]) {
+  const merged = new Map<string, number>();
+  for (const { productId, qty } of items) {
+    merged.set(productId, (merged.get(productId) ?? 0) + qty);
+  }
+  return [...merged].map(([productId, qty]) => ({ productId, qty }));
+}
+
 /**
  * Price a validated cart. Products that are neither on the storefront nor on
  * a published landing page are indistinguishable from unknown ones (both
@@ -40,19 +61,26 @@ export interface PricedCart {
  * off for display quotes so a cart can still show prices while stock shifts.
  */
 export async function priceCart(
-  items: { productId: string; qty: number }[],
+  rawItems: { productId: string; qty: number }[],
   insideDhaka: boolean | undefined,
   { enforceStock = false } = {},
 ): Promise<PricedCart> {
+  const items = mergeItems(rawItems);
+
   const products = await prisma.product.findMany({
     where: { id: { in: items.map((i) => i.productId) }, ...orderableProductWhere() },
-    include: { quantityOffers: true },
+    include: { quantityOffers: true, freeDeliveryOffers: true },
   });
   const byId = new Map(products.map((p) => [p.id, p]));
 
   const lines = items.map(({ productId, qty }) => {
     const product = byId.get(productId);
     if (!product) throw badRequest(`Unknown product: ${productId}`);
+    // Per-line quantity is capped by cartItemsDto; re-check the merged total so
+    // the cap can't be lifted by splitting one product across several lines.
+    if (qty > MAX_QTY_PER_PRODUCT) {
+      throw badRequest(`At most ${MAX_QTY_PER_PRODUCT} of "${product.name}" per order`);
+    }
     if (enforceStock) {
       const available = availableStock(product);
       if (qty > available) throw badRequest(`Only ${available} of "${product.name}" in stock`);
@@ -66,11 +94,11 @@ export async function priceCart(
       deliveryFee:
         insideDhaka === undefined
           ? null
-          : isDeliveryFree(product, qty)
-            ? 0
-            : insideDhaka
-              ? product.deliveryFeeInsideDhaka
-              : product.deliveryFeeOutsideDhaka,
+          : discountedDeliveryFee(
+              insideDhaka ? product.deliveryFeeInsideDhaka : product.deliveryFeeOutsideDhaka,
+              product.freeDeliveryOffers,
+              qty,
+            ),
       installationFee:
         insideDhaka === undefined
           ? null

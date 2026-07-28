@@ -5,9 +5,11 @@
  * Idempotent: safe to re-run — rows are upserted, staff auth users are only
  * created when missing. Run with `bun run db:seed`.
  */
+import { randomBytes } from "node:crypto";
 import { auth } from "../src/lib/auth";
 import { prisma } from "../src/lib/db";
 import { ADMIN_MODULES, type AdminModule, type Permission } from "../src/lib/rbac";
+import { staffEmail } from "../src/lib/rules";
 
 /* ===== Roles ===== */
 
@@ -37,7 +39,6 @@ const roles = [
         "homepage",
         "landingpages",
         "sitecontent",
-        "pricing",
       ],
     ),
   },
@@ -52,12 +53,31 @@ const roles = [
   },
 ];
 
-/* ===== Staff (demo password: zup123) ===== */
+/* ===== Staff ===== */
 
+/**
+ * The password new staff rows are created with.
+ *
+ * In development every account gets `zup123`, which is what the login screen
+ * hints at and what the docs tell you to sign in with. In production that
+ * would hand anyone who has read this repo three working admin logins, so the
+ * seed generates a random password instead and prints it once — the operator
+ * copies it out of the deploy log and changes it, rather than being trusted to
+ * remember a manual step nothing enforces. `SEED_DEMO_PASSWORD=true` opts back
+ * in for a throwaway staging box.
+ */
+function staffPassword(): string {
+  const demo =
+    process.env.NODE_ENV !== "production" || process.env.SEED_DEMO_PASSWORD === "true";
+  return demo ? "zup123" : `zup-${randomBytes(12).toString("base64url")}`;
+}
+
+// `email` is the real, deliverable address a password-reset OTP goes to — not
+// the synthetic `{username}@staff.zuptech.local` Better Auth signs in with.
 const staff = [
-  { name: "Arif Hossain", phone: "01711-000001", username: "arif", roleId: "super" },
-  { name: "Nusrat Jahan", phone: "01822-000002", username: "nusrat", roleId: "manager" },
-  { name: "Rakib Khan", phone: "01933-000003", username: "rakib", roleId: "support" },
+  { name: "Arif Hossain", phone: "01711-000001", email: "arif@zuptech.example", username: "arif", roleId: "super" },
+  { name: "Nusrat Jahan", phone: "01822-000002", email: "nusrat@zuptech.example", username: "nusrat", roleId: "manager" },
+  { name: "Rakib Khan", phone: "01933-000003", email: "rakib@zuptech.example", username: "rakib", roleId: "support" },
 ];
 
 /* ===== Catalog taxonomy (Section → Category → Product) ===== */
@@ -94,14 +114,61 @@ const products = [
   { id: "mccb400", slug: "mccb-breaker-400a-3-pole", name: "MCCB Breaker 400A 3-Pole", category: "Protection", price: 18500, minDp: 15, rating: 4.7, sold: 203, imgHint: "MCCB photo", specs: ["400A frame, 36kA breaking capacity", "Adjustable thermal-magnetic trip", "Panel or DIN mounting", "Genuine, with test certificate"], description: "A genuine 400A three-pole MCCB with 36kA breaking capacity and adjustable thermal-magnetic trip. Suitable for panel or DIN mounting, supplied with test certificate.", sku: "ZT-MCB-400", cost: 14200, stock: 41, reserved: 0, reorderAt: 10, visible: true, deliveryFeeInsideDhaka: 150, deliveryFeeOutsideDhaka: 400, installationFeeInsideDhaka: 400, installationFeeOutsideDhaka: 700, warrantyMonths: 12 },
 ];
 
+/* ===== Offer ladders =====
+ *
+ * Both tier kinds are relations, so they're written after the products exist.
+ * Keyed by product id; the highest satisfied minQty wins and tiers never stack
+ * (see rules.ts `bestQuantityOffer` / `deliveryDiscountPercent`).
+ */
+
+const offers: Record<
+  string,
+  {
+    quantity?: { minQty: number; percentage: number }[];
+    delivery?: { minQty: number; percentage: number }[];
+  }
+> = {
+  // The showcase product: both ladders, so the storefront has something to render.
+  ips1000: {
+    quantity: [
+      { minQty: 3, percentage: 5 },
+      { minQty: 5, percentage: 10 },
+    ],
+    delivery: [
+      { minQty: 2, percentage: 50 },
+      { minQty: 5, percentage: 100 },
+    ],
+  },
+  vprot: {
+    quantity: [
+      { minQty: 5, percentage: 8 },
+      { minQty: 10, percentage: 12 },
+      { minQty: 25, percentage: 18 },
+    ],
+    delivery: [{ minQty: 10, percentage: 100 }],
+  },
+  flood100: {
+    quantity: [{ minQty: 4, percentage: 7 }],
+    delivery: [{ minQty: 4, percentage: 100 }],
+  },
+  // Delivery-only ladder — proves the two are independent.
+  mccb400: {
+    delivery: [
+      { minQty: 2, percentage: 40 },
+      { minQty: 5, percentage: 100 },
+    ],
+  },
+};
+
 /* ===== Customers ===== */
 
+// `email` mirrors what registration now collects — the reset OTP target.
 const customers = [
-  { id: "c1", name: "Karim Uddin", phone: "01712345678", joinedAt: new Date("2026-06-01") },
-  { id: "c2", name: "Salma Akter", phone: "01898112233", joinedAt: new Date("2026-07-01") },
-  { id: "c3", name: "Hasan Mia", phone: "01611778899", joinedAt: new Date("2026-05-01") },
-  { id: "c4", name: "Rahim & Co. Textiles", phone: "01555334455", joinedAt: new Date("2026-01-01") },
-  { id: "c5", name: "Farida Begum", phone: "01722556677", joinedAt: new Date("2026-07-01") },
+  { id: "c1", name: "Karim Uddin", phone: "01712345678", email: "karim.uddin@example.com", joinedAt: new Date("2026-06-01") },
+  { id: "c2", name: "Salma Akter", phone: "01898112233", email: "salma.akter@example.com", joinedAt: new Date("2026-07-01") },
+  { id: "c3", name: "Hasan Mia", phone: "01611778899", email: "hasan.mia@example.com", joinedAt: new Date("2026-05-01") },
+  { id: "c4", name: "Rahim & Co. Textiles", phone: "01555334455", email: "accounts@rahimtextiles.example", joinedAt: new Date("2026-01-01") },
+  { id: "c5", name: "Farida Begum", phone: "01722556677", email: "farida.begum@example.com", joinedAt: new Date("2026-07-01") },
 ];
 
 /* ===== Orders (items reconstructed from the demo totals) ===== */
@@ -305,12 +372,21 @@ async function main() {
   // Staff sign in through Better Auth — create the auth user + profile row.
   for (const member of staff) {
     const existing = await prisma.staff.findUnique({ where: { username: member.username } });
-    if (existing) continue;
+    if (existing) {
+      // The auth user already exists, so the signup below is skipped — but a
+      // DB seeded before `email` was added still has none, and without it the
+      // demo staff can't test the reset flow. Backfill it, leave the rest.
+      if (!existing.email) {
+        await prisma.staff.update({ where: { id: existing.id }, data: { email: member.email } });
+      }
+      continue;
+    }
 
+    const password = staffPassword();
     const signup = await auth.api.signUpEmail({
       body: {
-        email: `${member.username}@staff.zuptech.local`,
-        password: "zup123", // demo password from the login screen
+        email: staffEmail(member.username), // synthetic sign-in id, not member.email
+        password,
         name: member.name,
         username: member.username,
       },
@@ -321,7 +397,7 @@ async function main() {
       await prisma.user.delete({ where: { id: signup.user.id } }).catch(() => {});
       throw err;
     }
-    console.log(`  staff: ${member.username}`);
+    console.log(`  staff: ${member.username} · password: ${password}`);
   }
 
   // Taxonomy first — products can't be written without a category to point at.
@@ -350,6 +426,23 @@ async function main() {
   for (const { category, ...product } of products) {
     const data = { ...product, categoryId: categoryIds.get(category)! };
     await prisma.product.upsert({ where: { id: data.id }, create: data, update: data });
+  }
+
+  // Offer tiers are replace-all (same semantics as PATCH /admin/api/products/:id),
+  // so re-seeding converges instead of accumulating duplicates.
+  for (const [productId, ladder] of Object.entries(offers)) {
+    await prisma.quantityOffer.deleteMany({ where: { productId } });
+    await prisma.freeDeliveryOffer.deleteMany({ where: { productId } });
+    if (ladder.quantity?.length) {
+      await prisma.quantityOffer.createMany({
+        data: ladder.quantity.map((tier) => ({ ...tier, productId })),
+      });
+    }
+    if (ladder.delivery?.length) {
+      await prisma.freeDeliveryOffer.createMany({
+        data: ladder.delivery.map((tier) => ({ ...tier, productId })),
+      });
+    }
   }
 
   for (const customer of customers) {

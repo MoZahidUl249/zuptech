@@ -34,6 +34,7 @@ import type {
   Category,
   ContactMessage,
   Customer,
+  FreeDeliveryOffer,
   HeroSlide,
   IndustrialLead,
   IndustrialService,
@@ -73,12 +74,14 @@ import { availableStock, isLowStock, maskSecret, salePrice } from "./rules";
  */
 export const productInclude = {
   quantityOffers: { orderBy: { minQty: "asc" as const } },
+  freeDeliveryOffers: { orderBy: { minQty: "asc" as const } },
   category: { include: { section: true } },
 };
 
 /** A product row with `productInclude` applied. */
 export type ProductWithRelations = Product & {
   quantityOffers: QuantityOffer[];
+  freeDeliveryOffers: FreeDeliveryOffer[];
   category: Category & { section: Section };
 };
 
@@ -102,7 +105,10 @@ export function toPublicProduct(p: ProductWithRelations): PublicProductDto {
     deliveryFeeOutsideDhaka: p.deliveryFeeOutsideDhaka,
     installationFeeInsideDhaka: p.installationFeeInsideDhaka,
     installationFeeOutsideDhaka: p.installationFeeOutsideDhaka,
-    freeDeliveryMinQty: p.freeDeliveryMinQty,
+    freeDeliveryOffers: p.freeDeliveryOffers.map((o) => ({
+      minQty: o.minQty,
+      percentage: o.percentage,
+    })),
     rating: p.rating,
     sold: p.sold,
     imgHint: p.imgHint,
@@ -314,7 +320,14 @@ export function toCustomer(c: Customer & { _count: { orders: number } }): Custom
 
 /** Self-service profile — GET/PATCH /api/me. */
 export function toCustomerProfile(c: Customer): CustomerProfileDto {
-  return { id: c.id, name: c.name, phone: c.phone, address: c.address, insideDhaka: c.insideDhaka };
+  return {
+    id: c.id,
+    name: c.name,
+    phone: c.phone,
+    email: c.email ?? "",
+    address: c.address,
+    insideDhaka: c.insideDhaka,
+  };
 }
 
 /** A saved cart's raw id+qty lines (Json column, cast to the known shape —
@@ -416,6 +429,7 @@ export function toPublicLandingPage(lp: LandingPageRow): PublicLandingPageDto {
     offerPrice: lp.offerPrice,
     compareAtPrice: lp.compareAtPrice,
     discountPercentage,
+    youSave: Math.max(0, lp.compareAtPrice - lp.offerPrice),
     ribbonText: lp.ribbonText,
     buttonLabel: lp.buttonLabel,
     footerNote: lp.footerNote,
@@ -544,7 +558,11 @@ export function toMovement(m: StockMovement): StockMovementDto {
   };
 }
 
-/** Admin payments view: apiSecret is write-only, responses carry a mask. */
+/**
+ * Admin payments view: gateway credentials are write-only, responses carry a
+ * mask. Both fields, not just the one named "secret" — a gateway API key is a
+ * credential too, and it was going out in full to anyone with `payments: view`.
+ */
 export function toPaymentMethod(m: PaymentMethod): PaymentMethodDto {
   return {
     id: m.id,
@@ -554,7 +572,7 @@ export function toPaymentMethod(m: PaymentMethod): PaymentMethodDto {
     providers: m.providers,
     enabled: m.enabled,
     environment: m.environment,
-    apiKey: m.apiKey,
+    apiKey: maskSecret(m.apiKey),
     apiSecret: maskSecret(m.apiSecret),
     webhookUrl: m.webhookUrl,
     isGateway: m.isGateway,

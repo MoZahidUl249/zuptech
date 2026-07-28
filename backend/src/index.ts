@@ -38,6 +38,15 @@ import { paymentWebhooks } from "./routes/public/webhooks";
  *   /pay/*        payment gateway webhooks
  *   /admin/api/*  staff panel (session + per-module RBAC on every route)
  */
+/**
+ * The docs describe every admin endpoint, its body schema and its permission
+ * requirements — a map of the attack surface, published unauthenticated. It is
+ * a development tool, so it is mounted only outside production. Set
+ * `OPENAPI_DOCS=true` to bring it back on a staging box.
+ */
+const DOCS_ENABLED =
+  process.env.OPENAPI_DOCS === "true" || process.env.NODE_ENV !== "production";
+
 const app = new Elysia()
   .use(
     cors({
@@ -49,43 +58,45 @@ const app = new Elysia()
   // Interactive API docs (Scalar UI) at /openapi, raw spec at /openapi/json.
   // Request schemas come straight from the DTOs in src/dtos/*.dto.ts.
   .use(
-    openapi({
-      path: "/openapi",
-      documentation: {
-        info: {
-          title: "ZUP TECH API",
-          version: "1.0.0",
-          description:
-            "Backend for the ZUP TECH storefront + admin panel. " +
-            "`/api/*` is the public storefront, `/pay/*` payment webhooks, " +
-            "`/admin/api/*` the staff panel (session cookie + per-module RBAC). " +
-            "All money is integer BDT and always computed server-side — see " +
-            "`cal-bk.md` for the pricing contract. Storefront validation " +
-            "errors return 400 `{ error }`; admin routes return 422.",
-        },
-        tags: [
-          { name: "Storefront", description: "Public catalog & site config" },
-          { name: "Checkout", description: "Cart pricing quotes + guest checkout (cal-bk.md)" },
-          { name: "Customer auth", description: "Phone + password login for order tracking" },
-          { name: "Customer cart", description: "Signed-in customer's server-synced cart" },
-          { name: "Leads", description: "Booking & contact forms" },
-          { name: "Webhooks", description: "Payment gateway callbacks (stubs)" },
-          { name: "Admin · Auth", description: "Staff login/logout/session" },
-          { name: "Admin · Metrics", description: "Dashboard & analytics" },
-          { name: "Admin · Orders", description: "Order list, detail, status & prepared-by" },
-          { name: "Admin · Invoices", description: "Order invoices (Draft → Issued → Paid)" },
-          { name: "Admin · Warranty", description: "Warranty registry & claims" },
-          { name: "Admin · Products", description: "Catalog CRUD + featured row" },
-          { name: "Admin · Taxonomy", description: "Sections & categories (with logos)" },
-          { name: "Admin · Services", description: "Service & industrial-service catalogues" },
-          { name: "Admin · Inventory", description: "Stock, purchase orders, suppliers, movements" },
-          { name: "Admin · Leads & Customers", description: "Lead pipeline + customer list" },
-          { name: "Admin · Content", description: "Hero slides, copy, contact, integrations" },
-          { name: "Admin · Payments", description: "Payment method config (secrets masked)" },
-          { name: "Admin · Staff", description: "Staff & role management (RBAC)" },
-        ],
-      },
-    }),
+    DOCS_ENABLED
+      ? openapi({
+          path: "/openapi",
+          documentation: {
+            info: {
+              title: "ZUP TECH API",
+              version: "1.0.0",
+              description:
+                "Backend for the ZUP TECH storefront + admin panel. " +
+                "`/api/*` is the public storefront, `/pay/*` payment webhooks, " +
+                "`/admin/api/*` the staff panel (session cookie + per-module RBAC). " +
+                "All money is integer BDT and always computed server-side — see " +
+                "`cal-bk.md` for the pricing contract. Storefront validation " +
+                "errors return 400 `{ error }`; admin routes return 422.",
+            },
+            tags: [
+              { name: "Storefront", description: "Public catalog & site config" },
+              { name: "Checkout", description: "Cart pricing quotes + guest checkout (cal-bk.md)" },
+              { name: "Customer auth", description: "Phone + password login for order tracking" },
+              { name: "Customer cart", description: "Signed-in customer's server-synced cart" },
+              { name: "Leads", description: "Booking & contact forms" },
+              { name: "Webhooks", description: "Payment gateway callbacks (stubs)" },
+              { name: "Admin · Auth", description: "Staff login/logout/session" },
+              { name: "Admin · Metrics", description: "Dashboard & analytics" },
+              { name: "Admin · Orders", description: "Order list, detail, status & prepared-by" },
+              { name: "Admin · Invoices", description: "Order invoices (Draft → Issued → Paid)" },
+              { name: "Admin · Warranty", description: "Warranty registry & claims" },
+              { name: "Admin · Products", description: "Catalog CRUD + featured row" },
+              { name: "Admin · Taxonomy", description: "Sections & categories (with logos)" },
+              { name: "Admin · Services", description: "Service & industrial-service catalogues" },
+              { name: "Admin · Inventory", description: "Stock, purchase orders, suppliers, movements" },
+              { name: "Admin · Leads & Customers", description: "Lead pipeline + customer list" },
+              { name: "Admin · Content", description: "Hero slides, copy, contact, integrations" },
+              { name: "Admin · Payments", description: "Payment method config (secrets masked)" },
+              { name: "Admin · Staff", description: "Staff & role management (RBAC)" },
+            ],
+          },
+        })
+      : new Elysia({ name: "openapi-disabled" }),
   )
 
   // Baseline security headers on every response (mirrors next.config.ts).

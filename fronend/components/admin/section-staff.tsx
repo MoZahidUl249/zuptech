@@ -10,11 +10,13 @@ import {
   type AdminModule,
   type Permission,
   type Role,
+  tempId,
 } from "@/lib/admin";
 import {
   Card,
   Table,
   Td,
+  Pill,
   BtnPrimary,
   BtnGhost,
   BtnDanger,
@@ -38,7 +40,6 @@ const MODULE_LABELS: Record<AdminModule, string> = {
   sitecontent: "Site content",
   payments: "Payments",
   staff: "Staff & roles",
-  pricing: "Delivery & installation pricing",
 };
 
 const PERMS: Permission[] = ["none", "view", "manage"];
@@ -48,13 +49,26 @@ export function StaffSection() {
   const readOnly = can("staff") !== "manage";
   const [selectedRoleId, setSelectedRoleId] = useState("manager");
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ name: "", phone: "", username: "", password: "" });
+  const [draft, setDraft] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    username: "",
+    password: "",
+    // Default to the least-privileged non-system role rather than a hardcoded
+    // "support": whichever roles this shop has actually created, start at the
+    // bottom of them.
+    roleId: "",
+  });
   const [showPassword, setShowPassword] = useState(false);
 
   const selectedRole =
     state.roles.find((r) => r.id === selectedRoleId) ?? state.roles[0];
   const staffCount = (roleId: string) =>
     state.staff.filter((s) => s.roleId === roleId).length;
+  // Never offer "super" as a default for a new hire.
+  const assignableRoles = state.roles.filter((r) => r.id !== "super");
+  const defaultRoleId = assignableRoles.at(-1)?.id ?? "";
 
   const addStaff = () => {
     const username = draft.username.trim().toLowerCase();
@@ -66,25 +80,49 @@ export function StaffSection() {
       toast(`Username "${username}" is taken`);
       return;
     }
+    const email = draft.email.trim().toLowerCase();
+    // Optional, but it's the only way this person can recover their own
+    // password — so a malformed one is worth catching here.
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      toast("Enter a valid email address, or leave it blank");
+      return;
+    }
+    if (email && state.staff.some((s) => s.email?.toLowerCase() === email)) {
+      toast(`Email "${email}" is already assigned to another staff member`);
+      return;
+    }
+    // Was hardcoded to "support" regardless of anything on screen — and the
+    // form had no role picker at all, so every new staff member landed in the
+    // wrong role and had to be corrected in the table afterwards.
+    const roleId = draft.roleId || defaultRoleId;
+    if (!roleId) {
+      toast("Create a role first, then add staff to it");
+      return;
+    }
+
     // The transient password field is sent to POST /admin/api/staff by the
     // sync layer; the server stores only a hash (better-auth).
     update({
       staff: [
         ...state.staff,
         {
-          id: `s${Date.now()}`,
+          id: tempId("staff"),
           name: draft.name.trim(),
           phone: draft.phone.trim(),
+          email,
           username,
           password: draft.password,
-          roleId: "support",
+          roleId,
         },
       ],
     });
-    setDraft({ name: "", phone: "", username: "", password: "" });
+    setDraft({ name: "", phone: "", email: "", username: "", password: "", roleId: "" });
     setAdding(false);
     toast(`${draft.name.trim()} added to staff`);
   };
+
+  const inUse = selectedRole ? staffCount(selectedRole.id) : 0;
+  const blockedReason = `Move its ${inUse} ${inUse === 1 ? "person" : "people"} to another role before deleting it.`;
 
   const setRolePerm = (module: AdminModule, perm: Permission) => {
     update({
@@ -101,7 +139,7 @@ export function StaffSection() {
       {/* Staff members */}
       <Card className="px-5 py-5 sm:px-6">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-[15px] font-bold">Staff members</h2>
+          <h2 className="text-ui-base font-bold">Staff members</h2>
           {!readOnly ? (
             <BtnPrimary onClick={() => setAdding((a) => !a)}>
               <Plus className="h-4 w-4" strokeWidth={2.6} aria-hidden /> Add staff
@@ -110,7 +148,7 @@ export function StaffSection() {
         </div>
 
         {adding ? (
-          <div className="mb-4 grid gap-2.5 rounded-2xl border border-zup-body/8 bg-[#FAFBFC] p-4 sm:grid-cols-5">
+          <div className="mb-4 grid gap-2.5 rounded-2xl border border-zup-body/8 bg-surface-sunken p-4 sm:grid-cols-2 lg:grid-cols-3">
             <input
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -124,6 +162,15 @@ export function StaffSection() {
               placeholder="Phone"
               inputMode="tel"
               aria-label="Phone"
+              className={inputCls}
+            />
+            <input
+              value={draft.email}
+              onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+              placeholder="Email (for password reset)"
+              type="email"
+              autoCapitalize="none"
+              aria-label="Email"
               className={inputCls}
             />
             <input
@@ -151,18 +198,41 @@ export function StaffSection() {
                 {showPassword ? "Hide" : "Show"}
               </BtnGhost>
             </div>
+            <select
+              value={draft.roleId || defaultRoleId}
+              onChange={(e) => setDraft({ ...draft, roleId: e.target.value })}
+              aria-label="Role"
+              className={selectCls}
+            >
+              {assignableRoles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
             <BtnPrimary onClick={addStaff}>Save</BtnPrimary>
           </div>
         ) : null}
 
-        <Table head={["Name", "Phone", "Username", "Role", ""]} minWidth={680}>
+        <Table head={["Name", "Phone", "Email", "Username", "Role", ""]} minWidth={840}>
           {state.staff.map((s) => {
             const isSuperSelf = s.roleId === "super";
             return (
               <tr key={s.id} className="last:[&>td]:border-0">
                 <Td className="font-bold">{s.name}</Td>
                 <Td className="text-zup-gray">{s.phone}</Td>
-                <Td className="font-mono text-[13px] text-zup-gray">{s.username}</Td>
+                <Td className="max-w-[220px] truncate text-zup-gray">
+                  {s.email ? (
+                    s.email
+                  ) : (
+                    // Without an address this member can't use "Forgot
+                    // password?" — another admin has to reset it for them.
+                    <span title="No email on file — this member can't reset their own password">
+                      <Pill tone="amber">No reset email</Pill>
+                    </span>
+                  )}
+                </Td>
+                <Td className="font-mono text-ui-sm text-zup-gray">{s.username}</Td>
                 <Td>
                   <select
                     value={s.roleId}
@@ -208,7 +278,7 @@ export function StaffSection() {
       {/* Roles + permission matrix */}
       <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
         <Card className="h-fit px-4 py-4">
-          <h2 className="mb-2.5 px-1.5 text-[15px] font-bold">Roles</h2>
+          <h2 className="mb-2.5 px-1.5 text-ui-base font-bold">Roles</h2>
           {state.roles.map((r) => (
             <button
               key={r.id}
@@ -217,12 +287,12 @@ export function StaffSection() {
               className={cn(
                 "mb-0.5 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors",
                 r.id === selectedRole.id
-                  ? "bg-[#E7EDFC] text-zup-blue"
+                  ? "bg-info-bg text-zup-blue"
                   : "text-zup-body hover:bg-secondary",
               )}
             >
               {r.name}
-              <span className="text-[11px] font-medium text-zup-soft">
+              <span className="text-ui-micro font-medium text-zup-soft">
                 {staffCount(r.id)} staff
               </span>
             </button>
@@ -231,7 +301,7 @@ export function StaffSection() {
             <button
               type="button"
               onClick={() => {
-                const id = `role${Date.now()}`;
+                const id = tempId("role");
                 const none = Object.fromEntries(
                   ADMIN_MODULES.map((m) => [m, m === "dashboard" ? "view" : "none"]),
                 ) as Role["permissions"];
@@ -241,7 +311,7 @@ export function StaffSection() {
                 setSelectedRoleId(id);
                 toast("Role created — set its permissions");
               }}
-              className="mt-2 w-full rounded-xl border border-dashed border-zup-body/20 px-3 py-2.5 text-sm font-bold text-zup-blue transition-colors hover:bg-[#F4F7FE]"
+              className="mt-2 w-full rounded-xl border border-dashed border-zup-body/20 px-3 py-2.5 text-sm font-bold text-zup-blue transition-colors hover:bg-info-tint"
             >
               + New role
             </button>
@@ -263,32 +333,40 @@ export function StaffSection() {
               }
               className={`${inputCls} max-w-[220px] font-bold`}
             />
+            {/* The guard used to run inside onConfirm: you clicked Delete,
+                confirmed a destructive action in a dialog, and only then were
+                told it wasn't allowed. Check first — a button that can't work
+                should look like it can't work, and say why. */}
             {!readOnly && selectedRole.id !== "super" ? (
-              <ConfirmDialog
-                trigger={
-                  <BtnDanger className="min-h-10 px-4">Delete role</BtnDanger>
-                }
-                title={`Delete "${selectedRole.name}" role?`}
-                description="This can't be undone. Staff assigned to it must be reassigned first."
-                confirmLabel="Delete"
-                onConfirm={() => {
-                  if (staffCount(selectedRole.id) > 0) {
-                    toast("Reassign this role's staff before deleting it");
-                    return;
-                  }
-                  update({ roles: state.roles.filter((r) => r.id !== selectedRole.id) });
-                  setSelectedRoleId("super");
-                  toast(`${selectedRole.name} role deleted`);
-                }}
-              />
+              inUse > 0 ? (
+                <BtnDanger disabled className="min-h-10 px-4" title={blockedReason}>
+                  Delete role
+                </BtnDanger>
+              ) : (
+                <ConfirmDialog
+                  trigger={<BtnDanger className="min-h-10 px-4">Delete role</BtnDanger>}
+                  title={`Delete the "${selectedRole.name}" role?`}
+                  description="This can't be undone."
+                  confirmLabel="Delete"
+                  onConfirm={() => {
+                    update({ roles: state.roles.filter((r) => r.id !== selectedRole.id) });
+                    setSelectedRoleId("super");
+                    toast(`${selectedRole.name} role deleted`);
+                  }}
+                />
+              )
             ) : null}
           </div>
 
+          {inUse > 0 && !readOnly && selectedRole.id !== "super" ? (
+            <p className="mb-4 text-ui-sm text-zup-gray">{blockedReason}</p>
+          ) : null}
+
           <div className="mb-2 grid grid-cols-[1fr_auto] items-center gap-2 border-b border-zup-body/6 pb-2">
-            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-zup-soft">
+            <span className="text-ui-micro font-bold uppercase tracking-[0.08em] text-zup-soft">
               Module
             </span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-zup-soft">
+            <span className="text-ui-micro font-bold uppercase tracking-[0.08em] text-zup-soft">
               Permission
             </span>
           </div>

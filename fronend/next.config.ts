@@ -15,6 +15,40 @@ const securityHeaders = [
   },
 ];
 
+/**
+ * Content-Security-Policy.
+ *
+ * Deliberately REPORT-ONLY for now. It is a real policy, not a placeholder —
+ * but shipping an enforcing CSP blind breaks pages in ways that only show up
+ * in a browser, and this one has two known-awkward tenants: Next's inline
+ * bootstrap/hydration scripts and the GTM loader snippet, both of which need
+ * 'unsafe-inline' until the app is switched to nonces.
+ *
+ * To enforce: load the storefront AND the admin, confirm the console reports
+ * no violations, then rename the header to `Content-Security-Policy`.
+ *
+ * The category-logo XSS sink this was added for is now closed at the source
+ * (sanitizeSvgLogo parses and allowlists rather than pattern-matching), so
+ * this is defence in depth rather than the only line.
+ */
+function contentSecurityPolicy(storageOrigin: string): string {
+  return [
+    "default-src 'self'",
+    // 'unsafe-inline'/'unsafe-eval': Next's bootstrap + the GTM loader.
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: ${storageOrigin} https://www.googletagmanager.com`,
+    `media-src 'self' ${storageOrigin}`,
+    "font-src 'self' data:",
+    // The browser talks to the API same-origin through the rewrites below.
+    "connect-src 'self' https://www.google-analytics.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join("; ");
+}
+
 // The real backend (see BACKEND.md / cal-bk.md / openapi.json). The frontend
 // runs on :3001 and proxies all API traffic there, so the browser stays
 // same-origin and the better-auth session cookie works unchanged.
@@ -65,7 +99,18 @@ const nextConfig: NextConfig = {
     dangerouslyAllowLocalIP: IS_LOCAL_STORAGE && process.env.NODE_ENV === "development",
   },
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          ...securityHeaders,
+          {
+            key: "Content-Security-Policy-Report-Only",
+            value: contentSecurityPolicy(STORAGE_ORIGIN.origin),
+          },
+        ],
+      },
+    ];
   },
   async redirects() {
     return [

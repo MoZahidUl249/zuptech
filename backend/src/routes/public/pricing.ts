@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { quoteDto } from "../../dtos/pricing.dto";
 import { ApiError } from "../../lib/http";
 import { priceCart } from "../../lib/pricing";
-import { allowHit } from "../../lib/rate-limit";
+import { allowHit, clientIp } from "../../lib/rate-limit";
 import { toQuote } from "../../lib/serialize";
 
 /**
@@ -14,7 +14,7 @@ import { toQuote } from "../../lib/serialize";
 export const publicPricing = new Elysia({ name: "routes/public/pricing", detail: { tags: ["Checkout"] } }).post(
   "/api/pricing/quote",
   async ({ body, request, server }) => {
-    const ip = server?.requestIP(request)?.address ?? "unknown";
+    const ip = clientIp(request, server);
     if (!allowHit(`quote-ip:${ip}`, 60, 60_000)) {
       throw new ApiError(429, "Too many requests — try again shortly");
     }

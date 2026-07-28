@@ -4,9 +4,10 @@ import {
   bestQuantityOffer,
   LEAD_STATUSES,
   MAX_SVG_LOGO_BYTES,
+  deliveryDiscountPercent,
+  discountedDeliveryFee,
   effectiveUnitPrice,
   GTM_ID_RE,
-  isDeliveryFree,
   isLowStock,
   isMaskedSecret,
   isOneOf,
@@ -102,11 +103,31 @@ describe("misc", () => {
       effectiveUnitPrice({ price: 1000, onSale: true, salePercentage: 2 }, 3, offers),
     ).toBe(950);
   });
-  test("isDeliveryFree only unlocks at/above a positive threshold", () => {
-    expect(isDeliveryFree({ freeDeliveryMinQty: 0 }, 10)).toBe(false); // disabled
-    expect(isDeliveryFree({ freeDeliveryMinQty: 4 }, 3)).toBe(false);
-    expect(isDeliveryFree({ freeDeliveryMinQty: 4 }, 4)).toBe(true);
-    expect(isDeliveryFree({ freeDeliveryMinQty: 4 }, 5)).toBe(true);
+  test("deliveryDiscountPercent picks the highest tier the qty satisfies", () => {
+    const tiers = [
+      { minQty: 2, percentage: 50 },
+      { minQty: 5, percentage: 100 },
+    ];
+    expect(deliveryDiscountPercent([], 10)).toBe(0); // no ladder = full fee
+    expect(deliveryDiscountPercent(tiers, 1)).toBe(0);
+    expect(deliveryDiscountPercent(tiers, 2)).toBe(50);
+    expect(deliveryDiscountPercent(tiers, 4)).toBe(50); // between tiers, lower wins
+    expect(deliveryDiscountPercent(tiers, 5)).toBe(100);
+    expect(deliveryDiscountPercent(tiers, 50)).toBe(100); // above the top tier
+  });
+  test("discountedDeliveryFee applies the best tier, floor-rounded", () => {
+    const tiers = [
+      { minQty: 2, percentage: 50 },
+      { minQty: 5, percentage: 100 },
+    ];
+    expect(discountedDeliveryFee(300, tiers, 1)).toBe(300);
+    expect(discountedDeliveryFee(300, tiers, 2)).toBe(150);
+    expect(discountedDeliveryFee(300, tiers, 5)).toBe(0); // 100% = free
+    expect(discountedDeliveryFee(300, [], 99)).toBe(300);
+    // 33% of 175 is 57.75 → floor 57 off, so the customer keeps the remainder.
+    expect(discountedDeliveryFee(175, [{ minQty: 2, percentage: 33 }], 3)).toBe(118);
+    // A zero zone fee stays zero rather than going negative.
+    expect(discountedDeliveryFee(0, tiers, 10)).toBe(0);
   });
   test("secrets are masked to last 4", () => {
     expect(maskSecret("bk_live_7f31a92c44e8")).toBe("••••44e8");
@@ -120,12 +141,22 @@ describe("misc", () => {
 
 describe("svg logo sanitizer", () => {
   const plain = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#0B4FE0"/></svg>';
+  // What comes back is re-serialized from the parse tree, not the input
+  // string — self-closing tags expand, which is what the browser does anyway.
+  const plainOut = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#0B4FE0"></circle></svg>';
 
   test("accepts inert drawing markup", () => {
-    expect(sanitizeSvgLogo(plain)).toBe(plain);
+    expect(sanitizeSvgLogo(plain)).toBe(plainOut);
   });
   test("strips the XML prolog and comments editors leave behind", () => {
-    expect(sanitizeSvgLogo(`<?xml version="1.0"?><!-- Generator --> ${plain}`)).toBe(plain);
+    expect(sanitizeSvgLogo(`<?xml version="1.0"?><!-- Generator --> ${plain}`)).toBe(plainOut);
+  });
+  test("keeps the camelCase SVG spellings a logo needs", () => {
+    const gradient =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">' +
+      '<defs><linearGradient id="g"><stop offset="0" stop-color="#fff"></stop></linearGradient></defs>' +
+      '<rect width="40" height="40" fill="url(#g)"></rect></svg>';
+    expect(sanitizeSvgLogo(gradient)).toBe(gradient);
   });
   test("empty input clears the logo", () => {
     expect(sanitizeSvgLogo("")).toBe("");
@@ -142,12 +173,22 @@ describe("svg logo sanitizer", () => {
     ['<svg><script>alert(1)</script></svg>', /script/i],
     ['<svg onload="alert(1)"></svg>', /event handler/i],
     ['<svg><circle onclick="alert(1)"/></svg>', /event handler/i],
-    ['<svg><a href="javascript:alert(1)"><circle/></a></svg>', /script\/data URLs/i],
-    ['<svg><image xlink:href="data:text/html;base64,PHNjcmlwdD4="/></svg>', /script\/data URLs/i],
-    ['<svg><foreignObject><body/></foreignObject></svg>', /foreignObject/i],
+    ['<svg><a href="javascript:alert(1)"><circle/></a></svg>', /not allowed/i],
+    ['<svg><image xlink:href="data:text/html;base64,PHNjcmlwdD4="/></svg>', /not allowed/i],
+    ['<svg><foreignObject><body/></foreignObject></svg>', /foreignobject/i],
     ['<svg><style>@import url(//evil.test/x.css)</style></svg>', /style/i],
-    ['<svg><use href="https://evil.test/x.svg#a"/></svg>', /external references/i],
+    ['<svg><use href="https://evil.test/x.svg#a"/></svg>', /external reference/i],
     ['<!DOCTYPE svg [<!ENTITY x "y">]><svg></svg>', /DOCTYPE\/ENTITY/i],
+    // Regressions. Every one of these was ACCEPTED by the regex blocklist this
+    // sanitizer replaced: an HTML parser takes `/` and a closing quote as
+    // attribute separators, and decodes entities before reading the scheme.
+    ['<svg><rect/onmouseover=alert(1) width="9"/></svg>', /event handler/i],
+    ['<svg><rect id="a"onmouseover=alert(1) width="9"/></svg>', /event handler/i],
+    ['<svg><circle/onfocus=alert(1) tabindex=0 r="5"/></svg>', /event handler/i],
+    ['<svg><a xlink:href="&#106;avascript:alert(1)"><circle r="9"/></a></svg>', /not allowed/i],
+    // CSS can't execute, but it can lift an element over the whole page.
+    ['<svg><rect style="position:fixed;inset:0;width:100vw"/></svg>', /"style" attribute/i],
+    ['<svg><animate attributeName="x" onbegin="alert(1)"/></svg>', /not allowed/i],
   ])("rejects %s", (markup, reason) => {
     expect(() => sanitizeSvgLogo(markup)).toThrow(reason);
   });

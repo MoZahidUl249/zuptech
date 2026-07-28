@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { metricsQueryDto } from "../../dtos/metrics.dto";
 import { prisma } from "../../lib/db";
-import { assertCan } from "../../lib/rbac";
+import { assertCanAny } from "../../lib/rbac";
 import { isLowStock } from "../../lib/rules";
 import { staffGuard } from "./guard";
 
@@ -62,7 +62,10 @@ export const adminMetrics = new Elysia({ name: "routes/admin/metrics", detail: {
   .get(
     "/admin/api/metrics",
     async ({ query, staffCtx }) => {
-      assertCan(staffCtx, "dashboard", "view");
+      // One endpoint, two screens: Today (dashboard) and Reports (analytics).
+      // `analytics` gates the Reports nav item client-side, so it has to mean
+      // something here too, or the permission is decorative.
+      assertCanAny(staffCtx, ["dashboard", "analytics"], "view");
 
       const period: Period = query.period ?? "week";
       const { starts, label } = bucketsFor(period);

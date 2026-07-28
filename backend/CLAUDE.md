@@ -32,6 +32,27 @@ Use `bun` (not npm/node) everywhere; run Prisma CLI as `bunx --bun prisma …`.
   `username` plugin, customers via phone + password (mapped to a synthetic
   email internally). Its tables (User,
   Session, Account, Verification) are part of `schema.prisma`.
+- There are **two kinds of email address** and conflating them breaks sign-in.
+  `User.email` is the synthetic *identifier* Better Auth authenticates against
+  (`{phone}@customers.zuptech.local`, `{username}@staff.zuptech.local` — see
+  `customerEmail`/`staffEmail` in `lib/rules.ts`); it is unique, required, and
+  never deliverable. `Customer.email` / `Staff.email` are the real inboxes,
+  nullable, and used only as a *destination* for password-reset codes. The
+  forgot/reset routes look an account up by the real address; the emailOTP
+  plugin's `sendVerificationOTP` goes the other way, via `parseInternalEmail`,
+  to find where to deliver. Never repoint `User.email` at a real address.
+- `src/lib/mail.ts` is the only outbound-mail path (SMTP via `nodemailer`).
+  With `SMTP_HOST` unset it logs instead of sending, which is how the reset
+  flow is exercised in dev — a log line, never a response field. Reset
+  endpoints always answer `{ok: true}` regardless of whether the account
+  exists, so nothing in the API can be used to enumerate accounts.
+- A product carries two offer ladders, both `{minQty, percentage}` relations
+  with `@@unique([productId, minQty])`: `QuantityOffer` (off the unit price)
+  and `FreeDeliveryOffer` (off the zone delivery fee; 100 = ships free).
+  Both resolve the same way — highest satisfied `minQty` wins, tiers never
+  stack — through `bestOfferTier` in `lib/rules.ts`. Admin writes are
+  replace-all per ladder. When adding a third ladder, reuse `bestOfferTier`
+  rather than writing another search.
 - Admin routes `.use(staffGuard)` (session → `staffCtx`) and call
   `assertCan(staffCtx, module, "view"|"manage")` at the top of every handler.
 - Request/response contracts are DTOs: every route body/query schema lives in
@@ -77,9 +98,25 @@ Use `bun` (not npm/node) everywhere; run Prisma CLI as `bunx --bun prisma …`.
   Distinct from `HeroSlide`, which is the homepage promo carousel.
 - `Category.svgLogo` holds SVG **markup**, not a URL — the media-storage
   service only accepts raster formats and rasterizes what it stores. The
-  storefront renders it inline, so it goes through `sanitizeSvgLogo`
-  (`src/lib/rules.ts`), which rejects anything active. Never widen that
-  allowlist without re-reading the tests in `rules.test.ts`.
+  storefront renders it inline (`dangerouslySetInnerHTML`), so it goes through
+  `sanitizeSvgLogo` (`src/lib/rules.ts`). That function **parses** the markup
+  with cheerio and allowlists elements and attributes, then re-serializes what
+  it validated; it does not pattern-match the source string. It used to, and
+  the blocklist was bypassable three ways at once (`<rect/onmouseover=…>`,
+  `<rect id="a"onmouseover=…>`, `&#106;avascript:`) — all now regression tests
+  in `rules.test.ts`. Add elements/attributes to the two allowlists if a real
+  logo needs them; never reintroduce a "reject these patterns" check.
+- Admin RBAC has three escalation guards that are easy to drop when editing
+  `routes/admin/staff.ts`: a non-Super-Admin can't edit or delete a staff
+  member whose role `isSystem`, nobody can change their own `roleId`, and
+  `assertCanGrant` (`lib/rbac.ts`) refuses to put access into a role that the
+  caller doesn't hold. Without all three, `staff: manage` silently implies
+  every other permission. A module belongs in `ADMIN_MODULES` only if some
+  route actually passes it to `assertCan`/`assertCanAny`.
+- Rate limiting keys on `clientIp` (`lib/rate-limit.ts`), never on
+  `server.requestIP()` directly — the browser reaches this service through the
+  Next.js rewrite, so the socket address is one container for the whole
+  internet. See the comment there before changing `TRUSTED_PROXY_HOPS`.
 - Order status ⇄ stock effects go through `applyStatusTransition`
   (`src/lib/order-stock.ts`) so StockMovement audit rows stay consistent.
 - Status fields are strings (not Prisma enums) to keep payloads identical to
@@ -99,8 +136,16 @@ Use `bun` (not npm/node) everywhere; run Prisma CLI as `bunx --bun prisma …`.
 `.env` (gitignored): `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `PORT`, `CORS_ORIGINS`, `STORAGE_URL`, `STORAGE_API_KEY` (the last two point
 at the media-storage service — see its own `.env`/README for how to run it
-locally). Local dev points at a temporary Prisma Postgres instance;
-production uses the hosting provider's internal Postgres URL (only resolves
-inside its network) — see `.env.example`.
+locally), plus `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/
+`MAIL_FROM` for password-reset delivery (leave `SMTP_HOST` empty locally —
+codes go to the console). Local dev points at a temporary Prisma Postgres
+instance; production uses the hosting provider's internal Postgres URL (only
+resolves inside its network) — see `.env.example`.
 
-Demo staff (password `zup123`): arif/super, nusrat/manager, rakib/support.
+Demo staff (password `zup123` in development): arif/super, nusrat/manager,
+rakib/support. Under `NODE_ENV=production` the seed generates a random password
+per account and prints it once instead — see `staffPassword()` in
+`prisma/seed.ts`.
+
+Optional: `TRUSTED_PROXY_HOPS` (default 1, see `lib/rate-limit.ts`) and
+`OPENAPI_DOCS=true` to serve `/openapi` in production, where it is off.

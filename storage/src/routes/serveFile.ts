@@ -27,6 +27,10 @@ export async function handleServeFile(req: Request, id: string, variant: string)
     ETag: etag,
     "Cache-Control": "public, max-age=31536000, immutable",
     "Last-Modified": new Date(row.created_at).toUTCString(),
+    // This origin serves uploaded bytes, so it must never let a browser
+    // second-guess the declared type and render one as a document.
+    "X-Content-Type-Options": "nosniff",
+    "Content-Disposition": "inline",
   });
 
   const ifNoneMatch = req.headers.get("if-none-match");

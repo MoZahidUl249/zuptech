@@ -33,7 +33,6 @@ export const ADMIN_MODULES = [
   "sitecontent",
   "payments",
   "staff",
-  "pricing",
   "landingpages",
 ] as const;
 export type AdminModule = (typeof ADMIN_MODULES)[number];
@@ -52,6 +51,9 @@ export interface StaffMember {
   id: string;
   name: string;
   phone: string;
+  /** Real address password-reset codes go to. "" = none on file, in which
+   *  case this member can't self-recover — another admin resets it for them. */
+  email: string;
   username: string;
   roleId: string;
   /**
@@ -81,6 +83,13 @@ export interface AdminSection {
 
 /** One "buy N+, save X%" tier. A relation on the backend, not a column. */
 export interface QuantityOffer {
+  minQty: number;
+  percentage: number;
+}
+
+/** One "buy N+, X% off delivery" tier — same shape and same replace-all write
+ *  semantics as QuantityOffer; 100 means the line ships free. */
+export interface FreeDeliveryOffer {
   minQty: number;
   percentage: number;
 }
@@ -117,10 +126,10 @@ export interface AdminProduct {
   deliveryFeeOutsideDhaka: number;
   installationFeeInsideDhaka: number;
   installationFeeOutsideDhaka: number;
-  /** 0 = disabled; a line with qty ≥ this ships free. */
-  freeDeliveryMinQty: number;
   /** "Buy N+, save X%" tiers, ordered by minQty ascending. */
   quantityOffers: QuantityOffer[];
+  /** "Buy N+, X% off delivery" tiers, ordered by minQty ascending. */
+  freeDeliveryOffers: FreeDeliveryOffer[];
   /** 0 = none. Generates warranty records when an order is delivered. */
   warrantyMonths: number;
   rating: number;
@@ -367,6 +376,10 @@ export interface ContactMessage {
   message: string;
   phone?: string;
   email?: string;
+  /** The backend has always returned this and accepted PATCH …/messages/:id
+   *  to set it; the admin simply never read it, so every message looked the
+   *  same whether or not anyone had dealt with it. */
+  read: boolean;
   createdAt: string;
 }
 
@@ -524,6 +537,21 @@ export interface AdminState {
   movements: StockMovement[];
 }
 
+/**
+ * A placeholder id for a row that exists locally but not yet on the server.
+ *
+ * The diff engine sends the new row to its POST endpoint and then re-fetches
+ * the collection (`reload.add(...)` in syncKeys), so this id lives for about a
+ * second before the server's real one replaces it. It only has to be unique
+ * within the session.
+ *
+ * A counter rather than `Date.now()`: React's rules forbid impure calls in
+ * render, two rows added in the same millisecond would collide, and a
+ * timestamp masquerading as an id invites someone to read meaning into it.
+ */
+let tempSeq = 0;
+export const tempId = (prefix: string) => `${prefix}-new-${++tempSeq}`;
+
 export function emptyState(): AdminState {
   return {
     roles: [],
@@ -649,7 +677,7 @@ async function syncKeys(
   const reload = new Set<ReloadKey>();
 
   if (keys.has("orders")) {
-    const { changed } = diffById(prev.orders, next.orders);
+    const { changed, removed } = diffById(prev.orders, next.orders);
     // Status and ownership are separate endpoints, so push only what moved —
     // sending both on every edit would put a spurious entry in the order's
     // audit trail each time someone changed the other field.
@@ -660,12 +688,21 @@ async function syncKeys(
         await api.setOrderPreparedBy(o.id, o.preparedById);
       }
     }
+    for (const o of removed) await api.deleteOrder(o.id);
     reload.add("orders");
+    // Deleting an order hands its reserved (or delivered) units back, so the
+    // product rows are stale as soon as one goes.
+    if (removed.length > 0) reload.add("products");
   }
 
   if (keys.has("leads")) {
     const { changed } = diffById(prev.leads, next.leads);
     for (const l of changed) await api.setLeadStatus(l.id, l.status);
+  }
+
+  if (keys.has("messages")) {
+    const { changed } = diffById(prev.messages, next.messages);
+    for (const m of changed) await api.setMessageRead(m.id, m.read);
   }
 
   if (keys.has("industrialLeads")) {
@@ -793,7 +830,34 @@ async function syncKeys(
   return reload;
 }
 
-/* ===== Store (context, backed by /admin/api) ===== */
+/* ===== Store (context, backed by /admin/api) =====
+ *
+ * There are exactly two ways to write to the backend from the admin, and
+ * picking the wrong one is how this codebase ended up with three:
+ *
+ *   Rule A — `update(patch)`. Plain rows with no file uploads, no
+ *     server-stamped fields, and no writes the server can legitimately refuse:
+ *     orders (status/owner), leads, industrialLeads, featuredIds, slides,
+ *     copy, contact, integrations, payments, suppliers, staff, roles,
+ *     products, purchaseOrders. Debounced and diffed by `syncKeys` below.
+ *
+ *   Rule B — a resource hook (useInvoices, useWarranties, useServices,
+ *     useLandingPages). Anything with multipart uploads, server-stamped fields
+ *     (issuedAt, endsAt), or writes that can 409. These deliberately sit
+ *     outside the diff engine, which has no story for any of that.
+ *
+ *   There is no Rule C. No raw `fetch` in a component.
+ */
+
+/** What the debounced save engine is doing, surfaced by <SaveStatus>. The
+ *  admin used to have two "Save changes" buttons that only fired a toast,
+ *  because nothing told the user their edits were already being saved. */
+export interface SyncState {
+  state: "idle" | "pending" | "saving" | "saved" | "error";
+  /** When the last successful save landed. */
+  at: number | null;
+  error: string | null;
+}
 
 interface AdminContextValue {
   state: AdminState;
@@ -809,6 +873,12 @@ interface AdminContextValue {
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   ready: boolean;
+  /** Save state for the header indicator. */
+  sync: SyncState;
+  /** Re-run a failed save, keeping whatever is on screen. */
+  retrySync: () => void;
+  /** Collections that failed to load, shown as a dismissible banner. */
+  loadErrors: api.LoadError[];
 }
 
 const AdminContext = createContext<AdminContextValue | null>(null);
@@ -834,11 +904,20 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const flushingRef = useRef(false);
   const flushRef = useRef<() => Promise<void>>(async () => {});
 
-  const loadAll = useCallback(async () => {
-    const loaded = await api.loadAdminState();
+  // Which collections couldn't be loaded, for the shell's retry banner.
+  const [loadErrors, setLoadErrors] = useState<api.LoadError[]>([]);
+  // What the debounced save engine is currently doing, so the UI can say so.
+  const [sync, setSync] = useState<SyncState>({ state: "idle", at: null, error: null });
+
+  // Loading needs the permission map: most /admin/api endpoints 403 a role
+  // without `view` on their module, and asking anyway used to blank the whole
+  // admin for every non-super staff member.
+  const loadAll = useCallback(async (perms: Record<AdminModule, Permission>) => {
+    const { state: loaded, errors } = await api.loadAdminState(perms);
     serverRef.current = loaded;
     dirtyRef.current.clear();
     setState(loaded);
+    setLoadErrors(errors);
   }, []);
 
   // Restore an existing staff session (better-auth cookie).
@@ -850,7 +929,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         if (session) {
           setMe(session);
-          await loadAll();
+          await loadAll(session.permissions);
         }
       } catch {
         // backend unreachable — login screen will surface it
@@ -865,10 +944,12 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const flush = useCallback(async () => {
     if (flushingRef.current || dirtyRef.current.size === 0) return;
     flushingRef.current = true;
+    setSync({ state: "saving", at: null, error: null });
     const keys = dirtyRef.current;
     dirtyRef.current = new Set();
     const prev = serverRef.current;
     const next = stateRef.current;
+    let failed = false;
     try {
       const reload = await syncKeys(keys, prev, next);
       // Assume what we pushed is now server truth, then refresh the
@@ -888,23 +969,30 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         ) as Partial<AdminState>;
         setState((s) => ({ ...s, ...safe }));
       }
+      setSync({ state: "saved", at: Date.now(), error: null });
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Couldn't save — reloading from server",
-      );
-      try {
-        await loadAll();
-      } catch {
-        // still down — keep local state so nothing typed is lost
-      }
+      // Deliberately NOT reloading from the server here. That's what this used
+      // to do, and it silently replaced whatever the admin had just typed with
+      // the last-known-good server copy — losing their work at the exact
+      // moment they most needed it kept. Keep local state, put the keys back
+      // in the dirty set, and let them retry.
+      failed = true;
+      for (const key of keys) dirtyRef.current.add(key);
+      const message = err instanceof Error ? err.message : "Couldn't save";
+      setSync({ state: "error", at: null, error: message });
     } finally {
       flushingRef.current = false;
-      if (dirtyRef.current.size > 0) {
+      // Only auto-continue after a success. Rescheduling after a failure would
+      // hammer a down backend forever, since the failed keys go straight back
+      // into the dirty set — retrying is the user's call, via retrySync().
+      if (!failed && dirtyRef.current.size > 0) {
         // Self-reference goes through the ref so the callback stays memoizable.
         timerRef.current = setTimeout(() => void flushRef.current(), SYNC_DEBOUNCE_MS);
       }
     }
-  }, [loadAll]);
+    // No dependencies: everything this touches is a ref or a setter. It used
+    // to depend on loadAll, back when a failed save reloaded from the server.
+  }, []);
   useEffect(() => {
     flushRef.current = flush;
   }, [flush]);
@@ -913,15 +1001,39 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     (patch: Partial<AdminState>) => {
       setState((s) => ({ ...s, ...patch }));
       for (const key of Object.keys(patch)) dirtyRef.current.add(key as keyof AdminState);
+      setSync({ state: "pending", at: null, error: null });
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => void flush(), SYNC_DEBOUNCE_MS);
     },
     [flush],
   );
 
+  /** Discard local edits and take the server's copy. */
   const reset = useCallback(() => {
-    void loadAll().catch(() => toast.error("Couldn't reload from the server"));
-  }, [loadAll]);
+    if (!me) return;
+    setSync({ state: "idle", at: null, error: null });
+    void loadAll(me.permissions).catch(() =>
+      toast.error("Couldn't reload from the server"),
+    );
+  }, [loadAll, me]);
+
+  /** Retry a save that failed, without losing what's on screen. */
+  const retrySync = useCallback(() => {
+    if (dirtyRef.current.size === 0) {
+      setSync({ state: "idle", at: null, error: null });
+      return;
+    }
+    void flush();
+  }, [flush]);
+
+  // Nothing in this app auto-saves on unload, so warn while edits are in
+  // flight or queued — a debounced save you navigated away from is a lost one.
+  useEffect(() => {
+    if (sync.state !== "pending" && sync.state !== "saving" && sync.state !== "error") return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [sync.state]);
 
   const login = useCallback(
     async (username: string, password: string) => {
@@ -931,11 +1043,9 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       if (!session) return false;
       setMe(session);
       setViewRoleId(null);
-      try {
-        await loadAll();
-      } catch {
-        toast.error("Signed in, but loading admin data failed — retry from the header");
-      }
+      // loadAll no longer throws on a partial failure — it reports per-slice
+      // errors, which the shell shows as a retry banner over a working admin.
+      await loadAll(session.permissions);
       return true;
     },
     [loadAll],
@@ -948,6 +1058,8 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     setState(emptyState());
     serverRef.current = emptyState();
     dirtyRef.current.clear();
+    setLoadErrors([]);
+    setSync({ state: "idle", at: null, error: null });
   }, []);
 
   const value = useMemo<AdminContextValue>(() => {
@@ -956,6 +1068,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           id: me.staff.id,
           name: me.staff.name,
           phone: me.staff.phone,
+          email: me.staff.email ?? "",
           username: me.staff.username,
           roleId: me.role.id,
         }
@@ -991,8 +1104,23 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       ready,
+      sync,
+      retrySync,
+      loadErrors,
     };
-  }, [state, me, viewRoleId, update, reset, login, logout, ready]);
+  }, [
+    state,
+    me,
+    viewRoleId,
+    update,
+    reset,
+    login,
+    logout,
+    ready,
+    sync,
+    retrySync,
+    loadErrors,
+  ]);
 
   return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;
 }
