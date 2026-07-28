@@ -4,7 +4,6 @@ import { site, jsonLd } from "@/lib/site";
 import { ContactForm } from "@/components/contact-form";
 import { ContactCards } from "@/components/contact-cards";
 import { ContactOffice } from "@/components/contact-office";
-import { TeamGrid } from "@/components/marketing/team-grid";
 import { HeroBackdrop } from "@/components/marketing/hero-backdrop";
 import { getPageHeroes, getSiteConfig } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
@@ -124,11 +123,15 @@ export default async function ContactPage() {
         </div>
       </section>
 
-      <section className="px-5">
-        <div className="mx-auto max-w-[1120px]">
-          <TeamGrid heading={copy.contactTeamHeading} />
-        </div>
-      </section>
+      {/*
+        The leadership roster is deliberately not rendered. The six people in
+        lib/team.ts were invented — names, roles and biographies — and
+        publishing fabricated staff for a real business is worse than
+        publishing none. Enquiries route through the contact form above.
+        Restore it (component and data are in git history, removed 2026-07-28)
+        once the client supplies real, consented details; SiteConfig still
+        carries `contactTeamHeading` for exactly that.
+      */}
 
       <div className="h-20" />
     </main>

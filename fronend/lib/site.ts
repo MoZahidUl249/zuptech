@@ -1,3 +1,24 @@
+/**
+ * ⚠️ LAUNCH BLOCKER — several values below are placeholders, and they are not
+ * cosmetic: app/layout.tsx publishes them as Organization/LocalBusiness
+ * JSON-LD on EVERY page, so search engines ingest them as facts about a real
+ * company. `site.phoneDisplay` also appears verbatim in the contact page's
+ * meta description.
+ *
+ * Replace with the client's real details before the site is public:
+ *   phone / phoneDisplay / whatsapp — currently sequential zeros
+ *   address.street                  — currently "House 00, Road 00"
+ *   email                           — hello@ on a domain that may not be ours
+ *   social.*                        — unverified handles
+ *   stats                           — unverified claims ("40+ substations")
+ *
+ * `url` is safe: it reads NEXT_PUBLIC_SITE_URL, set per environment at build
+ * time. The fallback only applies to local dev.
+ *
+ * The contact details shown in the page BODY come from the admin
+ * (SiteConfig / useSiteContact) and can be corrected without a deploy — it is
+ * only the structured data and metadata that are pinned here.
+ */
 export const site = {
   name: "ZUP TECH",
   legalName: "ZUP TECH",

@@ -561,7 +561,10 @@ const COPY_GROUPS: { group: string; fields: CopyField[] }[] = [
       { key: "contactHeading", label: "Page heading" },
       { key: "contactFormHeading", label: "Form heading" },
       { key: "contactOfficeHeading", label: "Office card heading" },
-      { key: "contactTeamHeading", label: "Team section heading" },
+      // No "Team section heading" field: the team section itself is not
+      // rendered (see app/(site)/contact/page.tsx), and offering an editor for
+      // a heading nobody can see is how this admin ends up full of controls
+      // that do nothing. The column stays in SiteConfig for when it returns.
       { key: "contactServiceLine", label: "Service line number" },
       { key: "contactTendersEmail", label: "Tenders email" },
     ],

@@ -1,8 +1,12 @@
-// Static content for the Contact page's office/warehouse cards — code-maintained
-// for now (mirrors lib/team.ts's precedent). These fields (service line, tenders
-// email, opening hours breakdown, warehouse address) have no admin-managed
-// equivalent yet; the head office name/phone/email/address itself is pulled
-// live from useSiteContact() so it stays in sync with the rest of the site.
+// Static content for the Contact page's office/warehouse cards —
+// code-maintained for now. These fields (service line, tenders email, opening
+// hours breakdown, warehouse address) have no admin-managed equivalent yet;
+// the head office name/phone/email/address itself is pulled live from
+// useSiteContact() so it stays in sync with the rest of the site.
+//
+// ⚠️ LAUNCH BLOCKER: `serviceLine` and `tendersEmail` below are placeholders
+// and ARE rendered on the contact page. Replace with the client's real details
+// before the site is public. See the same warning in lib/site.ts.
 
 export const headOffice = {
   name: "ZUP TECH Ltd.",
