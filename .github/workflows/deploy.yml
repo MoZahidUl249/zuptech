@@ -82,6 +82,12 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     environment: production
+    # The VPS logs in to GHCR with this job's GITHUB_TOKEN to pull the images
+    # published above. On a private repo those packages are private too, so
+    # without `packages: read` the login succeeds and the pull 403s.
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Roll out on the VPS
         uses: appleboy/ssh-action@v1

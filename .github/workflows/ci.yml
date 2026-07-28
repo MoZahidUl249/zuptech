@@ -1,9 +1,15 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  # Deploy calls this workflow as its gate (`uses: ./.github/workflows/ci.yml`),
+  # which only works if the called workflow declares workflow_call — without it
+  # the Deploy run fails to start at all, before any step executes.
+  workflow_call:
   pull_request:
+
+# Deliberately NOT `push: [main]`: deploy.yml runs on that push and calls this
+# workflow itself, so a push trigger here would run the whole suite twice for
+# the same commit. PRs still get their own run.
 
 # A newer push to the same branch makes the in-flight run irrelevant.
 concurrency:

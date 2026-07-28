@@ -67,6 +67,14 @@ services:
       # In-network for server-side uploads…
       STORAGE_URL: http://storage:3100
       STORAGE_API_KEY: ${STORAGE_API_KEY}
+      # SMTP delivers password-reset OTPs. Unset SMTP_HOST logs the code to
+      # the container log instead of sending — fine for staging, not for prod.
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      MAIL_FROM: ${MAIL_FROM}
     depends_on:
       db:
         condition: service_healthy
@@ -100,16 +108,34 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      # Templates, not conf.d: the image renders these through envsubst at
+      # startup and writes the result into conf.d itself.
+      - ./deploy/nginx/templates:/etc/nginx/templates:ro
       - certbot_conf:/etc/letsencrypt
       - certbot_www:/var/www/certbot
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN}
+      MEDIA_DOMAIN: ${MEDIA_DOMAIN:?set MEDIA_DOMAIN}
+      # Restrict envsubst to our three placeholders. Unfiltered, it would also
+      # expand anything in the container's environment that collides with an
+      # nginx variable name — $$host and friends would render empty and the
+      # proxy would start subtly broken rather than failing loudly.
+      NGINX_ENVSUBST_FILTER: "_DOMAIN$$"
     depends_on:
       - frontend
       - backend
       - storage
-    # Picks up renewed certificates without a manual restart.
+    # Renders the templates, then reloads every 12h to pick up renewed certs.
+    #
+    # The envsubst call is explicit because the image's entrypoint only runs
+    # /docker-entrypoint.d/* when its first argument is literally `nginx` — and
+    # this command starts with /bin/sh, for the reload loop. Without the call
+    # the templates are silently never rendered and nginx serves its default
+    # welcome page instead of the site. `sh -e` makes a rendering failure kill
+    # the container (visible, restart-looping) rather than degrade to that page.
     command: >
-      /bin/sh -c "while :; do sleep 12h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+      /bin/sh -ec "/docker-entrypoint.d/20-envsubst-on-templates.sh; while :; do sleep 12h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
 
   certbot:
     image: certbot/certbot

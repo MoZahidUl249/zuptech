@@ -24,8 +24,7 @@
     "db:seed": "bun run --filter backend db:seed",
     "db:studio": "bun run --filter backend db:studio",
 
-    "setup": "bun install && bun run db:generate && bun run db:migrate",
-    "health": "bash scripts/health.sh"
+    "setup": "bun install && bun run db:generate && bun run db:migrate"
   },
   "engines": {
     "bun": ">=1.3.13"
