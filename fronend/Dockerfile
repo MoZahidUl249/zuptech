@@ -38,9 +38,11 @@ ENV HOSTNAME=0.0.0.0
 # `output: "standalone"` traces the server's real dependency set. Because
 # outputFileTracingRoot is the repo root, the emitted tree mirrors the
 # workspace: standalone/fronend/server.js plus standalone/node_modules.
-COPY --from=build /app/fronend/.next/standalone ./../
-COPY --from=build /app/fronend/.next/static     ./.next/static
-COPY --from=build /app/fronend/public           ./public
+COPY --chown=bun:bun --from=build /app/fronend/.next/standalone ./../
+COPY --chown=bun:bun --from=build /app/fronend/.next/static     ./.next/static
+COPY --chown=bun:bun --from=build /app/fronend/public           ./public
+
+RUN mkdir -p .next/cache && chown -R bun:bun .next
 
 USER bun
 
