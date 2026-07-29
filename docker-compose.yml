@@ -66,6 +66,11 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS}
       # In-network for server-side uploads…
       STORAGE_URL: http://storage:3100
+      # …but the URLs the backend PERSISTS (Product.photos, Service.image, …)
+      # are later rendered in a browser, which cannot resolve `storage`. So the
+      # public origin has to be passed in too — the same one the frontend gets.
+      # Omit this and every uploaded image is stored permanently broken.
+      STORAGE_PUBLIC_URL: ${NEXT_PUBLIC_STORAGE_URL:?set NEXT_PUBLIC_STORAGE_URL}
       STORAGE_API_KEY: ${STORAGE_API_KEY}
       # SMTP delivers password-reset OTPs. Unset SMTP_HOST logs the code to
       # the container log instead of sending — fine for staging, not for prod.

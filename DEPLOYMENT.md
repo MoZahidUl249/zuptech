@@ -283,6 +283,16 @@ SQL by hand.
 only applies committed migrations — it never prompts or resets. Never run
 `migrate dev` against production.
 
+**The storage service has two origins and they are not interchangeable.**
+`STORAGE_URL` (`http://storage:3100`) is how the backend reaches it in-network;
+`STORAGE_PUBLIC_URL` is how a browser reaches it, through nginx at
+`https://media.<domain>`. Upload URLs are written into the database and later
+rendered in an `<img>`, so they must carry the public origin. Storing the
+in-network one breaks every uploaded image permanently — and re-uploading does
+not help, because the next upload stores the same unreachable host. If images
+are broken but the page otherwise renders, check this first, then repair the
+existing rows with `backend/prisma/fix-media-urls.ts`.
+
 **There are two databases with two separate migration histories**, and
 `docker-compose.yml` applies neither. `zuptech` is migrated by Prisma,
 `media_storage` by `storage/migrations/run-migrations.ts` — forgetting the

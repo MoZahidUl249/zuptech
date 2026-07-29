@@ -42,6 +42,27 @@ function config(): { baseUrl: string; apiKey: string } {
   return { baseUrl, apiKey };
 }
 
+/**
+ * The origin a BROWSER uses to fetch media — which is not the one this process
+ * uses to reach the storage service.
+ *
+ * STORAGE_URL is in-network (`http://storage:3100` under compose). The URLs we
+ * return here get persisted into the database and later rendered in an <img>,
+ * so they must be the public origin instead — nginx proxies
+ * `https://media.<domain>/files/` to the same service. Prefixing them with
+ * STORAGE_URL writes `http://storage:3100/files/...` into Product.photos,
+ * which no browser can resolve: the image is broken permanently, and
+ * re-uploading does not help because the next upload stores the same
+ * unreachable origin.
+ *
+ * Falls back to STORAGE_URL, which is correct in local dev where the process
+ * and the browser genuinely share an origin.
+ */
+function publicBaseUrl(): string {
+  const url = process.env.STORAGE_PUBLIC_URL || process.env.STORAGE_URL || "";
+  return url.replace(/\/$/, "");
+}
+
 /** Upload one file, tagged to the entity it belongs to (e.g. "product"/"ips1000"). */
 export async function uploadMedia(
   file: File,
@@ -67,7 +88,10 @@ export async function uploadMedia(
   }
 
   const media = (await res.json()) as StorageMedia;
-  return { ...media, variants: media.variants.map((v) => ({ ...v, url: `${baseUrl}${v.url}` })) };
+  // publicBaseUrl(), never baseUrl — see the note there. These URLs are stored
+  // and rendered in the browser; baseUrl is only good for server-to-server.
+  const publicBase = publicBaseUrl();
+  return { ...media, variants: media.variants.map((v) => ({ ...v, url: `${publicBase}${v.url}` })) };
 }
 
 export async function deleteMedia(id: string): Promise<void> {
@@ -81,12 +105,26 @@ export async function deleteMedia(id: string): Promise<void> {
   }
 }
 
-/** Media id embedded in a URL this service issued (`{STORAGE_URL}/files/{id}/{variant}`); null for anything else (external links, empty strings). */
+/**
+ * Media id embedded in a URL this service issued (`{base}/files/{id}/{variant}`);
+ * null for anything else (external links, empty strings).
+ *
+ * Matches against BOTH origins on purpose. Rows written before
+ * STORAGE_PUBLIC_URL existed hold the in-network one, and rows written since
+ * hold the public one — if this only recognised the current origin, replacing
+ * or clearing an older photo would silently fail to delete its file and leak
+ * an orphan onto disk every time.
+ */
 export function parseMediaId(fileUrl: string): string | null {
-  const baseUrl = process.env.STORAGE_URL?.replace(/\/$/, "");
-  if (!baseUrl || !fileUrl.startsWith(`${baseUrl}/files/`)) return null;
-  const id = fileUrl.slice(`${baseUrl}/files/`.length).split("/")[0];
-  return id || null;
+  const bases = [publicBaseUrl(), (process.env.STORAGE_URL ?? "").replace(/\/$/, "")];
+  for (const base of bases) {
+    if (!base) continue;
+    const prefix = `${base}/files/`;
+    if (!fileUrl.startsWith(prefix)) continue;
+    const id = fileUrl.slice(prefix.length).split("/")[0];
+    if (id) return id;
+  }
+  return null;
 }
 
 /**
