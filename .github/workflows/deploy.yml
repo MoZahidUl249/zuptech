@@ -108,24 +108,20 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" \
               | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+            # Pull, migrate BOTH databases, start, verify, prune. Deliberately
+            # the same script an operator runs by hand, so a fix to the rollout
+            # sequence can never land in one path and be missed by the other.
             export TAG=${{ github.sha }}
-            docker compose --env-file .env.production pull
+            bash scripts/deploy.sh --pull
 
-            # Migrations BEFORE the new code starts serving. --rm so the
-            # one-shot container never lingers; db:deploy only applies
-            # committed migrations and never prompts.
-            docker compose --env-file .env.production run --rm backend \
-              bunx --bun prisma migrate deploy
-            docker compose --env-file .env.production run --rm storage \
-              bun run migrate
-
-            docker compose --env-file .env.production up -d --remove-orphans
-
-            # Reclaim old image layers; without this the VPS disk fills up
-            # after a few dozen deploys.
-            docker image prune -f
-
-      - name: Smoke check
+      # scripts/deploy.sh already polls /health and fails the job if the backend
+      # never comes up, so this step no longer repeats that. It checks the thing
+      # /health cannot: /health only proves the DB adapter connected, which an
+      # unmigrated or unseeded database passes just fine. /api/site-config is
+      # the query the storefront actually depends on — it reads the SiteConfig
+      # row with findUniqueOrThrow, so it 500s on exactly the states that make
+      # every page 500 while the container still reports itself healthy.
+      - name: Smoke check the storefront's data path
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -135,13 +131,11 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/zuptech
-            for i in $(seq 1 30); do
-              if docker compose --env-file .env.production exec -T backend \
-                   bun -e "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
-                echo "backend healthy"; exit 0
-              fi
-              sleep 4
-            done
-            echo "backend did not become healthy — dumping logs"
-            docker compose --env-file .env.production logs --tail=80 backend
-            exit 1
+            code=$(docker compose --env-file .env.production exec -T backend \
+              bun -e "fetch('http://127.0.0.1:3000/api/site-config').then(r=>console.log(r.status)).catch(()=>console.log('000'))")
+            echo "GET /api/site-config -> $code"
+            if [ "$code" != "200" ]; then
+              echo "storefront data path is broken — dumping logs"
+              docker compose --env-file .env.production logs --tail=80 backend
+              exit 1
+            fi

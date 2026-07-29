@@ -164,8 +164,8 @@ Push to `main`, or run the *Deploy* workflow manually. The pipeline:
 1. **CI** — typecheck all three packages, lint, run backend + storage tests.
 2. **publish** — build and push all three images to GHCR, tagged `latest` and
    the commit SHA.
-3. **deploy** — SSH in, `git reset --hard origin/main`, pull images, run
-   migrations, `up -d`, prune old layers, then poll `/health`.
+3. **deploy** — SSH in, `git reset --hard origin/main`, then run
+   `scripts/deploy.sh --pull`, which does the actual rollout.
 
 Seed once, on the first deploy only. This is **not optional**: the storefront
 reads its `SiteConfig` row with `findUniqueOrThrow`, so every page returns 500
@@ -173,7 +173,7 @@ against an empty database.
 
 ```bash
 cd /opt/zuptech
-docker compose --env-file .env.production run --rm backend bun run db:seed
+bash scripts/deploy.sh --seed
 ```
 
 The seed creates `arif`/`nusrat`/`rakib`. Under `NODE_ENV=production` each one
@@ -207,12 +207,34 @@ Edit locally → `bun run dev` → commit → push to `main`. That is the whole
 loop; CI gates it and the deploy runs itself.
 
 ```bash
-# logs
-docker compose --env-file .env.production logs -f backend
+# logs. Use --since, not --tail: --tail replays history, so a problem you
+# already fixed keeps reappearing in the output and looks unfixed.
+docker compose --env-file .env.production logs --since=5m backend
 
 # rollback to a known-good commit (images are SHA-tagged, no rebuild)
 TAG=<sha> docker compose --env-file .env.production up -d
 ```
+
+### Deploying by hand
+
+When you need to roll out without going through GitHub — a hotfix, a box that
+predates the pipeline, or a registry you have not configured — use the same
+script the workflow uses:
+
+```bash
+cd /opt/zuptech
+git pull origin main
+bash scripts/deploy.sh            # pull prebuilt images from the registry
+bash scripts/deploy.sh --build    # or build them on the box instead
+```
+
+**Do not deploy with a bare `docker compose up -d`.** It applies neither
+migration history, and both resulting failures name something other than their
+cause: the storage service answers every request with `relation "media" does
+not exist`, and the backend 500s the whole storefront on a missing `SiteConfig`
+row while its own `/health` still reports healthy. `scripts/deploy.sh` runs
+both migrations first, then refuses to finish quietly against an unseeded
+database. It is idempotent — re-running against an up-to-date box is a no-op.
 
 Backups run nightly at 03:15 via the cron entry `scripts/vps-bootstrap.sh`
 installed, writing to `/backup` and keeping 14 days. Run one by hand with
@@ -260,6 +282,12 @@ SQL by hand.
 **Migrations run before the new code serves**, and `prisma migrate deploy`
 only applies committed migrations — it never prompts or resets. Never run
 `migrate dev` against production.
+
+**There are two databases with two separate migration histories**, and
+`docker-compose.yml` applies neither. `zuptech` is migrated by Prisma,
+`media_storage` by `storage/migrations/run-migrations.ts` — forgetting the
+second is easy, because the backend comes up perfectly and only the media
+service fails. `scripts/deploy.sh` runs both; use it rather than remembering.
 
 **nginx disables buffering on `/files/`.** Video is served with HTTP Range;
 buffering makes nginx swallow the whole response and silently breaks seeking.
