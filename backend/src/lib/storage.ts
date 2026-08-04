@@ -40,9 +40,21 @@ type ResourceType = "image" | "video";
  * auto-optimization; the width cap on images replaces the old thumbnail/
  * medium variant generation. Because these are fixed strings we control,
  * `parseCloudinaryRef` can strip them back off deterministically.
+ *
+ * Passed to `cloudinary.url()` as objects, not raw strings: a bare string in
+ * the `transformation` array is interpreted as a *named* transformation
+ * (Cloudinary prefixes the URL with `t_...`) rather than these components.
+ *
+ * The string forms below (used by `parseCloudinaryRef` to strip the segment
+ * back off) must match Cloudinary's own serialization order, which is
+ * alphabetical by parameter code (c_, f_, q_, w_) — NOT the object's key
+ * order or insertion order. Verified against a live upload; if the SDK's
+ * ordering ever changes, `parseCloudinaryRef`'s round-trip test will catch it.
  */
-const IMAGE_TRANSFORM = "f_auto,q_auto,w_1600,c_limit";
+const IMAGE_TRANSFORM = "c_limit,f_auto,q_auto,w_1600";
 const VIDEO_TRANSFORM = "f_auto,q_auto";
+const IMAGE_TRANSFORM_OPTS = { fetch_format: "auto", quality: "auto", width: 1600, crop: "limit" };
+const VIDEO_TRANSFORM_OPTS = { fetch_format: "auto", quality: "auto" };
 
 export interface StorageMedia {
   id: string; // Cloudinary public_id
@@ -65,7 +77,7 @@ export async function uploadMedia(
   ensureConfigured();
   const { mediaType, buffer } = await classifyAndValidate(file);
   const resourceType: ResourceType = mediaType === "video" ? "video" : "image";
-  const transformation = mediaType === "video" ? VIDEO_TRANSFORM : IMAGE_TRANSFORM;
+  const transformation = mediaType === "video" ? VIDEO_TRANSFORM_OPTS : IMAGE_TRANSFORM_OPTS;
 
   const result = await new Promise<UploadApiResponse>((resolve, reject) => {
     const upload = cloudinary.uploader.upload_stream(
@@ -88,6 +100,7 @@ export async function uploadMedia(
     version: result.version,
     format: result.format,
     transformation: [transformation],
+    urlAnalytics: false,
   });
 
   return {

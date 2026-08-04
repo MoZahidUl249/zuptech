@@ -14,7 +14,7 @@ afterEach(() => {
 describe("parseCloudinaryRef", () => {
   test("reads an image ref, stripping transform + version + extension", () => {
     process.env.CLOUDINARY_CLOUD_NAME = CLOUD;
-    const url = `https://res.cloudinary.com/${CLOUD}/image/upload/f_auto,q_auto,w_1600,c_limit/v1712345678/zuptech/product/ips1000/abc123.jpg`;
+    const url = `https://res.cloudinary.com/${CLOUD}/image/upload/c_limit,f_auto,q_auto,w_1600/v1712345678/zuptech/product/ips1000/abc123.jpg`;
     expect(parseCloudinaryRef(url)).toEqual({
       publicId: "zuptech/product/ips1000/abc123",
       resourceType: "image",
