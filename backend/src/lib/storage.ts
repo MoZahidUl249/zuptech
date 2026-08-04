@@ -1,66 +1,58 @@
+import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 import { ApiError } from "./http";
+import { classifyAndValidate, type MediaType } from "./media-validate";
 
 /**
- * Client for the standalone media-storage microservice (../storage — see its
- * README for the full HTTP contract). Write routes there require a shared
- * `X-API-Key`, which must never reach the browser — every upload/delete goes
- * through an admin route here that holds the key server-side.
+ * Media storage on Cloudinary. Every upload/delete goes through this module
+ * so entity rows only ever hold a plain Cloudinary delivery URL — the same
+ * shape a hand-written media-storage service used to hand back.
  */
 
-export interface StorageVariant {
-  variant: "original" | "thumbnail" | "medium" | "poster";
-  url: string; // absolute — already prefixed with STORAGE_URL
-  mimeType: string;
-  sizeBytes: number;
-  width: number | null;
-  height: number | null;
+function cloudName(): string | undefined {
+  return process.env.CLOUDINARY_CLOUD_NAME;
 }
 
+let configured = false;
+function ensureConfigured(): void {
+  if (configured) return;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName() || !apiKey || !apiSecret) {
+    throw new ApiError(
+      500,
+      "Cloudinary not configured — set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET",
+    );
+  }
+  cloudinary.config({ cloud_name: cloudName(), api_key: apiKey, api_secret: apiSecret, secure: true });
+  configured = true;
+}
+
+/** Keeps dev/staging/prod sharing one Cloudinary account from colliding. */
+function folderPrefix(): string {
+  return process.env.CLOUDINARY_FOLDER_PREFIX || "zuptech";
+}
+
+type ResourceType = "image" | "video";
+
+/**
+ * Fixed, deterministic transformations baked into the URL path (never a
+ * query string) — f_auto/q_auto is Cloudinary's standard format/quality
+ * auto-optimization; the width cap on images replaces the old thumbnail/
+ * medium variant generation. Because these are fixed strings we control,
+ * `parseCloudinaryRef` can strip them back off deterministically.
+ */
+const IMAGE_TRANSFORM = "f_auto,q_auto,w_1600,c_limit";
+const VIDEO_TRANSFORM = "f_auto,q_auto";
+
 export interface StorageMedia {
-  id: string;
-  entityType: string;
-  entityId: string;
-  mediaType: "image" | "video";
-  status: "processing" | "ready" | "failed";
-  originalFilename: string;
+  id: string; // Cloudinary public_id
+  mediaType: MediaType;
+  url: string;
   mimeType: string;
   sizeBytes: number;
   width: number | null;
   height: number | null;
   durationMs: number | null;
-  sortOrder: number;
-  createdAt: string;
-  variants: StorageVariant[];
-}
-
-function config(): { baseUrl: string; apiKey: string } {
-  const baseUrl = process.env.STORAGE_URL?.replace(/\/$/, "");
-  const apiKey = process.env.STORAGE_API_KEY;
-  if (!baseUrl || !apiKey) {
-    throw new ApiError(500, "Storage service not configured — set STORAGE_URL and STORAGE_API_KEY");
-  }
-  return { baseUrl, apiKey };
-}
-
-/**
- * The origin a BROWSER uses to fetch media — which is not the one this process
- * uses to reach the storage service.
- *
- * STORAGE_URL is in-network (`http://storage:3100` under compose). The URLs we
- * return here get persisted into the database and later rendered in an <img>,
- * so they must be the public origin instead — nginx proxies
- * `https://media.<domain>/files/` to the same service. Prefixing them with
- * STORAGE_URL writes `http://storage:3100/files/...` into Product.photos,
- * which no browser can resolve: the image is broken permanently, and
- * re-uploading does not help because the next upload stores the same
- * unreachable origin.
- *
- * Falls back to STORAGE_URL, which is correct in local dev where the process
- * and the browser genuinely share an origin.
- */
-function publicBaseUrl(): string {
-  const url = process.env.STORAGE_PUBLIC_URL || process.env.STORAGE_URL || "";
-  return url.replace(/\/$/, "");
 }
 
 /** Upload one file, tagged to the entity it belongs to (e.g. "product"/"ips1000"). */
@@ -68,76 +60,100 @@ export async function uploadMedia(
   file: File,
   entityType: string,
   entityId: string,
-  sortOrder = 0,
+  _sortOrder = 0,
 ): Promise<StorageMedia> {
-  const { baseUrl, apiKey } = config();
+  ensureConfigured();
+  const { mediaType, buffer } = await classifyAndValidate(file);
+  const resourceType: ResourceType = mediaType === "video" ? "video" : "image";
+  const transformation = mediaType === "video" ? VIDEO_TRANSFORM : IMAGE_TRANSFORM;
 
-  const form = new FormData();
-  form.append("file", file, file.name);
-  form.append("entityType", entityType);
-  form.append("entityId", entityId);
-  form.append("sortOrder", String(sortOrder));
-
-  const res = await fetch(`${baseUrl}/media`, {
-    method: "POST",
-    headers: { "X-API-Key": apiKey },
-    body: form,
+  const result = await new Promise<UploadApiResponse>((resolve, reject) => {
+    const upload = cloudinary.uploader.upload_stream(
+      {
+        folder: `${folderPrefix()}/${entityType}/${entityId}`,
+        resource_type: resourceType,
+        tags: [entityType],
+      },
+      (error, uploadResult) => {
+        if (error || !uploadResult) reject(error ?? new Error("Cloudinary upload returned no result"));
+        else resolve(uploadResult);
+      },
+    );
+    upload.end(buffer);
   });
-  if (!res.ok) {
-    throw new ApiError(502, `Storage upload failed (${res.status}): ${await res.text()}`);
-  }
 
-  const media = (await res.json()) as StorageMedia;
-  // publicBaseUrl(), never baseUrl — see the note there. These URLs are stored
-  // and rendered in the browser; baseUrl is only good for server-to-server.
-  const publicBase = publicBaseUrl();
-  return { ...media, variants: media.variants.map((v) => ({ ...v, url: `${publicBase}${v.url}` })) };
+  const url = cloudinary.url(result.public_id, {
+    secure: true,
+    resource_type: resourceType,
+    version: result.version,
+    format: result.format,
+    transformation: [transformation],
+  });
+
+  return {
+    id: result.public_id,
+    mediaType,
+    url,
+    mimeType: file.type,
+    sizeBytes: result.bytes,
+    width: result.width ?? null,
+    height: result.height ?? null,
+    durationMs: result.duration ? Math.round(result.duration * 1000) : null,
+  };
 }
 
-export async function deleteMedia(id: string): Promise<void> {
-  const { baseUrl, apiKey } = config();
-  const res = await fetch(`${baseUrl}/media/${id}`, {
-    method: "DELETE",
-    headers: { "X-API-Key": apiKey },
-  });
-  if (!res.ok && res.status !== 404) {
-    throw new ApiError(502, `Storage delete failed (${res.status}): ${await res.text()}`);
+export async function deleteMedia(publicId: string, resourceType: ResourceType): Promise<void> {
+  ensureConfigured();
+  try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+  } catch (err) {
+    throw new ApiError(502, `Cloudinary delete failed: ${(err as Error).message}`);
   }
 }
 
 /**
- * Media id embedded in a URL this service issued (`{base}/files/{id}/{variant}`);
- * null for anything else (external links, empty strings).
- *
- * Matches against BOTH origins on purpose. Rows written before
- * STORAGE_PUBLIC_URL existed hold the in-network one, and rows written since
- * hold the public one — if this only recognised the current origin, replacing
- * or clearing an older photo would silently fail to delete its file and leak
- * an orphan onto disk every time.
+ * Extracts the Cloudinary `public_id` (+ resource type) out of a URL this
+ * module issued (`.../<image|video>/upload/<transform>/v<version>/<public_id>.<ext>`).
+ * Matches only against our own known transform strings — same reasoning as
+ * the old code's URL matching: rows written under a different convention
+ * (or not ours at all — e.g. external URLs imported from elsewhere) must
+ * come back null rather than a wrong guess.
  */
-export function parseMediaId(fileUrl: string): string | null {
-  const bases = [publicBaseUrl(), (process.env.STORAGE_URL ?? "").replace(/\/$/, "")];
-  for (const base of bases) {
-    if (!base) continue;
-    const prefix = `${base}/files/`;
-    if (!fileUrl.startsWith(prefix)) continue;
-    const id = fileUrl.slice(prefix.length).split("/")[0];
-    if (id) return id;
+export function parseCloudinaryRef(
+  fileUrl: string,
+): { publicId: string; resourceType: ResourceType } | null {
+  const cloud = cloudName();
+  if (!cloud) return null;
+
+  for (const resourceType of ["image", "video"] as const) {
+    const base = `https://res.cloudinary.com/${cloud}/${resourceType}/upload/`;
+    if (!fileUrl.startsWith(base)) continue;
+
+    let rest = fileUrl.slice(base.length);
+    const transform = resourceType === "video" ? VIDEO_TRANSFORM : IMAGE_TRANSFORM;
+    if (rest.startsWith(`${transform}/`)) rest = rest.slice(transform.length + 1);
+
+    const versionMatch = rest.match(/^v\d+\//);
+    if (versionMatch) rest = rest.slice(versionMatch[0].length);
+
+    const publicId = rest.replace(/\.[a-zA-Z0-9]+$/, "");
+    if (!publicId) continue;
+    return { publicId, resourceType };
   }
   return null;
 }
 
 /**
  * Best-effort delete for a photo/video slot being replaced or cleared — a
- * stale file left behind on the storage service isn't worth failing the
- * request over, so failures (and non-storage URLs) are swallowed here.
+ * stale asset left behind on Cloudinary isn't worth failing the request
+ * over, so failures (and non-Cloudinary URLs) are swallowed here.
  */
 export async function deleteMediaByUrl(fileUrl: string): Promise<void> {
-  const id = parseMediaId(fileUrl);
-  if (!id) return;
+  const ref = parseCloudinaryRef(fileUrl);
+  if (!ref) return;
   try {
-    await deleteMedia(id);
+    await deleteMedia(ref.publicId, ref.resourceType);
   } catch {
-    // orphaned file on the storage service — no audit trail needed here
+    // orphaned asset on Cloudinary — no audit trail needed here
   }
 }

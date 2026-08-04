@@ -1,16 +1,17 @@
 # Deploying ZUP TECH (Docker + GitHub Actions + nginx)
 
-Single VPS, three app services behind nginx, images built by CI and pulled by
-the server. Verified end to end: all three images build, the stack boots
-healthy, both databases initialise, migrations apply and the storefront serves.
+Single VPS, two app services behind nginx, images built by CI and pulled by
+the server. Media (product photos/video, hero images, service images) lives
+on Cloudinary, not on this box. Verified end to end: both images build, the
+stack boots healthy, the database initialises, migrations apply and the
+storefront serves.
 
 ```
              ┌───────── nginx (:80/:443, the only public ports) ─────────┐
  <domain> ───┤ frontend:3001   api.<domain> → backend:3000
-             │                 media.<domain> → storage:3100  (/files/ only)
              └──────────────────────────────────────────────────────────┘
-                         backend ─┐             storage ─┐
-                                  └──► postgres (zuptech + media_storage)
+                         backend ──► postgres (zuptech)
+                         backend ──► Cloudinary (media)
 ```
 
 Throughout, `<domain>` is the site's domain (e.g. `example.com`). It appears in
@@ -21,20 +22,22 @@ a template rendered at container start.
 ## 0. Prerequisites
 
 - A VPS (2 GB RAM minimum — the Next.js build runs in CI, not here).
-- Four DNS A records → the VPS IP: `<domain>`, `www.<domain>`,
-  `api.<domain>`, `media.<domain>`. **Do this first**; certificate issuance
-  fails otherwise, and DNS takes time to propagate.
+- Three DNS A records → the VPS IP: `<domain>`, `www.<domain>`,
+  `api.<domain>`. **Do this first**; certificate issuance fails otherwise,
+  and DNS takes time to propagate.
+- A Cloudinary account (cloud name + API key/secret from the Console) — see
+  `backend/.env.example`.
 - A GitHub repo with the code pushed to `main`.
 
-Before the first push, confirm no secrets are staged — `backend/.env` and
-`storage/.env` hold live credentials:
+Before the first push, confirm no secrets are staged — `backend/.env` holds
+live credentials:
 
 ```bash
 git status --porcelain | grep -E '\.env$|\.env\.' && echo "STOP — secrets staged"
 ```
 
-(The root `.gitignore` already excludes `.env`, `node_modules/`, `.next/`,
-`storage/data/` and `backend/src/generated/`.)
+(The root `.gitignore` already excludes `.env`, `node_modules/`, `.next/`
+and `backend/src/generated/`.)
 
 ## 1. Prepare the VPS
 
@@ -100,13 +103,15 @@ purposes:
 
 ```bash
 openssl rand -hex 32   # BETTER_AUTH_SECRET
-openssl rand -hex 32   # STORAGE_API_KEY
-openssl rand -hex 24   # each of the three DB passwords
+openssl rand -hex 24   # each of the DB passwords
 ```
 
 Then set:
 
-- `APP_DOMAIN`, `API_DOMAIN`, `MEDIA_DOMAIN` — bare hostnames, no scheme
+- `APP_DOMAIN`, `API_DOMAIN` — bare hostnames, no scheme
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` —
+  from the Cloudinary Console; `CLOUDINARY_FOLDER_PREFIX=zuptech-prod` keeps
+  this account's uploads separate from any dev/staging account sharing it
 - `BETTER_AUTH_URL=https://api.<domain>` and `CORS_ORIGINS=https://<domain>`
 - `REGISTRY=ghcr.io/OWNER/REPO` — **all lowercase**, matching the repo exactly.
   The workflow publishes to `ghcr.io/${{ github.repository }}`; anything else
@@ -124,11 +129,11 @@ cd /opt/zuptech
 docker run --rm -p 80:80 \
   -v zuptech_certbot_conf:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
-  -d <domain> -d www.<domain> -d api.<domain> -d media.<domain> \
+  -d <domain> -d www.<domain> -d api.<domain> \
   --email you@example.com --agree-tos --no-eff-email
 ```
 
-All four names go on **one** certificate, and every nginx server block points
+All three names go on **one** certificate, and every nginx server block points
 at `live/${APP_DOMAIN}/`. The first `-d` determines that directory name, so it
 must be `<domain>` — the same value as `APP_DOMAIN`.
 
@@ -151,7 +156,7 @@ JavaScript, so they are variables, not secrets:
 | Name | Value |
 |---|---|
 | `NEXT_PUBLIC_SITE_URL` | `https://<domain>` |
-| `NEXT_PUBLIC_STORAGE_URL` | `https://media.<domain>` |
+| `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` | same value as `CLOUDINARY_CLOUD_NAME` |
 
 Create an **Environment** called `production` (Settings → Environments). Leave
 required reviewers empty for fully automatic deploys, or add yourself to make
@@ -161,8 +166,8 @@ every release pause for a click.
 
 Push to `main`, or run the *Deploy* workflow manually. The pipeline:
 
-1. **CI** — typecheck all three packages, lint, run backend + storage tests.
-2. **publish** — build and push all three images to GHCR, tagged `latest` and
+1. **CI** — typecheck both packages, lint, run backend tests.
+2. **publish** — build and push both images to GHCR, tagged `latest` and
    the commit SHA.
 3. **deploy** — SSH in, `git reset --hard origin/main`, then run
    `scripts/deploy.sh --pull`, which does the actual rollout.
@@ -194,12 +199,13 @@ Then confirm the site is actually up, from your own machine:
 curl -sI https://<domain>                  | head -1   # 200
 curl -s  https://<domain>/api/site-config  | head -c 80 # JSON, not a 500
 curl -sI https://api.<domain>/health       | head -1   # 200
-curl -sI https://media.<domain>/media      | head -1   # 404 — write API not public
 ```
 
 Then in a browser: the storefront loads **with images** (a wrong
-`NEXT_PUBLIC_STORAGE_URL` shows the page but 400s every image), sign in at
-`/admin`, and place one test order end to end.
+`NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` shows the page but 400s every image), sign
+in at `/admin`, upload one product photo (confirms `CLOUDINARY_API_KEY`/
+`CLOUDINARY_API_SECRET` on the backend are correct), and place one test order
+end to end.
 
 ## 7. Day-to-day
 
@@ -228,32 +234,32 @@ bash scripts/deploy.sh            # pull prebuilt images from the registry
 bash scripts/deploy.sh --build    # or build them on the box instead
 ```
 
-**Do not deploy with a bare `docker compose up -d`.** It applies neither
-migration history, and both resulting failures name something other than their
-cause: the storage service answers every request with `relation "media" does
-not exist`, and the backend 500s the whole storefront on a missing `SiteConfig`
-row while its own `/health` still reports healthy. `scripts/deploy.sh` runs
-both migrations first, then refuses to finish quietly against an unseeded
-database. It is idempotent — re-running against an up-to-date box is a no-op.
+**Do not deploy with a bare `docker compose up -d`.** It applies no migration,
+and the resulting failure names something other than its cause: the backend
+500s the whole storefront on a missing `SiteConfig` row while its own
+`/health` still reports healthy. `scripts/deploy.sh` runs the migration first,
+then refuses to finish quietly against an unseeded database. It is
+idempotent — re-running against an up-to-date box is a no-op.
 
 Backups run nightly at 03:15 via the cron entry `scripts/vps-bootstrap.sh`
 installed, writing to `/backup` and keeping 14 days. Run one by hand with
-`sudo APP_DIR=/opt/zuptech bash /opt/zuptech/scripts/backup.sh`. **Both**
-artefacts are needed for a full restore — the database alone leaves every
-product photo pointing at a file that no longer exists.
+`sudo APP_DIR=/opt/zuptech bash /opt/zuptech/scripts/backup.sh`. This covers
+Postgres only — media lives on Cloudinary, which has its own backup/export
+tooling in the Console.
 
 Those backups sit on the same disk as the app, which does not survive losing
 the VPS. Copy them off-box (`rsync`/`rclone` to object storage) and test a
-restore before you rely on either.
+restore before you rely on them.
 
 ## Things that will bite you
 
-**`NEXT_PUBLIC_*` is baked at build time.** Changing a domain means a rebuild,
-not a restart. That is why those are build args in `fronend/Dockerfile` and
-why the frontend image is environment-specific. Concretely, moving domains
-means changing `.env.production` on the VPS **and** the two GitHub repository
-Variables, then pushing a commit — updating only the first gets you a correctly
-routed site serving a bundle that still calls the old media host.
+**`NEXT_PUBLIC_*` is baked at build time.** Changing a domain or Cloudinary
+account means a rebuild, not a restart. That is why those are build args in
+`fronend/Dockerfile` and why the frontend image is environment-specific.
+Concretely, moving domains means changing `.env.production` on the VPS **and**
+the two GitHub repository Variables, then pushing a commit — updating only the
+first gets you a correctly routed site serving a bundle that still points
+`next/image` at the old host.
 
 **The nginx config is a template, not a live file.** `deploy/nginx/templates/`
 is rendered by envsubst at container start. Two consequences: a new
@@ -264,10 +270,11 @@ entrypoint scripts when the command starts with `nginx` — and ours starts with
 `/bin/sh` for the cert-reload loop. Remove that call and nginx silently serves
 its default welcome page.
 
-**`NEXT_PUBLIC_STORAGE_URL` must be a public HTTPS origin.** Next 16 refuses
-to optimize images whose host resolves to a private IP. `next.config.ts` opts
-out of that guard only when `NODE_ENV=development`, so pointing this at
-`localhost` in production makes every product and hero image return 400.
+**`NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` must exactly match `CLOUDINARY_CLOUD_NAME`.**
+`next.config.ts`'s `images.remotePatterns` allow-lists
+`res.cloudinary.com/<cloud_name>/**` using this value — a mismatch (wrong
+cloud name, or unset) makes every product and hero image 400, since Next's
+image optimizer refuses to fetch a host/path it hasn't allow-listed.
 
 **CI does not run on pushes to `main` under its own name.** `ci.yml` triggers
 on `pull_request` and `workflow_call` only; on `main` it runs *inside* the
@@ -283,24 +290,17 @@ SQL by hand.
 only applies committed migrations — it never prompts or resets. Never run
 `migrate dev` against production.
 
-**The storage service has two origins and they are not interchangeable.**
-`STORAGE_URL` (`http://storage:3100`) is how the backend reaches it in-network;
-`STORAGE_PUBLIC_URL` is how a browser reaches it, through nginx at
-`https://media.<domain>`. Upload URLs are written into the database and later
-rendered in an `<img>`, so they must carry the public origin. Storing the
-in-network one breaks every uploaded image permanently — and re-uploading does
-not help, because the next upload stores the same unreachable host. If images
-are broken but the page otherwise renders, check this first, then repair the
-existing rows with `backend/prisma/fix-media-urls.ts`.
+**Cloudinary credentials are backend-only.** `CLOUDINARY_API_KEY`/
+`CLOUDINARY_API_SECRET` authorize uploads and deletes and must never reach the
+browser — only `CLOUDINARY_CLOUD_NAME` (via its `NEXT_PUBLIC_` twin) is safe
+to expose, since it's just an account identifier baked into every delivery
+URL, not a credential.
 
-**There are two databases with two separate migration histories**, and
-`docker-compose.yml` applies neither. `zuptech` is migrated by Prisma,
-`media_storage` by `storage/migrations/run-migrations.ts` — forgetting the
-second is easy, because the backend comes up perfectly and only the media
-service fails. `scripts/deploy.sh` runs both; use it rather than remembering.
-
-**nginx disables buffering on `/files/`.** Video is served with HTTP Range;
-buffering makes nginx swallow the whole response and silently breaks seeking.
+**Existing media from the old storage service was migrated once**, via
+`backend/prisma/migrate-media-to-cloudinary.ts` (dry-run by default, `--apply`
+to commit). If a product photo predates the migration and still looks broken,
+re-run that script's dry-run first to see whether the row was missed rather
+than assuming it's a fresh bug.
 
 ## Still open before real traffic
 
@@ -325,5 +325,3 @@ code, not in the deployment:
   right: nginx appends the real peer, and Next's proxy passes the header
   through untouched. If you put a CDN or another reverse proxy in front, raise
   `TRUSTED_PROXY_HOPS` to match, or every visitor will share one bucket again.
-- The media host publishes `/files/` only. The storage write API stays on the
-  internal compose network — don't add a catch-all `location /` back to it.

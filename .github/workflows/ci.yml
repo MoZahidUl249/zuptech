@@ -42,20 +42,12 @@ jobs:
         working-directory: fronend
         run: bunx tsc --noEmit
 
-      - name: Typecheck (storage)
-        working-directory: storage
-        run: bunx tsc --noEmit
-
       - name: Lint (frontend)
         working-directory: fronend
         run: bun run lint
 
       - name: Test (backend)
         working-directory: backend
-        run: bun test
-
-      - name: Test (storage)
-        working-directory: storage
         run: bun test
 
   # Proves the images build before main is allowed to deploy. No push here —
@@ -75,15 +67,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build storage image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: storage/Dockerfile
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
       - name: Build frontend image
         uses: docker/build-push-action@v6
         with:
@@ -94,4 +77,4 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             NEXT_PUBLIC_SITE_URL=https://example.invalid
-            NEXT_PUBLIC_STORAGE_URL=https://example.invalid
+            NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=demo

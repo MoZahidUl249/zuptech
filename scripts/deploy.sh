@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# Roll the stack forward on the VPS: get images, migrate BOTH databases, start.
+# Roll the stack forward on the VPS: get images, migrate the database, start.
 #
 #   bash scripts/deploy.sh            # pull prebuilt images from the registry
 #   bash scripts/deploy.sh --build    # build the images on this box instead
 #   bash scripts/deploy.sh --seed     # also seed, if the database is empty
 #
-# This exists because the two databases have separate migration histories and
-# nothing in docker-compose.yml applies either one. `docker compose up -d` on
-# its own therefore starts services against whatever schema happens to be
-# there: the storage service answers every request with `relation "media" does
-# not exist`, and the backend 500s the whole storefront on a missing SiteConfig
-# row. Both failures look like application bugs and neither mentions migration.
+# This exists because nothing in docker-compose.yml applies the migration on
+# its own. `docker compose up -d` alone therefore starts the backend against
+# whatever schema happens to be there, and it 500s the whole storefront on a
+# missing SiteConfig row — a failure that looks like an application bug and
+# doesn't mention migration.
 #
 # .github/workflows/deploy.yml calls this same script, so the automated and the
 # by-hand path cannot drift apart.
@@ -55,13 +54,9 @@ fi
 
 # ---------- Migrations ----------
 # Before the new code serves, never after. `prisma migrate deploy` only applies
-# committed migrations and never prompts; the storage runner tracks what it has
-# applied in its own schema_migrations table.
+# committed migrations and never prompts.
 log "Migrating backend database (zuptech)"
 compose run --rm backend bunx --bun prisma migrate deploy
-
-log "Migrating storage database (media_storage)"
-compose run --rm storage bun run migrate
 
 # ---------- Start ----------
 log "Starting services"

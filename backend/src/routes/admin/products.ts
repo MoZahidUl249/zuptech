@@ -179,11 +179,7 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
       }
 
       const media = await uploadMedia(body.file, "product", existing.id, existing.photos.length);
-      const url =
-        media.variants.find((v) => v.variant === "medium")?.url ??
-        media.variants.find((v) => v.variant === "original")!.url;
-
-      const photos = [...existing.photos, url];
+      const photos = [...existing.photos, media.url];
       const product = await prisma.product.update({
         where: { id: existing.id },
         data: { photos },
@@ -230,11 +226,10 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
       if (!existing) throw notFound("Product");
 
       const media = await uploadMedia(body.file, "product", existing.id, 0);
-      const url = media.variants.find((v) => v.variant === "original")!.url;
 
       const product = await prisma.product.update({
         where: { id: existing.id },
-        data: { video: url },
+        data: { video: media.url },
         include: productInclude,
       });
       if (existing.video) await deleteMediaByUrl(existing.video);

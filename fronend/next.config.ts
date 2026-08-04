@@ -1,6 +1,8 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 
+const CLOUDINARY_ORIGIN = "https://res.cloudinary.com";
+
 const securityHeaders = [
   // Prevent MIME-type sniffing
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -31,14 +33,14 @@ const securityHeaders = [
  * (sanitizeSvgLogo parses and allowlists rather than pattern-matching), so
  * this is defence in depth rather than the only line.
  */
-function contentSecurityPolicy(storageOrigin: string): string {
+function contentSecurityPolicy(): string {
   return [
     "default-src 'self'",
     // 'unsafe-inline'/'unsafe-eval': Next's bootstrap + the GTM loader.
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: ${storageOrigin} https://www.googletagmanager.com`,
-    `media-src 'self' ${storageOrigin}`,
+    `img-src 'self' data: blob: ${CLOUDINARY_ORIGIN} https://www.googletagmanager.com`,
+    `media-src 'self' ${CLOUDINARY_ORIGIN}`,
     "font-src 'self' data:",
     // The browser talks to the API same-origin through the rewrites below.
     "connect-src 'self' https://www.google-analytics.com",
@@ -54,15 +56,12 @@ function contentSecurityPolicy(storageOrigin: string): string {
 // same-origin and the better-auth session cookie works unchanged.
 export const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:3000";
 
-// The media-storage service (../storage). Admin uploads (product photos, hero
-// banners, service images) are served from here as absolute URLs, so
-// next/image needs it allow-listed to optimize them.
-const STORAGE_URL = process.env.NEXT_PUBLIC_STORAGE_URL ?? "http://localhost:3100";
-const STORAGE_ORIGIN = new URL(STORAGE_URL);
-/** True when storage is on this machine — i.e. the local dev setup. */
-const IS_LOCAL_STORAGE = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(
-  STORAGE_ORIGIN.hostname,
-);
+// Admin uploads (product photos, hero banners, service images) are stored on
+// Cloudinary and served from res.cloudinary.com as absolute URLs, so
+// next/image needs the account's delivery path allow-listed to optimize
+// them. Cloud name isn't a secret — it's just an account identifier baked
+// into every delivery URL — so it's safe as a public env var.
+const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? "";
 
 const nextConfig: NextConfig = {
   // Docker image size: standalone emits .next/standalone with only the files
@@ -75,28 +74,17 @@ const nextConfig: NextConfig = {
   // startup on a missing module. `bun run build` runs with cwd = fronend.
   outputFileTracingRoot: path.join(process.cwd(), ".."),
   images: {
-    // Explicit object form rather than `new URL(...)`: the storage host is
-    // configurable, and spelling out protocol/hostname/port keeps the
-    // allowlist readable when STORAGE_URL changes between environments.
-    // `search: ""` keeps query strings blocked.
+    // Scoped to this account's own delivery path — Cloudinary's transform
+    // segments are part of the path, not a query string, so `search: ""`
+    // (blocking query strings) stays correct.
     remotePatterns: [
       {
-        protocol: STORAGE_ORIGIN.protocol.replace(":", "") as "http" | "https",
-        hostname: STORAGE_ORIGIN.hostname,
-        port: STORAGE_ORIGIN.port,
-        pathname: "/files/**",
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+        pathname: `/${CLOUDINARY_CLOUD_NAME}/**`,
         search: "",
       },
     ],
-    // Next 16 refuses to optimize an upstream image whose host resolves to a
-    // private IP — an SSRF guard. In local dev the media-storage service IS
-    // on 127.0.0.1, so every admin image preview 400s without this.
-    //
-    // Scoped to local development on purpose: in staging/production
-    // STORAGE_URL points at a public host, the guard does real work, and this
-    // stays false. Never set it because a deployed image 400s — that error
-    // means the URL is pointing somewhere it shouldn't.
-    dangerouslyAllowLocalIP: IS_LOCAL_STORAGE && process.env.NODE_ENV === "development",
   },
   async headers() {
     return [
@@ -106,7 +94,7 @@ const nextConfig: NextConfig = {
           ...securityHeaders,
           {
             key: "Content-Security-Policy-Report-Only",
-            value: contentSecurityPolicy(STORAGE_ORIGIN.origin),
+            value: contentSecurityPolicy(),
           },
         ],
       },

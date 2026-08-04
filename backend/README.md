@@ -166,6 +166,6 @@ Errors are always `{ "error": "message" }` with a meaningful status
 - [ ] Set `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`/`MAIL_FROM` — without them `lib/mail.ts` only logs the reset code and nobody can recover a password
 - [ ] Give every staff member a real `email`, or they can't use "Forgot password?"
 - [ ] Implement real gateway verification in `routes/public/webhooks.ts` + a payment-initiation step
-- [ ] Move product photos to object storage (currently URL/data-URL strings)
+- [ ] Set `CLOUDINARY_CLOUD_NAME`/`CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET` to a real Cloudinary account
 - [ ] Change the seeded demo staff passwords
 - [ ] Put the API behind TLS and restrict CORS_ORIGINS to the real storefront origin

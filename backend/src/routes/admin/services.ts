@@ -87,13 +87,10 @@ export const adminServices = new Elysia({
       if (!existing) throw notFound("Service");
 
       const media = await uploadMedia(body.file, "service", existing.id, 0);
-      const url =
-        media.variants.find((v) => v.variant === "medium")?.url ??
-        media.variants.find((v) => v.variant === "original")!.url;
 
       const service = await prisma.service.update({
         where: { id: existing.id },
-        data: { image: url },
+        data: { image: media.url },
       });
       if (existing.image) await deleteMediaByUrl(existing.image);
       return toService(service);
@@ -162,13 +159,10 @@ export const adminServices = new Elysia({
       if (!existing) throw notFound("Industrial service");
 
       const media = await uploadMedia(body.file, "industrialservice", existing.id, 0);
-      const url =
-        media.variants.find((v) => v.variant === "medium")?.url ??
-        media.variants.find((v) => v.variant === "original")!.url;
 
       const service = await prisma.industrialService.update({
         where: { id: existing.id },
-        data: { image: url },
+        data: { image: media.url },
       });
       if (existing.image) await deleteMediaByUrl(existing.image);
       return toIndustrialService(service);

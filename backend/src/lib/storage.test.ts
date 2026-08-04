@@ -1,68 +1,58 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { parseMediaId } from "./storage";
+import { parseCloudinaryRef } from "./storage";
 
-/*
- * These cover the split between the two storage origins.
- *
- * Production sets STORAGE_URL to the in-network `http://storage:3100` and
- * STORAGE_PUBLIC_URL to the browser-facing `https://media.<domain>`. Media
- * URLs are persisted and later rendered in an <img>, so they must carry the
- * public origin — storing the in-network one breaks every uploaded image
- * permanently, which is what shipped before this split existed.
- */
+const CLOUD = "zuptech-demo";
 
-const INTERNAL = "http://storage:3100";
-const PUBLIC = "https://media.zuptech.com";
-
-const original = {
-  url: process.env.STORAGE_URL,
-  publicUrl: process.env.STORAGE_PUBLIC_URL,
-};
+const original = process.env.CLOUDINARY_CLOUD_NAME;
 
 afterEach(() => {
-  // Restore rather than delete — an unrelated suite may rely on these.
-  if (original.url === undefined) delete process.env.STORAGE_URL;
-  else process.env.STORAGE_URL = original.url;
-  if (original.publicUrl === undefined) delete process.env.STORAGE_PUBLIC_URL;
-  else process.env.STORAGE_PUBLIC_URL = original.publicUrl;
+  // Restore rather than delete — an unrelated suite may rely on this.
+  if (original === undefined) delete process.env.CLOUDINARY_CLOUD_NAME;
+  else process.env.CLOUDINARY_CLOUD_NAME = original;
 });
 
-describe("parseMediaId", () => {
-  test("reads an id from a public-origin URL", () => {
-    process.env.STORAGE_URL = INTERNAL;
-    process.env.STORAGE_PUBLIC_URL = PUBLIC;
-    expect(parseMediaId(`${PUBLIC}/files/abc-123/medium`)).toBe("abc-123");
+describe("parseCloudinaryRef", () => {
+  test("reads an image ref, stripping transform + version + extension", () => {
+    process.env.CLOUDINARY_CLOUD_NAME = CLOUD;
+    const url = `https://res.cloudinary.com/${CLOUD}/image/upload/f_auto,q_auto,w_1600,c_limit/v1712345678/zuptech/product/ips1000/abc123.jpg`;
+    expect(parseCloudinaryRef(url)).toEqual({
+      publicId: "zuptech/product/ips1000/abc123",
+      resourceType: "image",
+    });
   });
 
-  // The reason parseMediaId checks both origins: rows written before
-  // STORAGE_PUBLIC_URL existed still hold the in-network form, and replacing
-  // one of those photos must still delete the old file rather than orphan it.
-  test("still reads an id from a legacy in-network URL", () => {
-    process.env.STORAGE_URL = INTERNAL;
-    process.env.STORAGE_PUBLIC_URL = PUBLIC;
-    expect(parseMediaId(`${INTERNAL}/files/abc-123/medium`)).toBe("abc-123");
+  test("reads a video ref with its own transform string", () => {
+    process.env.CLOUDINARY_CLOUD_NAME = CLOUD;
+    const url = `https://res.cloudinary.com/${CLOUD}/video/upload/f_auto,q_auto/v1712345678/zuptech/product/ips1000/promo.mp4`;
+    expect(parseCloudinaryRef(url)).toEqual({
+      publicId: "zuptech/product/ips1000/promo",
+      resourceType: "video",
+    });
   });
 
-  test("falls back to STORAGE_URL when no public origin is set (local dev)", () => {
-    process.env.STORAGE_URL = "http://localhost:3100";
-    delete process.env.STORAGE_PUBLIC_URL;
-    expect(parseMediaId("http://localhost:3100/files/xyz/original")).toBe("xyz");
+  test("reads a ref with no transform segment (nothing to strip)", () => {
+    process.env.CLOUDINARY_CLOUD_NAME = CLOUD;
+    const url = `https://res.cloudinary.com/${CLOUD}/image/upload/v1712345678/zuptech/service/svc1/logo.png`;
+    expect(parseCloudinaryRef(url)).toEqual({
+      publicId: "zuptech/service/svc1/logo",
+      resourceType: "image",
+    });
   });
 
-  test("ignores a trailing slash on either origin", () => {
-    process.env.STORAGE_URL = `${INTERNAL}/`;
-    process.env.STORAGE_PUBLIC_URL = `${PUBLIC}/`;
-    expect(parseMediaId(`${PUBLIC}/files/abc-123/medium`)).toBe("abc-123");
+  test("returns null for URLs this account did not issue", () => {
+    process.env.CLOUDINARY_CLOUD_NAME = CLOUD;
+    expect(parseCloudinaryRef("https://youtube.com/watch?v=abc")).toBeNull();
+    expect(parseCloudinaryRef("")).toBeNull();
+    // Right host, wrong cloud name.
+    expect(
+      parseCloudinaryRef("https://res.cloudinary.com/someone-else/image/upload/v1/x.jpg"),
+    ).toBeNull();
   });
 
-  test("returns null for URLs this service did not issue", () => {
-    process.env.STORAGE_URL = INTERNAL;
-    process.env.STORAGE_PUBLIC_URL = PUBLIC;
-    expect(parseMediaId("https://youtube.com/watch?v=abc")).toBeNull();
-    expect(parseMediaId("")).toBeNull();
-    // Right origin, but not a /files/ path.
-    expect(parseMediaId(`${PUBLIC}/media/abc-123`)).toBeNull();
-    // /files/ with no id after it.
-    expect(parseMediaId(`${PUBLIC}/files/`)).toBeNull();
+  test("returns null when CLOUDINARY_CLOUD_NAME isn't configured", () => {
+    delete process.env.CLOUDINARY_CLOUD_NAME;
+    expect(
+      parseCloudinaryRef(`https://res.cloudinary.com/${CLOUD}/image/upload/v1/x.jpg`),
+    ).toBeNull();
   });
 });

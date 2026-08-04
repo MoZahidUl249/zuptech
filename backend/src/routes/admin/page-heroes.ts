@@ -101,14 +101,13 @@ export const adminPageHeroes = new Elysia({
       const existing = await ensureHero(pageKey);
 
       const media = await uploadMedia(body.file, "pagehero", pageKey, 0);
-      const url = media.variants.find((v) => v.variant === "original")!.url;
       await forgetImage(existing.background);
 
       const hero = await prisma.pageHero.update({
         where: { pageKey },
         // Uploading a background is the act of choosing one, so switch the
         // mode too rather than leaving the admin with an invisible image.
-        data: { background: url, mode: "image" },
+        data: { background: media.url, mode: "image" },
         include: posterInclude,
       });
       return toPageHero(hero);
@@ -126,12 +125,11 @@ export const adminPageHeroes = new Elysia({
       const hero = await ensureHero(pageKey);
 
       const media = await uploadMedia(body.file, "heroposter", crypto.randomUUID(), 0);
-      const url = media.variants.find((v) => v.variant === "original")!.url;
 
       await prisma.heroPoster.create({
         data: {
           heroId: hero.id,
-          image: url,
+          image: media.url,
           // Append: one past the current last, so an upload never displaces
           // an existing poster's position.
           sort: hero.posters.length,

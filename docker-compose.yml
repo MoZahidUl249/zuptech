@@ -18,7 +18,6 @@ services:
       POSTGRES_DB: postgres
       # Consumed by the init script below.
       ZUPTECH_DB_PASSWORD: ${ZUPTECH_DB_PASSWORD:?set ZUPTECH_DB_PASSWORD}
-      MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD:?set MEDIA_DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Only executed when pgdata is empty — adding a database later means
@@ -29,27 +28,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-
-  storage:
-    image: ${REGISTRY:-ghcr.io/OWNER/REPO}/storage:${TAG:-latest}
-    build:
-      context: .
-      dockerfile: storage/Dockerfile
-    restart: unless-stopped
-    environment:
-      PORT: 3100
-      HOST: 0.0.0.0
-      API_KEY: ${STORAGE_API_KEY:?set STORAGE_API_KEY}
-      DATABASE_URL: postgres://media_storage:${MEDIA_DB_PASSWORD}@db:5432/media_storage
-      STORAGE_ROOT: /data
-      MAX_UPLOAD_SIZE_BYTES: ${MAX_UPLOAD_SIZE_BYTES:-524288000}
-    volumes:
-      # The uploaded originals live here. This volume plus a pg_dump is the
-      # complete backup set — losing either one loses the media library.
-      - media_data:/data
-    depends_on:
-      db:
-        condition: service_healthy
 
   backend:
     image: ${REGISTRY:-ghcr.io/OWNER/REPO}/backend:${TAG:-latest}
@@ -64,14 +42,12 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL}
       CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS}
-      # In-network for server-side uploads…
-      STORAGE_URL: http://storage:3100
-      # …but the URLs the backend PERSISTS (Product.photos, Service.image, …)
-      # are later rendered in a browser, which cannot resolve `storage`. So the
-      # public origin has to be passed in too — the same one the frontend gets.
-      # Omit this and every uploaded image is stored permanently broken.
-      STORAGE_PUBLIC_URL: ${NEXT_PUBLIC_STORAGE_URL:?set NEXT_PUBLIC_STORAGE_URL}
-      STORAGE_API_KEY: ${STORAGE_API_KEY}
+      # Media (product photos/video, hero images, service images) lives on
+      # Cloudinary — see src/lib/storage.ts.
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:?set CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:?set CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:?set CLOUDINARY_API_SECRET}
+      CLOUDINARY_FOLDER_PREFIX: ${CLOUDINARY_FOLDER_PREFIX:-zuptech-prod}
       # SMTP delivers password-reset OTPs. Unset SMTP_HOST logs the code to
       # the container log instead of sending — fine for staging, not for prod.
       SMTP_HOST: ${SMTP_HOST}
@@ -83,8 +59,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      storage:
-        condition: service_started
 
   frontend:
     image: ${REGISTRY:-ghcr.io/OWNER/REPO}/frontend:${TAG:-latest}
@@ -92,9 +66,9 @@ services:
       context: .
       dockerfile: fronend/Dockerfile
       args:
-        # …but the BROWSER fetches media directly, so this one must be the
-        # public https origin, and it is baked in at build time.
-        NEXT_PUBLIC_STORAGE_URL: ${NEXT_PUBLIC_STORAGE_URL:?set NEXT_PUBLIC_STORAGE_URL}
+        # The browser fetches media directly from Cloudinary, so next/image
+        # needs the cloud name baked in at build time to allow-list it.
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:?set CLOUDINARY_CLOUD_NAME}
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL}
     restart: unless-stopped
     environment:
@@ -121,8 +95,7 @@ services:
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN}
       API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN}
-      MEDIA_DOMAIN: ${MEDIA_DOMAIN:?set MEDIA_DOMAIN}
-      # Restrict envsubst to our three placeholders. Unfiltered, it would also
+      # Restrict envsubst to our two placeholders. Unfiltered, it would also
       # expand anything in the container's environment that collides with an
       # nginx variable name — $$host and friends would render empty and the
       # proxy would start subtly broken rather than failing loudly.
@@ -130,7 +103,6 @@ services:
     depends_on:
       - frontend
       - backend
-      - storage
     # Renders the templates, then reloads every 12h to pick up renewed certs.
     #
     # The envsubst call is explicit because the image's entrypoint only runs
@@ -152,6 +124,5 @@ services:
 
 volumes:
   pgdata:
-  media_data:
   certbot_conf:
   certbot_www:

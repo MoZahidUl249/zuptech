@@ -122,25 +122,31 @@ Use `bun` (not npm/node) everywhere; run Prisma CLI as `bunx --bun prisma …`.
 - Status fields are strings (not Prisma enums) to keep payloads identical to
   the frontend types ("On the way" etc.); validated with Elysia `t` unions.
 - Money is integer BDT throughout.
-- Product photos/video and hero slide images are files on the standalone
-  media-storage service (`../storage`, its own repo — see its README for the
-  full HTTP contract), not base64 blobs. `src/lib/storage.ts` wraps its API;
-  admin upload routes (`POST /admin/api/products/:id/photos|video`,
-  `POST /admin/api/slides/image`) proxy the multipart file through with the
-  shared `X-API-Key`, which stays server-side, and store the returned file
-  URL on the row. `GET /files/...` is public/unauthed, so the browser reads
-  media directly from the storage service.
+- Product photos/video and hero slide images are files on Cloudinary, not
+  base64 blobs. `src/lib/storage.ts` wraps the Cloudinary SDK; admin upload
+  routes (`POST /admin/api/products/:id/photos|video`,
+  `POST /admin/api/slides/image`) proxy the multipart file through — the
+  file is validated (`src/lib/media-validate.ts`: MIME allow-list + magic-byte
+  content sniffing, since a served asset replays whatever type it was
+  uploaded as) and re-uploaded with `CLOUDINARY_API_SECRET`, which stays
+  server-side — and store the returned Cloudinary delivery URL on the row.
+  That URL is a plain `https://res.cloudinary.com/...` link with a fixed
+  `f_auto,q_auto[,w_1600,c_limit]` transform baked into the path (never a
+  query string), so `deleteMediaByUrl`/`parseCloudinaryRef` can deterministically
+  recover the `public_id` to delete later. The browser fetches media directly
+  from Cloudinary's CDN, never proxied through this service.
 
 ## Environment
 
 `.env` (gitignored): `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
-`PORT`, `CORS_ORIGINS`, `STORAGE_URL`, `STORAGE_API_KEY` (the last two point
-at the media-storage service — see its own `.env`/README for how to run it
-locally), plus `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/
-`MAIL_FROM` for password-reset delivery (leave `SMTP_HOST` empty locally —
-codes go to the console). Local dev points at a temporary Prisma Postgres
-instance; production uses the hosting provider's internal Postgres URL (only
-resolves inside its network) — see `.env.example`.
+`PORT`, `CORS_ORIGINS`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
+`CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER_PREFIX` (the Cloudinary account
+media is stored on — see `.env.example`), plus
+`SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/`MAIL_FROM` for
+password-reset delivery (leave `SMTP_HOST` empty locally — codes go to the
+console). Local dev points at a temporary Prisma Postgres instance;
+production uses the hosting provider's internal Postgres URL (only resolves
+inside its network) — see `.env.example`.
 
 Demo staff (password `zup123` in development): arif/super, nusrat/manager,
 rakib/support. Under `NODE_ENV=production` the seed generates a random password

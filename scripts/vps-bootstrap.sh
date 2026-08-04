@@ -96,8 +96,8 @@ echo "    open: $SSH_PORT, 80, 443 — everything else refused"
 echo "    (Postgres and the app services publish no host ports at all)"
 
 # ---------- Backups ----------
-# Both halves are required for a full restore: the database alone will not
-# bring back the media library, and vice versa.
+# Media (product photos/video, hero images, service images) lives on
+# Cloudinary, so this backs up Postgres only.
 log "Nightly backups"
 install -d -m 750 /backup
 if crontab -l 2>/dev/null | grep -q 'zuptech-backup'; then

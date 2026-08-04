@@ -69,8 +69,7 @@ export const adminContent = new Elysia({ name: "routes/admin/content", detail: {
     async ({ body, staffCtx }) => {
       assertCan(staffCtx, "homepage", "manage");
       const media = await uploadMedia(body.file, "heroslide", crypto.randomUUID(), 0);
-      const url = media.variants.find((v) => v.variant === "original")!.url;
-      return { url };
+      return { url: media.url };
     },
     { body: uploadSlideImageDto },
   )

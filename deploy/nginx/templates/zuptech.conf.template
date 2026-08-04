@@ -1,26 +1,28 @@
 # RENDERED AT CONTAINER START — this is a template, not a live config.
 #
 # The nginx image runs envsubst over /etc/nginx/templates/*.template and writes
-# the result to /etc/nginx/conf.d/. Only ${APP_DOMAIN}, ${API_DOMAIN} and
-# ${MEDIA_DOMAIN} are substituted: docker-compose.yml sets
-# NGINX_ENVSUBST_FILTER='_DOMAIN$' so that nginx's own runtime variables
-# ($host, $remote_addr, $scheme, …) survive untouched. Adding a new
-# ${PLACEHOLDER} means naming it *_DOMAIN or widening that filter — otherwise
-# it renders as an empty string and nginx starts with a silently broken config.
+# the result to /etc/nginx/conf.d/. Only ${APP_DOMAIN} and ${API_DOMAIN} are
+# substituted: docker-compose.yml sets NGINX_ENVSUBST_FILTER='_DOMAIN$' so that
+# nginx's own runtime variables ($host, $remote_addr, $scheme, …) survive
+# untouched. Adding a new ${PLACEHOLDER} means naming it *_DOMAIN or widening
+# that filter — otherwise it renders as an empty string and nginx starts with
+# a silently broken config.
 #
-# All four hostnames share ONE certificate, issued under ${APP_DOMAIN} (see
+# All three hostnames share ONE certificate, issued under ${APP_DOMAIN} (see
 # DEPLOYMENT.md §4), which is why every block points at the same live/ path.
+#
+# Media (product photos/video, hero images, service images) is served
+# straight from Cloudinary's own CDN, so there is no media vhost here.
 
 # Upstreams are compose service names on the internal network.
 upstream storefront { server frontend:3001; }
 upstream api        { server backend:3000; }
-upstream media      { server storage:3100; }
 
 # ACME + HTTP->HTTPS. Keep this server block on :80 permanently; certbot
 # renews through it.
 server {
     listen 80;
-    server_name ${APP_DOMAIN} www.${APP_DOMAIN} ${API_DOMAIN} ${MEDIA_DOMAIN};
+    server_name ${APP_DOMAIN} www.${APP_DOMAIN} ${API_DOMAIN};
 
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
     location / { return 301 https://$host$request_uri; }
@@ -56,7 +58,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${APP_DOMAIN}/privkey.pem;
 
-    # Admin photo/video uploads proxy through the API to the storage service.
+    # Admin photo/video uploads proxy through the API to Cloudinary.
     client_max_body_size 320m;
 
     location / {
@@ -66,40 +68,5 @@ server {
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-
-# ---------- media ----------
-server {
-    listen 443 ssl;
-    http2 on;
-    server_name ${MEDIA_DOMAIN};
-
-    ssl_certificate     /etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${APP_DOMAIN}/privkey.pem;
-
-    # Reads only. Uploads arrive at this host from the browser but never reach
-    # nginx as a public write: the admin posts them to the API, which forwards
-    # them to storage over the internal network with the shared X-API-Key. So
-    # the only body size that matters here is a response, not a request.
-    client_max_body_size 1m;
-
-    location /files/ {
-        proxy_pass http://media;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        # Video is served with HTTP Range. Buffering makes nginx pull the whole
-        # response before forwarding, which silently breaks seeking —
-        # see storage/README.md.
-        proxy_buffering off;
-    }
-
-    # Everything else on this service — POST /media, DELETE /media/:id,
-    # GET /media (list) — is an admin-only write API reachable from inside the
-    # compose network. Publishing it left a static shared key as the only thing
-    # between the internet and the media library, with no rate limit behind it.
-    # /files/ is the entire public surface.
-    location / {
-        return 404;
     }
 }

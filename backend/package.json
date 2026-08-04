@@ -12,6 +12,7 @@
     "db:deploy": "bunx --bun prisma migrate deploy",
     "db:seed": "bun run prisma/seed.ts",
     "db:import:zupplus": "bun run prisma/import-zupplus.ts",
+    "db:migrate-media": "bun run prisma/migrate-media-to-cloudinary.ts",
     "db:studio": "bunx --bun prisma studio",
     "typecheck": "bunx tsc --noEmit"
   },
@@ -22,6 +23,7 @@
     "@prisma/client": "^7.8.0",
     "better-auth": "^1.6.23",
     "cheerio": "^1.2.0",
+    "cloudinary": "^2.5.1",
     "elysia": "^1.4.29",
     "nodemailer": "^9.0.3",
     "pg": "^8.22.0"

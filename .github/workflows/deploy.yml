@@ -49,18 +49,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Storage
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: storage/Dockerfile
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/storage:latest
-            ${{ env.REGISTRY }}/storage:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
       - name: Frontend
         uses: docker/build-push-action@v6
         with:
@@ -76,7 +64,7 @@ jobs:
           # repository *variables*, not secrets — they end up in public JS.
           build-args: |
             NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
-            NEXT_PUBLIC_STORAGE_URL=${{ vars.NEXT_PUBLIC_STORAGE_URL }}
+            NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=${{ vars.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME }}
 
   deploy:
     needs: publish
