@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { Zap, LayoutGrid, Sun, BarChart3, BadgeCheck } from "lucide-react";
-import { BrandHero } from "@/components/marketing/brand-hero";
 import { HeroBanner } from "@/components/marketing/hero-banner";
 import { FeaturedEquipment } from "@/components/marketing/featured-equipment";
 import { CtaBanner } from "@/components/marketing/cta-banner";
 import { site, jsonLd } from "@/lib/site";
-import { getPageHeroes, getServices, getSiteConfig } from "@/lib/api";
+import { getServices, getSiteConfig } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
 import { TrustStrip } from "@/components/marketing/trust-strip";
 import { ServicesStrip } from "@/components/marketing/services-strip";
@@ -35,11 +34,10 @@ const orgJsonLd = {
 export default async function HomePage() {
   // Server component: copy read here lands in the SSR HTML (SEO-visible, no
   // post-hydration swap).
-  const [services, config, heroes] = await Promise.all([
-    getServices(),
-    getSiteConfig(),
-    getPageHeroes(),
-  ]);
+  // No getPageHeroes() here any more: the homepage hero is the banner
+  // carousel alone, so Admin → Page pictures has nothing left to place on
+  // this page. The other pages still use it.
+  const [services, config] = await Promise.all([getServices(), getSiteConfig()]);
   const copy = resolveCopy(config?.copy);
 
   return (
@@ -49,22 +47,13 @@ export default async function HomePage() {
         dangerouslySetInnerHTML={{ __html: jsonLd(orgJsonLd) }}
       />
 
-      {/* HERO */}
-      <BrandHero
-        eyebrow={copy.homeHeroEyebrow}
-        headline={copy.homeHeroHeadline}
-        subhead={copy.homeHeroSubhead}
-        primaryCta={{ label: "Our Services", href: "/services" }}
-        secondaryCta={{ label: "Shop Products", href: "/shop" }}
-        // Admin → Page pictures → Home page. Was never passed, so that screen
-        // let staff configure homepage art that nothing rendered.
-        hero={heroes.home}
-      />
-
-      {/* Admin-managed promo banners (Admin → Home page → Hero banner slides) */}
-      <div className="bg-zup-ink pb-12">
-        <HeroBanner />
-      </div>
+      {/* HERO — the admin's banner slides, full-bleed, and nothing else.
+          The headline is kept as a visually-hidden <h1> rather than dropped:
+          a page still needs exactly one, both for search engines and so a
+          screen reader announces something other than "Featured promotions"
+          on arrival. It renders nothing on screen. */}
+      <h1 className="sr-only">{copy.homeHeroHeadline}</h1>
+      <HeroBanner />
 
       <TrustStrip />
 
