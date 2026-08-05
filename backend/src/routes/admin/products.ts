@@ -161,6 +161,12 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
       });
     });
 
+    // Release the gallery and promo video, same as the per-photo/video deletes
+    // and the service routes already do. Without this the row goes but the
+    // assets stay on Cloudinary forever, billed and unreferenced — nothing
+    // else knows their URLs once the row is gone.
+    await Promise.all([...product.photos, product.video].map(deleteMediaByUrl));
+
     return { ok: true };
   })
 
