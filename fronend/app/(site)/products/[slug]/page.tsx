@@ -6,6 +6,8 @@ import { getProductBySlug, getProducts } from "@/lib/api";
 import { formatBDT, site , jsonLd } from "@/lib/site";
 import { ProductActions } from "@/components/product-actions";
 import { ProductCard, ProductImagePlaceholder } from "@/components/product-card";
+import { ProductVideo } from "@/components/product-video";
+import { parseProductVideo } from "@/lib/video";
 
 export async function generateMetadata({
   params,
@@ -44,6 +46,7 @@ export default async function ProductPage({
   const outOfStock = product.inStock === false;
   // salePrice is server-computed (PublicProductDto); never derived here.
   const onSale = product.salePrice !== undefined && product.salePrice < product.price;
+  const video = parseProductVideo(product.video);
 
   const productJsonLd = {
     "@context": "https://schema.org",
@@ -90,6 +93,20 @@ export default async function ProductPage({
           }
         : {}),
     },
+    // Makes the promo eligible for video rich results. Only the fields Google
+    // requires are emitted, and only for YouTube — an uploaded file has no
+    // thumbnail to point at, and a VideoObject without one is rejected.
+    ...(video?.kind === "youtube"
+      ? {
+          video: {
+            "@type": "VideoObject",
+            name: `${product.name} — product video`,
+            description: product.description,
+            thumbnailUrl: video.thumbnailUrl,
+            embedUrl: video.embedUrl,
+          },
+        }
+      : {}),
   };
 
   const breadcrumbJsonLd = {
@@ -126,6 +143,12 @@ export default async function ProductPage({
           ← Shop
         </Link>
       </nav>
+
+      {product.video && (
+        <div className="mb-7">
+          <ProductVideo url={product.video} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 items-start gap-7 md:grid-cols-2 md:gap-9">
         <div>
@@ -244,17 +267,6 @@ export default async function ProductPage({
               </li>
             ))}
           </ul>
-
-          {product.video && (
-            <a
-              href={product.video}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 self-start text-[13.5px] font-semibold text-zup-blue transition-colors hover:text-zup-blue-dark"
-            >
-              ▶ Watch product video
-            </a>
-          )}
 
           <ProductActions product={product} />
         </div>

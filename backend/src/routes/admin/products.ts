@@ -126,6 +126,16 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
           include: productInclude,
         });
       });
+
+      // `video` doubles as an uploaded-file URL and a pasted link, so swapping
+      // a file for a YouTube link (or any other value) strands the old upload
+      // — nothing holds its URL once the column is overwritten. Same reasoning
+      // as forgetImage() when a page hero's background changes. No-ops on
+      // values we didn't issue, so link→file needs no special case.
+      if (fields.video !== undefined && fields.video !== existing.video) {
+        await deleteMediaByUrl(existing.video);
+      }
+
       return toAdminProduct(product, await featuredIds());
     },
     { body: updateProductDto },

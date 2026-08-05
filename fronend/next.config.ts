@@ -2,6 +2,8 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 const CLOUDINARY_ORIGIN = "https://res.cloudinary.com";
+/** Cookie-free YouTube host — see lib/video.ts. */
+const YOUTUBE_EMBED_ORIGIN = "https://www.youtube-nocookie.com";
 
 const securityHeaders = [
   // Prevent MIME-type sniffing
@@ -39,8 +41,13 @@ function contentSecurityPolicy(): string {
     // 'unsafe-inline'/'unsafe-eval': Next's bootstrap + the GTM loader.
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: ${CLOUDINARY_ORIGIN} https://www.googletagmanager.com`,
+    // i.ytimg.com: the poster frame for a YouTube product video, shown before
+    // the viewer clicks play (components/product-video.tsx).
+    `img-src 'self' data: blob: ${CLOUDINARY_ORIGIN} https://i.ytimg.com https://www.googletagmanager.com`,
     `media-src 'self' ${CLOUDINARY_ORIGIN}`,
+    // Only reached once someone actually plays a YouTube product video — the
+    // page embeds no iframe until then.
+    `frame-src ${YOUTUBE_EMBED_ORIGIN}`,
     "font-src 'self' data:",
     // The browser talks to the API same-origin through the rewrites below.
     "connect-src 'self' https://www.google-analytics.com",

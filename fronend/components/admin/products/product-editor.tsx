@@ -48,10 +48,14 @@ export function ProductEditor({
     p.onSale && p.salePercentage > 0
       ? Math.round(p.price * (1 - p.salePercentage / 100))
       : p.price;
-  const photoSummary =
-    p.photos.length === 0
-      ? "No photos yet"
-      : `${p.photos.length} photo${p.photos.length === 1 ? "" : "s"}${p.video ? " and a video" : ""}`;
+  // Counted independently: a product can have a video and no photos, and the
+  // old short-circuit on an empty gallery reported "No photos yet" for it,
+  // hiding the video completely.
+  const mediaParts = [
+    p.photos.length ? `${p.photos.length} photo${p.photos.length === 1 ? "" : "s"}` : "",
+    p.video ? "1 video" : "",
+  ].filter(Boolean);
+  const photoSummary = mediaParts.length ? mediaParts.join(" · ") : "No photos yet";
   const priceSummary =
     p.onSale && p.salePercentage > 0
       ? `${taka(sellingPrice)} — ${p.salePercentage}% off ${taka(p.price)}`
@@ -75,6 +79,15 @@ export function ProductEditor({
   const removeVideo = async () => {
     const updated = await deleteProductVideo(p.id);
     onChange({ video: updated.video });
+  };
+  /**
+   * A pasted link needs no upload endpoint — `video` is an ordinary product
+   * field, so it rides the editor's normal save like any other text input.
+   * Replacing an uploaded file this way is safe: the PATCH route releases the
+   * old Cloudinary asset when the value changes.
+   */
+  const setVideoUrl = async (url: string) => {
+    onChange({ video: url });
   };
 
   return (
@@ -203,7 +216,13 @@ export function ProductEditor({
             ) : null}
           </div>
           <p className="mt-4 mb-2 text-ui-sm font-bold text-zup-mid">Video (optional)</p>
-          <VideoSlot value={p.video || null} disabled={isNew} onUpload={uploadVideo} onRemove={removeVideo} />
+          <VideoSlot
+            value={p.video || null}
+            disabled={isNew}
+            onUpload={uploadVideo}
+            onRemove={removeVideo}
+            onSetUrl={setVideoUrl}
+          />
         </FormGroup>
 
         <FormGroup
