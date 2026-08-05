@@ -13,7 +13,16 @@
  * frontend asserting a union the API never promised.
  */
 
-import type { OrderStatus } from "../lib/rules";
+import type {
+  IndustrialLeadStatus,
+  InvoiceStatus,
+  LeadStatus,
+  OrderEventKind,
+  OrderStatus,
+  PageHeroMode,
+  PoStatus,
+  WarrantyStatus,
+} from "../lib/rules";
 
 /** A "buy N+, save X%" tier — see rules.ts `bestQuantityOffer`. */
 export interface QuantityOfferDto {
@@ -142,7 +151,7 @@ export interface AdminOrderDto extends OrderDto {
   preparedById: string | null;
   preparedBy: string | null; // Staff.name at read time, null when unclaimed
   invoiceId: string | null;
-  invoiceStatus: string | null;
+  invoiceStatus: InvoiceStatus | null;
   warrantyCount: number;
 }
 
@@ -150,7 +159,7 @@ export interface AdminOrderDto extends OrderDto {
 export interface OrderEventDto {
   id: string;
   at: string;
-  kind: string;
+  kind: OrderEventKind;
   detail: string;
   by: string; // staff username, or "customer"
   byName: string;
@@ -179,7 +188,7 @@ export interface OrderDetailDto extends AdminOrderDto {
 export interface InvoiceDto {
   id: string;
   orderId: string;
-  status: string;
+  status: InvoiceStatus;
   issuedAt: string | null;
   paidAt: string | null;
   notes: string;
@@ -210,7 +219,7 @@ export interface WarrantyDto {
   months: number;
   startsAt: string;
   endsAt: string;
-  status: string;
+  status: WarrantyStatus;
   claimNote: string;
   // Denormalized for the registry list, so it is searchable without a join.
   customer: string;
@@ -261,7 +270,7 @@ export interface LeadDto {
   city: string;
   phone: string;
   notes: string;
-  status: string;
+  status: LeadStatus;
   createdAt: string;
 }
 
@@ -278,7 +287,7 @@ export interface HeroPosterDto {
  *  nothing staff-only about it, so one shape covers both. */
 export interface PageHeroDto {
   pageKey: string;
-  mode: string; // "plain" | "image" | "posters"
+  mode: PageHeroMode;
   background: string;
   overlay: number;
   posters: HeroPosterDto[];
@@ -362,7 +371,7 @@ export interface IndustrialLeadDto {
   load: string;
   budget: string;
   notes: string;
-  status: string;
+  status: IndustrialLeadStatus;
   createdAt: string;
 }
 
@@ -425,7 +434,7 @@ export interface PurchaseOrderDto {
   qty: number;
   value: number;
   eta: string;
-  status: string;
+  status: PoStatus;
 }
 
 export interface StockMovementDto {
@@ -440,11 +449,11 @@ export interface StockMovementDto {
 export interface PaymentMethodDto {
   id: string;
   name: string;
-  kind: string;
+  kind: "Mobile wallet" | "Card gateway" | "Offline";
   provider: string;
   providers: string[];
   enabled: boolean;
-  environment: string;
+  environment: "Live" | "Test";
   apiKey: string;
   apiSecret: string;
   webhookUrl: string;

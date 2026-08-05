@@ -10,6 +10,7 @@ import { badRequest, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { PAGE_HERO_KEYS, type PageHeroKey } from "../../lib/rules";
 import { toPageHero } from "../../lib/serialize";
+import type { PageHeroDto } from "../../dtos/responses";
 import { deleteMediaByUrl, uploadMedia } from "../../lib/storage";
 import { staffGuard } from "./guard";
 
@@ -59,7 +60,10 @@ export const adminPageHeroes = new Elysia({
     const byKey = new Map(heroes.map((h) => [h.pageKey, h]));
     // Always return the full set, defaulting the untouched ones, so the admin
     // can render an editor per page without a create step.
-    return PAGE_HERO_KEYS.map((pageKey) => {
+    // Annotated so the default branch is checked against the contract too —
+    // without it the inline literal widens `mode` to `string` and the whole
+    // response type loses the PageHeroMode union.
+    return PAGE_HERO_KEYS.map((pageKey): PageHeroDto => {
       const row = byKey.get(pageKey);
       return row
         ? toPageHero(row)

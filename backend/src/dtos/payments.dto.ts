@@ -1,16 +1,13 @@
 import { t } from "elysia";
+import { paymentEnvironmentDto, paymentKindDto } from "./common";
 
 const paymentMethodFields = {
   name: t.String({ minLength: 2, maxLength: 100 }),
-  kind: t.Union([
-    t.Literal("Mobile wallet"),
-    t.Literal("Card gateway"),
-    t.Literal("Offline"),
-  ]),
+  kind: paymentKindDto,
   provider: t.String({ maxLength: 100 }),
   providers: t.Array(t.String({ maxLength: 100 }), { maxItems: 10 }),
   enabled: t.Boolean(),
-  environment: t.Union([t.Literal("Live"), t.Literal("Test")]),
+  environment: paymentEnvironmentDto,
   apiKey: t.String({ maxLength: 300 }),
   apiSecret: t.String({ maxLength: 300 }),
   webhookUrl: t.String({ maxLength: 300 }),

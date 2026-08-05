@@ -59,7 +59,23 @@ import type {
   Warranty,
 } from "../generated/client";
 import type { PricedCart } from "./pricing";
-import { availableStock, isLowStock, maskSecret, parseOrderStatus, salePrice } from "./rules";
+import {
+  availableStock,
+  coerceTo,
+  INDUSTRIAL_LEAD_STATUSES,
+  INVOICE_STATUSES,
+  isLowStock,
+  LEAD_STATUSES,
+  maskSecret,
+  ORDER_EVENT_KINDS,
+  PAGE_HERO_MODES,
+  parseOrderStatus,
+  PAYMENT_ENVIRONMENTS,
+  PAYMENT_KINDS,
+  PO_STATUSES,
+  salePrice,
+  WARRANTY_STATUSES,
+} from "./rules";
 
 /**
  * DB row → API payload mappers. Every response goes through one of these so
@@ -193,7 +209,7 @@ export function toAdminOrder(o: AdminOrderRow): AdminOrderDto {
     preparedById: o.preparedById,
     preparedBy: o.preparedBy?.name ?? null,
     invoiceId: o.invoice?.id ?? null,
-    invoiceStatus: o.invoice?.status ?? null,
+    invoiceStatus: o.invoice ? coerceTo(INVOICE_STATUSES, o.invoice.status, "Draft") : null,
     warrantyCount: o._count.warranties,
   };
 }
@@ -223,7 +239,7 @@ export function toOrderEvent(e: OrderEvent): OrderEventDto {
   return {
     id: e.id,
     at: e.at.toISOString(),
-    kind: e.kind,
+    kind: coerceTo(ORDER_EVENT_KINDS, e.kind, "note"),
     detail: e.detail,
     by: e.by,
     byName: e.byName,
@@ -244,7 +260,7 @@ export function toInvoice(inv: InvoiceRow): InvoiceDto {
   return {
     id: inv.id,
     orderId: inv.orderId,
-    status: inv.status,
+    status: coerceTo(INVOICE_STATUSES, inv.status, "Draft"),
     issuedAt: inv.issuedAt?.toISOString() ?? null,
     paidAt: inv.paidAt?.toISOString() ?? null,
     notes: inv.notes,
@@ -281,7 +297,7 @@ export function toWarranty(w: WarrantyRow): WarrantyDto {
     months: w.months,
     startsAt: w.startsAt.toISOString(),
     endsAt: w.endsAt.toISOString(),
-    status: w.status,
+    status: coerceTo(WARRANTY_STATUSES, w.status, "Active"),
     claimNote: w.claimNote,
     customer: w.order.name,
     phone: w.order.phone,
@@ -347,7 +363,7 @@ export function toLead(l: ServiceLead & { service: Service }): LeadDto {
     city: l.city,
     phone: l.phone,
     notes: l.notes,
-    status: l.status,
+    status: coerceTo(LEAD_STATUSES, l.status, "New"),
     createdAt: l.createdAt.toISOString(),
   };
 }
@@ -371,7 +387,7 @@ export function toIndustrialLead(l: IndustrialLead): IndustrialLeadDto {
     load: l.load,
     budget: l.budget,
     notes: l.notes,
-    status: l.status,
+    status: coerceTo(INDUSTRIAL_LEAD_STATUSES, l.status, "New"),
     createdAt: l.createdAt.toISOString(),
   };
 }
@@ -444,7 +460,7 @@ export function toPublicLandingPage(lp: LandingPageRow): PublicLandingPageDto {
 export function toPageHero(h: PageHero & { posters: HeroPosterRow[] }): PageHeroDto {
   return {
     pageKey: h.pageKey,
-    mode: h.mode,
+    mode: coerceTo(PAGE_HERO_MODES, h.mode, "plain"),
     background: h.background,
     overlay: h.overlay,
     posters: h.posters.map((p) => ({
@@ -546,7 +562,7 @@ export function toPurchaseOrder(po: PurchaseOrder): PurchaseOrderDto {
     qty: po.qty,
     value: po.value,
     eta: po.eta.toISOString(),
-    status: po.status,
+    status: coerceTo(PO_STATUSES, po.status, "Confirmed"),
   };
 }
 
@@ -570,11 +586,11 @@ export function toPaymentMethod(m: PaymentMethod): PaymentMethodDto {
   return {
     id: m.id,
     name: m.name,
-    kind: m.kind,
+    kind: coerceTo(PAYMENT_KINDS, m.kind, "Offline"),
     provider: m.provider,
     providers: m.providers,
     enabled: m.enabled,
-    environment: m.environment,
+    environment: coerceTo(PAYMENT_ENVIRONMENTS, m.environment, "Test"),
     apiKey: maskSecret(m.apiKey),
     apiSecret: maskSecret(m.apiSecret),
     webhookUrl: m.webhookUrl,

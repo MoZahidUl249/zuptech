@@ -1,6 +1,7 @@
 import { products as fallbackCatalog, type Product } from "@/lib/products";
 import type { HeroSlide, SiteContact, SiteCopy } from "@/lib/admin";
-import { api, edenErrorMessage, failureStatus, type EdenFailure } from "@/lib/eden";
+import { api, failureStatus, type EdenFailure } from "@/lib/eden";
+import { ApiRequestError, logApiFailure } from "@/lib/api-error";
 
 /*
  * Central client for the ZUP TECH backend (contract: openapi.json /
@@ -14,15 +15,12 @@ import { api, edenErrorMessage, failureStatus, type EdenFailure } from "@/lib/ed
 
 /** Thrown on a non-2xx response; carries the HTTP status and, for Better Auth
  *  errors, its stable `code` (e.g. "INVALID_EMAIL_OR_PASSWORD") so callers can
- *  branch without string-matching the message. */
-export class ApiError extends Error {
-  status: number;
-  code?: string;
-  constructor(message: string, status: number, code?: string) {
-    super(message);
+ *  branch without string-matching the message. Also carries the method, path
+ *  and the server's validation detail — see lib/api-error.ts. */
+export class ApiError extends ApiRequestError {
+  constructor(init: { status: number; method: string; path: string; body: unknown }) {
+    super(init);
     this.name = "ApiError";
-    this.status = status;
-    this.code = code;
   }
 }
 
@@ -38,9 +36,15 @@ async function unwrap<T>(
 ): Promise<T> {
   const { data, error } = await call;
   if (error) {
-    const status = failureStatus(error);
-    const { message, code } = edenErrorMessage(error, `${what} → ${status}`);
-    throw new ApiError(message, status, code);
+    const [method = "GET", ...rest] = what.split(" ");
+    const failure = new ApiError({
+      status: failureStatus(error),
+      method,
+      path: rest.join(" "),
+      body: error.value,
+    });
+    logApiFailure(failure);
+    throw failure;
   }
   return data as T;
 }
@@ -103,7 +107,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     if (error) {
       const status = failureStatus(error);
       if (status === 404) return null;
-      throw new ApiError(`GET /api/products/${slug} → ${status}`, status);
+      throw new ApiError({ status, method: "GET", path: `/api/products/${slug}`, body: error.value });
     }
     return data as Product;
   } catch (err) {

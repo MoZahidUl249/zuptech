@@ -1,64 +1,59 @@
 "use client";
 
+import { ApiRequestError, logApiFailure, type ValidationDetail } from "@/lib/api-error";
+import { failureStatus, type EdenFailure } from "@/lib/eden";
+
 /*
- * The one HTTP helper every admin client uses.
+ * Shared plumbing for every admin client (admin-api, admin-invoices,
+ * admin-warranty, admin-landing-pages).
  *
- * This exact function had been copy-pasted into admin-api.ts,
- * admin-invoices.ts, admin-warranty.ts and admin-landing-pages.ts, so a fix to
- * error handling in one left the other three behind. It lives here now.
+ * Requests themselves now go through the Eden client in lib/eden.ts, which
+ * types routes, params and responses against the backend's own definitions.
+ * What lives here is the half Eden deliberately leaves to the caller: turning
+ * its `{data, error}` result into the thrown AdminApiError the admin UI has
+ * always expected.
  *
- * All calls are same-origin relative paths — next.config.ts proxies /admin/api
- * to the backend, which keeps the Better Auth staff session cookie first-party.
- * There is no token to attach; if you find yourself adding an Authorization
- * header, something has gone wrong.
+ * Calls stay same-origin — next.config.ts proxies /admin/api to the backend so
+ * the Better Auth staff session cookie stays first-party. There is no token to
+ * attach; if you find yourself adding an Authorization header, something has
+ * gone wrong.
  */
 
 /** Carries the HTTP status so callers can tell 403 (no permission) from 409
  *  (server refused, e.g. deleting a category that still has products) from a
- *  genuine failure. The old helper threw a bare Error and lost that. */
-export class AdminApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
+ *  genuine failure — plus, now, the method/path and the server's validation
+ *  detail. See lib/api-error.ts. */
+export class AdminApiError extends ApiRequestError {
+  constructor(init: { status: number; method: string; path: string; body: unknown }) {
+    super(init);
     this.name = "AdminApiError";
-    this.status = status;
   }
 }
 
-export async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    let message = `${method} ${path} → ${res.status}`;
-    try {
-      const data = (await res.json()) as { error?: string };
-      if (data.error) message = data.error;
-    } catch {
-      // non-JSON error body — keep the status message
-    }
-    throw new AdminApiError(message, res.status);
-  }
-  return res.json();
-}
+export type { ValidationDetail };
 
-export const get = <T,>(path: string) => req<T>("GET", path);
-
-/** Multipart upload (product photos/video, hero images). The browser sets the
- *  multipart boundary itself, so never set Content-Type here. */
-export async function postForm<T>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(path, { method: "POST", body: form });
-  if (!res.ok) {
-    let message = `POST ${path} → ${res.status}`;
-    try {
-      const data = (await res.json()) as { error?: string };
-      if (data.error) message = data.error;
-    } catch {
-      // keep status message
-    }
-    throw new AdminApiError(message, res.status);
+/**
+ * Unwraps an Eden call into the value, or throws AdminApiError.
+ *
+ * `what` is the human-readable "METHOD /path" — Eden knows the route at the
+ * type level but doesn't hand it back at runtime, and an error that can't say
+ * which request failed is most of the way to useless.
+ */
+export async function unwrap<T>(
+  call: Promise<{ data: T | null; error: EdenFailure | null }>,
+  what: string,
+): Promise<T> {
+  const { data, error } = await call;
+  if (error) {
+    const [method = "GET", ...rest] = what.split(" ");
+    const failure = new AdminApiError({
+      status: failureStatus(error),
+      method,
+      path: rest.join(" "),
+      body: error.value,
+    });
+    logApiFailure(failure);
+    throw failure;
   }
-  return res.json();
+  return data as T;
 }

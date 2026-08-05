@@ -304,6 +304,26 @@ export function isOneOf<T extends readonly string[]>(
   return (values as readonly string[]).includes(value);
 }
 
+/**
+ * Narrow a column to its vocabulary for a response, falling back when the row
+ * holds something the vocabulary no longer covers (a legacy value, or a
+ * hand-edited row).
+ *
+ * The `parse*` helpers below throw instead, which is right on a single-record
+ * write path where corruption should stop the operation. These values are
+ * serialized into list responses, where throwing would take out the whole
+ * admin screen over one bad row — degrading to a sane default is the better
+ * failure. Either way the response type is now honest about the vocabulary,
+ * which it wasn't while these were all typed `string`.
+ */
+export function coerceTo<T extends readonly string[]>(
+  values: T,
+  value: string,
+  fallback: T[number],
+): T[number] {
+  return isOneOf(values, value) ? value : fallback;
+}
+
 // Product categories are no longer a vocabulary — they're rows in the
 // Category table, grouped by Section. See prisma/schema.prisma.
 
@@ -432,6 +452,16 @@ export type IndustrialTimeline = (typeof INDUSTRIAL_TIMELINES)[number];
 
 export const PO_STATUSES = ["Confirmed", "In transit", "Received", "Cancelled"] as const;
 export type PoStatus = (typeof PO_STATUSES)[number];
+
+/** How a payment method is settled, and which gateway credentials it uses.
+ *  These were literals inlined in payments.dto.ts; they live here now so the
+ *  request DTO and the response contract are built from one vocabulary, the
+ *  same as every other list in this file. */
+export const PAYMENT_KINDS = ["Mobile wallet", "Card gateway", "Offline"] as const;
+export type PaymentKind = (typeof PAYMENT_KINDS)[number];
+
+export const PAYMENT_ENVIRONMENTS = ["Live", "Test"] as const;
+export type PaymentEnvironment = (typeof PAYMENT_ENVIRONMENTS)[number];
 
 /** What an OrderEvent row records. Append-only — never reuse a kind's meaning. */
 export const ORDER_EVENT_KINDS = [

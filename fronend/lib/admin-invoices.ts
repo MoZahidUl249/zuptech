@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Invoice, InvoiceStatus } from "@/lib/admin";
-import { req } from "@/lib/admin-http";
+import { unwrap } from "@/lib/admin-http";
+import { api } from "@/lib/eden";
 
 /*
  * Typed client for /admin/api/invoices. Deliberately NOT wired into the
@@ -16,19 +17,19 @@ import { req } from "@/lib/admin-http";
  */
 
 
-export const getInvoices = () => req<Invoice[]>("GET", "/admin/api/invoices");
+export const getInvoices = () => unwrap(api.admin.api.invoices.get(), "GET /admin/api/invoices");
 
 export const getInvoice = (id: string) =>
-  req<Invoice>("GET", `/admin/api/invoices/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api.invoices({ id }).get(), "GET /admin/api/invoices/:id");
 
 /** Raise a Draft invoice for an order. Rejects (409) if one already exists. */
 export const createInvoice = (orderId: string, notes = "") =>
-  req<Invoice>("POST", "/admin/api/invoices", { orderId, notes });
+  unwrap(api.admin.api.invoices.post({ orderId, notes }), "POST /admin/api/invoices");
 
 export const patchInvoice = (
   id: string,
   patch: { status?: InvoiceStatus; notes?: string },
-) => req<Invoice>("PATCH", `/admin/api/invoices/${encodeURIComponent(id)}`, patch);
+) => unwrap(api.admin.api.invoices({ id }).patch(patch), "PATCH /admin/api/invoices/:id");
 
 /** Local-state owner for the invoice list, mirroring useServices. */
 export function useInvoices() {

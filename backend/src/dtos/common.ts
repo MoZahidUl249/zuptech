@@ -8,6 +8,8 @@ import {
   INVOICE_STATUSES,
   LEAD_STATUSES,
   ORDER_STATUSES,
+  PAYMENT_ENVIRONMENTS,
+  PAYMENT_KINDS,
   WARRANTY_STATUSES,
 } from "../lib/rules";
 
@@ -55,7 +57,7 @@ export const savedCartItemsDto = t.Array(
  * vocabulary. The mapped-tuple assertion below keeps the per-element literal
  * types, so the inferred static type is the real union.
  */
-function literalUnion<const T extends readonly [string, ...string[]]>(
+export function literalUnion<const T extends readonly [string, ...string[]]>(
   values: T,
 ): TUnion<{ -readonly [K in keyof T]: TLiteral<T[K] & string> }> {
   // The runtime value is the same union schema as before; only the declared
@@ -73,6 +75,9 @@ export const industrialLeadStatusDto = literalUnion(INDUSTRIAL_LEAD_STATUSES);
 export const industrialSectorDto = literalUnion(INDUSTRIAL_SECTORS);
 export const industrialScopeDto = literalUnion(INDUSTRIAL_SCOPES);
 export const industrialTimelineDto = literalUnion(INDUSTRIAL_TIMELINES);
+
+export const paymentKindDto = literalUnion(PAYMENT_KINDS);
+export const paymentEnvironmentDto = literalUnion(PAYMENT_ENVIRONMENTS);
 
 /** Slugs are the storefront-visible identifier for services and categories. */
 export const slugDto = t.String({

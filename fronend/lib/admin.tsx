@@ -502,7 +502,7 @@ export interface StockMovement {
 export interface PaymentMethod {
   id: string;
   name: string;
-  kind: string;
+  kind: "Mobile wallet" | "Card gateway" | "Offline";
   provider: string;
   providers: string[];
   enabled: boolean;

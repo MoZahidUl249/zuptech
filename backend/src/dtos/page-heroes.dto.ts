@@ -1,5 +1,6 @@
 import { t } from "elysia";
 import { PAGE_HERO_KEYS, PAGE_HERO_MODES } from "../lib/rules";
+import { literalUnion } from "./common";
 
 /**
  * Per-page hero art (background image or a rotating poster list).
@@ -10,8 +11,8 @@ import { PAGE_HERO_KEYS, PAGE_HERO_MODES } from "../lib/rules";
  * poster's optional `href` click-through.
  */
 
-export const pageHeroKeyDto = t.Union(PAGE_HERO_KEYS.map((k) => t.Literal(k)));
-export const pageHeroModeDto = t.Union(PAGE_HERO_MODES.map((m) => t.Literal(m)));
+export const pageHeroKeyDto = literalUnion(PAGE_HERO_KEYS);
+export const pageHeroModeDto = literalUnion(PAGE_HERO_MODES);
 
 export const updatePageHeroDto = t.Object({
   mode: pageHeroModeDto,

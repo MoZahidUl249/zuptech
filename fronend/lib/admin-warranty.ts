@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Warranty, WarrantyStatus } from "@/lib/admin";
-import { req } from "@/lib/admin-http";
+import { unwrap } from "@/lib/admin-http";
+import { api } from "@/lib/eden";
 
 /*
  * Typed client for /admin/api/warranties. Kept out of the AdminState diff-sync
@@ -12,7 +13,7 @@ import { req } from "@/lib/admin-http";
  */
 
 
-export const getWarranties = () => req<Warranty[]>("GET", "/admin/api/warranties");
+export const getWarranties = () => unwrap(api.admin.api.warranties.get(), "GET /admin/api/warranties");
 
 /**
  * Backfill the registry for one delivered order. Delivery generates warranties
@@ -20,14 +21,12 @@ export const getWarranties = () => req<Warranty[]>("GET", "/admin/api/warranties
  * is safe to call repeatedly.
  */
 export const generateWarranties = (orderId: string) =>
-  req<{ created: number; warranties: Warranty[] }>("POST", "/admin/api/warranties", {
-    orderId,
-  });
+  unwrap(api.admin.api.warranties.post({ orderId }), "POST /admin/api/warranties");
 
 export const patchWarranty = (
   id: string,
   patch: { serialNo?: string; status?: WarrantyStatus; claimNote?: string; months?: number },
-) => req<Warranty>("PATCH", `/admin/api/warranties/${encodeURIComponent(id)}`, patch);
+) => unwrap(api.admin.api.warranties({ id }).patch(patch), "PATCH /admin/api/warranties/:id");
 
 /** Local-state owner for the warranty registry, mirroring useInvoices. */
 export function useWarranties() {

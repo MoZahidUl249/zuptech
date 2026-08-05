@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { req } from "@/lib/admin-http";
+import { unwrap } from "@/lib/admin-http";
+import { api } from "@/lib/eden";
 
 /** Row shape of GET /admin/api/landing-pages (LandingPageDto). */
 export interface LandingPage {
@@ -53,7 +54,7 @@ export interface LandingPage {
  */
 
 
-export const listLandingPages = () => req<LandingPage[]>("GET", "/admin/api/landing-pages");
+export const listLandingPages = () => unwrap(api.admin.api["landing-pages"].get(), "GET /admin/api/landing-pages");
 
 /** The writable subset — everything the server resolves or owns is stripped. */
 export type LandingPageDraft = Omit<
@@ -70,23 +71,22 @@ export type LandingPageDraft = Omit<
 >;
 
 export const createLandingPage = (draft: LandingPageDraft) =>
-  req<LandingPage>("POST", "/admin/api/landing-pages", draft);
+  unwrap(api.admin.api["landing-pages"].post(draft), "POST /admin/api/landing-pages");
 
-const at = (id: string) => `/admin/api/landing-pages/${encodeURIComponent(id)}`;
 
 export const patchLandingPage = (id: string, patch: Partial<LandingPageDraft>) =>
-  req<LandingPage>("PATCH", at(id), patch);
+  unwrap(api.admin.api["landing-pages"]({ id }).patch(patch), "PATCH /admin/api/landing-pages/:id");
 
-export const deleteLandingPage = (id: string) => req<{ ok: true }>("DELETE", at(id));
+export const deleteLandingPage = (id: string) => unwrap(api.admin.api["landing-pages"]({ id }).delete(), "DELETE /admin/api/landing-pages/:id");
 
 export const publishLandingPage = (id: string) =>
-  req<LandingPage>("POST", `${at(id)}/publish`);
+  unwrap(api.admin.api["landing-pages"]({ id }).publish.post(), "POST /admin/api/landing-pages/:id/publish");
 
 export const unpublishLandingPage = (id: string) =>
-  req<LandingPage>("POST", `${at(id)}/unpublish`);
+  unwrap(api.admin.api["landing-pages"]({ id }).unpublish.post(), "POST /admin/api/landing-pages/:id/unpublish");
 
 export const duplicateLandingPage = (id: string) =>
-  req<LandingPage>("POST", `${at(id)}/duplicate`);
+  unwrap(api.admin.api["landing-pages"]({ id }).duplicate.post(), "POST /admin/api/landing-pages/:id/duplicate");
 
 export function useLandingPages() {
   const [pages, setPages] = useState<LandingPage[]>([]);

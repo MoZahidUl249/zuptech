@@ -1,33 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { get, postForm, req } from "@/lib/admin-http";
+import { unwrap } from "@/lib/admin-http";
+import { api } from "@/lib/eden";
 import { emptyState } from "@/lib/admin";
 import type {
-  AdminCustomer,
   AdminModule,
-  AdminOrder,
   AdminProduct,
   AdminState,
-  ContactMessage,
   HeroSlide,
   Integrations,
-  AdminCategory,
-  AdminSection,
-  IndustrialLead,
   IndustrialLeadStatus,
   LeadStatus,
-  OrderDetail,
   OrderStatus,
   PaymentMethod,
   Permission,
-  PurchaseOrder,
   Role,
-  ServiceLead,
   SiteContact,
   SiteCopy,
   StaffMember,
-  StockMovement,
   Supplier,
 } from "@/lib/admin";
 
@@ -59,11 +50,11 @@ export async function adminLogin(username: string, password: string): Promise<bo
 /** Mails a 6-digit reset code. Always resolves, whether or not the address
  *  belongs to a staff account — the server won't say, and neither do we. */
 export const adminForgotPassword = (email: string) =>
-  req<{ ok: boolean }>("POST", "/admin/api/forgot-password", { email });
+  unwrap(api.admin.api["forgot-password"].post({ email }), "POST /admin/api/forgot-password");
 
 /** Consumes the code from adminForgotPassword and sets the new password. */
 export const adminResetPassword = (email: string, otp: string, password: string) =>
-  req("POST", "/admin/api/reset-password", { email, otp, password });
+  unwrap(api.admin.api["reset-password"].post({ email, otp, password }), "POST /admin/api/reset-password");
 
 export async function adminLogout(): Promise<void> {
   await fetch("/admin/api/logout", { method: "POST" });
@@ -190,53 +181,53 @@ export async function loadAdminState(
     messages,
     config,
   ] = await Promise.all([
-    slice("staff", "Staff roles", () => get<Role[]>("/admin/api/roles"), []),
-    slice("staff", "Staff", () => get<StaffMember[]>("/admin/api/staff"), []),
-    slice("products", "Products", () => get<AdminProduct[]>("/admin/api/products"), []),
-    slice("products", "Sections", () => get<AdminSection[]>("/admin/api/sections"), []),
-    slice("products", "Categories", () => get<AdminCategory[]>("/admin/api/categories"), []),
-    slice("orders", "Orders", () => get<AdminOrder[]>("/admin/api/orders"), []),
-    slice("leads", "Service requests", () => get<ServiceLead[]>("/admin/api/leads"), []),
+    slice("staff", "Staff roles", () => unwrap(api.admin.api.roles.get(), "GET /admin/api/roles"), []),
+    slice("staff", "Staff", () => unwrap(api.admin.api.staff.get(), "GET /admin/api/staff"), []),
+    slice("products", "Products", () => unwrap(api.admin.api.products.get(), "GET /admin/api/products"), []),
+    slice("products", "Sections", () => unwrap(api.admin.api.sections.get(), "GET /admin/api/sections"), []),
+    slice("products", "Categories", () => unwrap(api.admin.api.categories.get(), "GET /admin/api/categories"), []),
+    slice("orders", "Orders", () => unwrap(api.admin.api.orders.get(), "GET /admin/api/orders"), []),
+    slice("leads", "Service requests", () => unwrap(api.admin.api.leads.get(), "GET /admin/api/leads"), []),
     slice(
       "leads",
       "Business enquiries",
-      () => get<IndustrialLead[]>("/admin/api/industrial-leads"),
+      () => unwrap(api.admin.api["industrial-leads"].get(), "GET /admin/api/industrial-leads"),
       [],
     ),
     slice(
       "customers",
       "Customers",
-      () => get<(AdminCustomer & { joined: string })[]>("/admin/api/customers"),
+      () => unwrap(api.admin.api.customers.get(), "GET /admin/api/customers"),
       [],
     ),
-    slice("homepage", "Home page", () => get<HeroSlide[]>("/admin/api/slides"), []),
+    slice("homepage", "Home page", () => unwrap(api.admin.api.slides.get(), "GET /admin/api/slides"), []),
     slice(
       "payments",
       "Payment methods",
-      () => get<PaymentMethod[]>("/admin/api/payment-methods"),
+      () => unwrap(api.admin.api["payment-methods"].get(), "GET /admin/api/payment-methods"),
       [],
     ),
-    slice("inventory", "Suppliers", () => get<Supplier[]>("/admin/api/suppliers"), []),
+    slice("inventory", "Suppliers", () => unwrap(api.admin.api.suppliers.get(), "GET /admin/api/suppliers"), []),
     slice(
       "inventory",
       "Purchase orders",
-      () => get<(PurchaseOrder & { eta: string })[]>("/admin/api/purchase-orders"),
+      () => unwrap(api.admin.api["purchase-orders"].get(), "GET /admin/api/purchase-orders"),
       [],
     ),
     slice(
       "inventory",
       "Stock movements",
-      () => get<(StockMovement & { date: string })[]>("/admin/api/movements"),
+      () => unwrap(api.admin.api.movements.get(), "GET /admin/api/movements"),
       [],
     ),
     slice(
       "leads",
       "Contact messages",
-      () => get<(ContactMessage & { createdAt: string })[]>("/admin/api/messages"),
+      () => unwrap(api.admin.api.messages.get(), "GET /admin/api/messages"),
       [],
     ),
     // Public endpoint — no module gate, every role needs the site copy.
-    slice<PublicSiteConfig>("sitecontent", "Site content", () => get("/api/site-config"), {
+    slice<PublicSiteConfig>("sitecontent", "Site content", () => unwrap(api.api["site-config"].get(), "GET /api/site-config"), {
       featuredIds: [],
       copy: emptyState().copy,
       contact: emptyState().contact,
@@ -282,23 +273,23 @@ export async function loadAdminState(
  */
 export const reloaders = {
   products: async () =>
-    (await get<AdminProduct[]>("/admin/api/products")).map(toAdminProduct),
-  sections: () => get<AdminSection[]>("/admin/api/sections"),
-  categories: () => get<AdminCategory[]>("/admin/api/categories"),
-  orders: () => get<AdminOrder[]>("/admin/api/orders"),
-  leads: () => get<ServiceLead[]>("/admin/api/leads"),
-  industrialLeads: () => get<IndustrialLead[]>("/admin/api/industrial-leads"),
-  slides: () => get<HeroSlide[]>("/admin/api/slides"),
-  payments: () => get<PaymentMethod[]>("/admin/api/payment-methods"),
-  suppliers: () => get<Supplier[]>("/admin/api/suppliers"),
-  staff: () => get<StaffMember[]>("/admin/api/staff"),
-  roles: () => get<Role[]>("/admin/api/roles"),
+    (await unwrap(api.admin.api.products.get(), "GET /admin/api/products")).map(toAdminProduct),
+  sections: () => unwrap(api.admin.api.sections.get(), "GET /admin/api/sections"),
+  categories: () => unwrap(api.admin.api.categories.get(), "GET /admin/api/categories"),
+  orders: () => unwrap(api.admin.api.orders.get(), "GET /admin/api/orders"),
+  leads: () => unwrap(api.admin.api.leads.get(), "GET /admin/api/leads"),
+  industrialLeads: () => unwrap(api.admin.api["industrial-leads"].get(), "GET /admin/api/industrial-leads"),
+  slides: () => unwrap(api.admin.api.slides.get(), "GET /admin/api/slides"),
+  payments: () => unwrap(api.admin.api["payment-methods"].get(), "GET /admin/api/payment-methods"),
+  suppliers: () => unwrap(api.admin.api.suppliers.get(), "GET /admin/api/suppliers"),
+  staff: () => unwrap(api.admin.api.staff.get(), "GET /admin/api/staff"),
+  roles: () => unwrap(api.admin.api.roles.get(), "GET /admin/api/roles"),
   purchaseOrders: async () =>
-    (await get<(PurchaseOrder & { eta: string })[]>("/admin/api/purchase-orders")).map(
+    (await unwrap(api.admin.api["purchase-orders"].get(), "GET /admin/api/purchase-orders")).map(
       (po) => ({ ...po, eta: shortDate(po.eta) }),
     ),
   movements: async () =>
-    (await get<(StockMovement & { date: string })[]>("/admin/api/movements")).map((m) => ({
+    (await unwrap(api.admin.api.movements.get(), "GET /admin/api/movements")).map((m) => ({
       ...m,
       date: shortDateTime(m.date),
     })),
@@ -309,48 +300,51 @@ export const reloaders = {
 /** Permanently delete an order. The backend releases any stock it was holding
  *  and cascades to its invoice and warranty records — see the route comment. */
 export const deleteOrder = (id: string) =>
-  req<{ ok: boolean }>("DELETE", `/admin/api/orders/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api.orders({ id }).delete(), "DELETE /admin/api/orders/:id");
 
 export const setOrderStatus = (id: string, status: OrderStatus) =>
-  req("PATCH", `/admin/api/orders/${encodeURIComponent(id)}`, { status });
+  unwrap(api.admin.api.orders({ id }).patch({ status }), "PATCH /admin/api/orders/:id");
 
 /** Assign (or, with null, unassign) the staff member accountable for an order. */
 export const setOrderPreparedBy = (id: string, preparedById: string | null) =>
-  req<OrderDetail>("PATCH", `/admin/api/orders/${encodeURIComponent(id)}`, { preparedById });
+  unwrap(api.admin.api.orders({ id }).patch({ preparedById }), "PATCH /admin/api/orders/:id");
 
 /** Lines + audit trail + invoice + warranties, in one call. */
 export const getOrderDetail = (id: string) =>
-  get<OrderDetail>(`/admin/api/orders/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api.orders({ id }).get(), "GET /admin/api/orders/:id");
 
 export const setLeadStatus = (id: string, status: LeadStatus) =>
-  req("PATCH", `/admin/api/leads/${encodeURIComponent(id)}`, { status });
+  unwrap(api.admin.api.leads({ id }).patch({ status }), "PATCH /admin/api/leads/:id");
 
 export const setIndustrialLeadStatus = (id: string, status: IndustrialLeadStatus) =>
-  req("PATCH", `/admin/api/industrial-leads/${encodeURIComponent(id)}`, { status });
+  unwrap(api.admin.api["industrial-leads"]({ id }).patch({ status }), "PATCH /admin/api/industrial-leads/:id");
 
 export const deleteIndustrialLead = (id: string) =>
-  req("DELETE", `/admin/api/industrial-leads/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api["industrial-leads"]({ id }).delete(), "DELETE /admin/api/industrial-leads/:id");
 
 /** Mark a contact message read or unread. The endpoint has existed since the
  *  messages route was written; the admin had simply never called it, so every
  *  message looked identical whether or not someone had dealt with it. */
 export const setMessageRead = (id: string, read: boolean) =>
-  req("PATCH", `/admin/api/messages/${encodeURIComponent(id)}`, { read });
+  unwrap(api.admin.api.messages({ id }).patch({ read }), "PATCH /admin/api/messages/:id");
 
 export const setFeatured = (ids: string[]) =>
-  req("PATCH", "/admin/api/products/featured", { ids });
+  unwrap(api.admin.api.products.featured.patch({ ids }), "PATCH /admin/api/products/featured");
 
 export const putSlides = (slides: HeroSlide[]) =>
-  req("PUT", "/admin/api/slides", {
-    slides: slides.map((s) => ({
-      image: s.image,
-      cta: s.cta,
-      href: s.href,
-      active: s.active,
-      fit: s.fit ?? "cover",
-      bg: s.bg ?? "",
-    })),
-  });
+  unwrap(
+    api.admin.api.slides.put({
+      slides: slides.map((s) => ({
+        image: s.image,
+        cta: s.cta,
+        href: s.href,
+        active: s.active,
+        fit: s.fit ?? "cover",
+        bg: s.bg ?? "",
+      })),
+    }),
+    "PUT /admin/api/slides",
+  );
 
 /** Upload a hero banner image to the media-storage service and get its URL back.
  *  The URL is then stored on the slide by the next putSlides() — the upload
@@ -358,7 +352,7 @@ export const putSlides = (slides: HeroSlide[]) =>
 export const uploadSlideImage = (file: File) => {
   const form = new FormData();
   form.append("file", file);
-  return postForm<{ url: string }>("/admin/api/slides/image", form);
+  return unwrap(api.admin.api.slides.image.post(form as never), "POST /admin/api/slides/image");
 };
 
 /* ===== Catalog taxonomy (Section → Category) ===== */
@@ -368,33 +362,31 @@ export const uploadSlideImage = (file: File) => {
  *  round trip. */
 export const MAX_SVG_LOGO_BYTES = 32 * 1024;
 
-const sectionAt = (id: string) => `/admin/api/sections/${encodeURIComponent(id)}`;
-const categoryAt = (id: string) => `/admin/api/categories/${encodeURIComponent(id)}`;
 
 export const createSection = (body: { name: string; sort: number }) =>
-  req<AdminSection>("POST", "/admin/api/sections", body);
+  unwrap(api.admin.api.sections.post(body), "POST /admin/api/sections");
 
 export const patchSection = (id: string, patch: { name?: string; sort?: number }) =>
-  req<AdminSection>("PATCH", sectionAt(id), patch);
+  unwrap(api.admin.api.sections({ id }).patch(patch), "PATCH /admin/api/sections/:id");
 
-export const deleteSection = (id: string) => req<{ ok: true }>("DELETE", sectionAt(id));
+export const deleteSection = (id: string) => unwrap(api.admin.api.sections({ id }).delete(), "DELETE /admin/api/sections/:id");
 
 export const createCategory = (body: { name: string; sectionId: string; sort: number }) =>
-  req<AdminCategory>("POST", "/admin/api/categories", body);
+  unwrap(api.admin.api.categories.post(body), "POST /admin/api/categories");
 
 export const patchCategory = (
   id: string,
   patch: { name?: string; sectionId?: string; sort?: number },
-) => req<AdminCategory>("PATCH", categoryAt(id), patch);
+) => unwrap(api.admin.api.categories({ id }).patch(patch), "PATCH /admin/api/categories/:id");
 
-export const deleteCategory = (id: string) => req<{ ok: true }>("DELETE", categoryAt(id));
+export const deleteCategory = (id: string) => unwrap(api.admin.api.categories({ id }).delete(), "DELETE /admin/api/categories/:id");
 
 /** Logos are SVG *markup* on the row, not files — the media-storage service
  *  only takes raster formats. `""` clears it. The backend rejects anything
  *  with active content (script, external refs), so a paste from an untrusted
  *  source fails loudly rather than shipping to the storefront. */
 export const setCategoryLogo = (id: string, svg: string) =>
-  req<AdminCategory>("PUT", `${categoryAt(id)}/logo`, { svg });
+  unwrap(api.admin.api.categories({ id }).logo.put({ svg }), "PUT /admin/api/categories/:id/logo");
 
 /* ===== Page heroes ===== */
 
@@ -420,45 +412,44 @@ export interface PageHero {
 
 /** Always returns one entry per key — pages never edited come back as
  *  `mode: "plain"`, so the admin renders an editor without a create step. */
-export const getPageHeroes = () => get<PageHero[]>("/admin/api/page-heroes");
+export const getPageHeroes = () => unwrap(api.admin.api["page-heroes"].get(), "GET /admin/api/page-heroes");
 
-const heroAt = (k: string) => `/admin/api/page-heroes/${encodeURIComponent(k)}`;
 
 export const putPageHero = (
   pageKey: string,
   body: { mode: PageHeroMode; overlay: number; background?: string },
-) => req<PageHero>("PUT", heroAt(pageKey), body);
+) => unwrap(api.admin.api["page-heroes"]({ pageKey }).put(body), "PUT /admin/api/page-heroes/:pageKey");
 
 /** Uploading also switches the hero into the matching mode server-side, so
  *  the admin sees the art immediately instead of an invisible upload. */
 export const uploadHeroBackground = (pageKey: string, file: File) => {
   const form = new FormData();
   form.append("file", file);
-  return postForm<PageHero>(`${heroAt(pageKey)}/background`, form);
+  return unwrap(api.admin.api["page-heroes"]({ pageKey }).background.post(form as never), "POST /admin/api/page-heroes/:pageKey/background");
 };
 
 export const uploadHeroPoster = (pageKey: string, file: File) => {
   const form = new FormData();
   form.append("file", file);
-  return postForm<PageHero>(`${heroAt(pageKey)}/posters`, form);
+  return unwrap(api.admin.api["page-heroes"]({ pageKey }).posters.post(form as never), "POST /admin/api/page-heroes/:pageKey/posters");
 };
 
 export const patchHeroPoster = (id: string, patch: { alt?: string; href?: string }) =>
-  req<PageHero>("PATCH", `/admin/api/hero-posters/${encodeURIComponent(id)}`, patch);
+  unwrap(api.admin.api["hero-posters"]({ id }).patch(patch), "PATCH /admin/api/hero-posters/:id");
 
 export const deleteHeroPoster = (id: string) =>
-  req<PageHero>("DELETE", `/admin/api/hero-posters/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api["hero-posters"]({ id }).delete(), "DELETE /admin/api/hero-posters/:id");
 
 export const reorderHeroPosters = (pageKey: string, ids: string[]) =>
-  req<PageHero>("PUT", `${heroAt(pageKey)}/posters/order`, { ids });
+  unwrap(api.admin.api["page-heroes"]({ pageKey }).posters.order.put({ ids }), "PUT /admin/api/page-heroes/:pageKey/posters/order");
 
-export const putCopy = (copy: SiteCopy) => req("PUT", "/admin/api/copy", copy);
-export const putContact = (contact: SiteContact) => req("PUT", "/admin/api/contact", contact);
+export const putCopy = (copy: SiteCopy) => unwrap(api.admin.api.copy.put(copy), "PUT /admin/api/copy");
+export const putContact = (contact: SiteContact) => unwrap(api.admin.api.contact.put(contact), "PUT /admin/api/contact");
 export const putIntegrations = (integrations: Integrations) =>
-  req("PUT", "/admin/api/integrations", integrations);
+  unwrap(api.admin.api.integrations.put(integrations), "PUT /admin/api/integrations");
 
 export const putPaymentMethod = (id: string, body: Partial<PaymentMethod>) =>
-  req("PUT", `/admin/api/payment-methods/${encodeURIComponent(id)}`, body);
+  unwrap(api.admin.api["payment-methods"]({ id: id }).put(body), "PUT /admin/api/payment-methods/:id");
 
 /* ===== Location tree (delivery/installation pricing) ===== */
 
@@ -496,18 +487,18 @@ function productBody(p: AdminProduct) {
 }
 
 export const createProduct = (p: AdminProduct) =>
-  req("POST", "/admin/api/products", {
+  unwrap(api.admin.api.products.post({
     id: p.id,
     ...productBody(p),
     stock: p.stock,
     reserved: p.reserved,
-  });
+  }), "POST /admin/api/products");
 
 export const patchProduct = (p: AdminProduct) =>
-  req("PATCH", `/admin/api/products/${encodeURIComponent(p.id)}`, productBody(p));
+  unwrap(api.admin.api.products({ id: p.id }).patch(productBody(p)), "PATCH /admin/api/products/:id");
 
 export const deleteProduct = (id: string) =>
-  req("DELETE", `/admin/api/products/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api.products({ id: id }).delete(), "DELETE /admin/api/products/:id");
 
 
 /** Append one photo to a product's gallery (goes to the media-storage
@@ -515,33 +506,33 @@ export const deleteProduct = (id: string) =>
 export const uploadProductPhoto = (productId: string, file: File) => {
   const form = new FormData();
   form.append("file", file);
-  return postForm<AdminProduct>(
-    `/admin/api/products/${encodeURIComponent(productId)}/photos`,
-    form,
+  return unwrap(
+    api.admin.api.products({ id: productId }).photos.post(form as never),
+    "POST /admin/api/products/:id/photos",
   ).then(toAdminProduct);
 };
 
 /** Remove one gallery photo by its position (later photos shift down). */
 export const deleteProductPhoto = (productId: string, index: number) =>
-  req<AdminProduct>(
-    "DELETE",
-    `/admin/api/products/${encodeURIComponent(productId)}/photos/${index}`,
+  unwrap(
+    api.admin.api.products({ id: productId }).photos({ index }).delete(),
+    "DELETE /admin/api/products/:id/photos/:index",
   ).then(toAdminProduct);
 
 /** Upload/replace the product's promo video (same storage-service path as photos). */
 export const uploadProductVideo = (productId: string, file: File) => {
   const form = new FormData();
   form.append("file", file);
-  return postForm<AdminProduct>(
-    `/admin/api/products/${encodeURIComponent(productId)}/video`,
-    form,
+  return unwrap(
+    api.admin.api.products({ id: productId }).video.post(form as never),
+    "POST /admin/api/products/:id/video",
   ).then(toAdminProduct);
 };
 
 export const deleteProductVideo = (productId: string) =>
-  req<AdminProduct>(
-    "DELETE",
-    `/admin/api/products/${encodeURIComponent(productId)}/video`,
+  unwrap(
+    api.admin.api.products({ id: productId }).video.delete(),
+    "DELETE /admin/api/products/:id/video",
   ).then(toAdminProduct);
 
 /* ===== Service catalogues (bookable /services + display-only /industrial) =====
@@ -567,23 +558,23 @@ export interface AdminService {
 /** Fields the backend accepts on create/update (id and image are server-owned). */
 export type ServiceInput = Omit<AdminService, "id" | "image">;
 
-export const getServices = (kind: ServiceKind) => get<AdminService[]>(`/admin/api/${kind}`);
+export const getServices = (kind: ServiceKind) => unwrap(api.admin.api[kind].get(), `GET /admin/api/${kind}`);
 
 export const createService = (kind: ServiceKind, body: ServiceInput) =>
-  req<AdminService>("POST", `/admin/api/${kind}`, body);
+  unwrap(api.admin.api[kind].post(body), `POST /admin/api/${kind}`);
 
 export const patchService = (kind: ServiceKind, id: string, patch: Partial<ServiceInput>) =>
-  req<AdminService>("PATCH", `/admin/api/${kind}/${encodeURIComponent(id)}`, patch);
+  unwrap(api.admin.api[kind]({ id }).patch(patch), `PATCH /admin/api/${kind}/:id`);
 
-/** 409s when a bookable service still has enquiries attached — req() surfaces
+/** 409s when a bookable service still has enquiries attached — unwrap() surfaces
  *  the backend's own message, so callers can toast it verbatim. */
 export const deleteService = (kind: ServiceKind, id: string) =>
-  req<void>("DELETE", `/admin/api/${kind}/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api[kind]({ id }).delete(), `DELETE /admin/api/${kind}/:id`);
 
 export const uploadServiceImage = (kind: ServiceKind, id: string, file: File) => {
   const form = new FormData();
   form.append("file", file);
-  return postForm<AdminService>(`/admin/api/${kind}/${encodeURIComponent(id)}/image`, form);
+  return unwrap(api.admin.api[kind]({ id }).image.post(form as never), `POST /admin/api/${kind}/:id/image`);
 };
 
 /** Local-state owner for one catalogue, mirroring useLandingPages — services
@@ -634,72 +625,75 @@ export function useServices(kind: ServiceKind) {
 }
 
 export const adjustStock = (productId: string, onHand: number, reason: string) =>
-  req("PATCH", `/admin/api/stock/${encodeURIComponent(productId)}`, { onHand, reason });
+  unwrap(api.admin.api.stock({ productId }).patch({ onHand, reason }), "PATCH /admin/api/stock/:id");
 
 export const createPurchaseOrder = (po: { supplierId: string; productId: string; qty: number }) =>
-  req("POST", "/admin/api/purchase-orders", {
+  unwrap(api.admin.api["purchase-orders"].post({
     ...po,
     eta: new Date(Date.now() + 7 * 86400000).toISOString(),
-  });
+  }), "POST /admin/api/purchase-orders");
 
 export const receivePurchaseOrder = (id: string) =>
-  req("POST", `/admin/api/purchase-orders/${encodeURIComponent(id)}/receive`);
+  unwrap(api.admin.api["purchase-orders"]({ id: id }).receive.post(), "POST /admin/api/purchase-orders/:id/receive");
 
 export const cancelPurchaseOrder = (id: string) =>
-  req("POST", `/admin/api/purchase-orders/${encodeURIComponent(id)}/cancel`);
+  unwrap(api.admin.api["purchase-orders"]({ id: id }).cancel.post(), "POST /admin/api/purchase-orders/:id/cancel");
 
 export const createSupplier = (s: Supplier) =>
-  req("POST", "/admin/api/suppliers", {
+  unwrap(api.admin.api.suppliers.post({
     name: s.name,
     contact: s.contact,
     phone: s.phone,
     items: s.items,
-  });
+  }), "POST /admin/api/suppliers");
 
 export const patchSupplier = (s: Supplier) =>
-  req("PATCH", `/admin/api/suppliers/${encodeURIComponent(s.id)}`, {
+  unwrap(api.admin.api.suppliers({ id: s.id }).patch({
     name: s.name,
     contact: s.contact,
     phone: s.phone,
     items: s.items,
-  });
+  }), "PATCH /admin/api/suppliers/:id");
 
 export const deleteSupplier = (id: string) =>
-  req("DELETE", `/admin/api/suppliers/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api.suppliers({ id: id }).delete(), "DELETE /admin/api/suppliers/:id");
 
 export const createStaff = (s: StaffMember) =>
-  req("POST", "/admin/api/staff", {
+  unwrap(api.admin.api.staff.post({
     name: s.name,
     phone: s.phone,
     email: s.email ?? "",
     username: s.username,
     password: s.password ?? "",
     roleId: s.roleId,
-  });
+  }), "POST /admin/api/staff");
 
 export const patchStaff = (s: StaffMember) =>
-  req("PATCH", `/admin/api/staff/${encodeURIComponent(s.id)}`, {
-    name: s.name,
-    phone: s.phone,
-    email: s.email ?? "",
-    roleId: s.roleId,
-    ...(s.password ? { password: s.password } : {}),
-  });
+  unwrap(
+    api.admin.api.staff({ id: s.id }).patch({
+      name: s.name,
+      phone: s.phone,
+      email: s.email ?? "",
+      roleId: s.roleId,
+      ...(s.password ? { password: s.password } : {}),
+    }),
+    "PATCH /admin/api/staff/:id",
+  );
 
 export const deleteStaff = (id: string) =>
-  req("DELETE", `/admin/api/staff/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api.staff({ id: id }).delete(), "DELETE /admin/api/staff/:id");
 
 export const createRole = (r: Role) =>
-  req("POST", "/admin/api/roles", { name: r.name, permissions: r.permissions });
+  unwrap(api.admin.api.roles.post({ name: r.name, permissions: r.permissions }), "POST /admin/api/roles");
 
 export const patchRole = (r: Role) =>
-  req("PATCH", `/admin/api/roles/${encodeURIComponent(r.id)}`, {
+  unwrap(api.admin.api.roles({ id: r.id }).patch({
     name: r.name,
     permissions: r.permissions,
-  });
+  }), "PATCH /admin/api/roles/:id");
 
 export const deleteRole = (id: string) =>
-  req("DELETE", `/admin/api/roles/${encodeURIComponent(id)}`);
+  unwrap(api.admin.api.roles({ id: id }).delete(), "DELETE /admin/api/roles/:id");
 
 /* ===== Metrics (dashboard + analytics) ===== */
 
