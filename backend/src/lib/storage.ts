@@ -79,19 +79,31 @@ export async function uploadMedia(
   const resourceType: ResourceType = mediaType === "video" ? "video" : "image";
   const transformation = mediaType === "video" ? VIDEO_TRANSFORM_OPTS : IMAGE_TRANSFORM_OPTS;
 
-  const result = await new Promise<UploadApiResponse>((resolve, reject) => {
-    const upload = cloudinary.uploader.upload_stream(
-      {
-        folder: `${folderPrefix()}/${entityType}/${entityId}`,
-        resource_type: resourceType,
-        tags: [entityType],
-      },
-      (error, uploadResult) => {
-        if (error || !uploadResult) reject(error ?? new Error("Cloudinary upload returned no result"));
-        else resolve(uploadResult);
-      },
-    );
-    upload.end(buffer);
+  /*
+   * Sent as a base64 data URI rather than a stream.
+   *
+   * Every multipart-streaming route in this SDK — upload_stream,
+   * upload(path), upload_large(path) — silently drops the auth fields under
+   * Bun once the payload reaches 1 MiB, and Cloudinary rejects the request
+   * with "Upload preset must be specified when using unsigned upload". It
+   * reads as a credentials problem and is not one: the config is fully
+   * populated at call time. 1,024,000 bytes succeeds, 1,048,576 fails.
+   *
+   * That put every real upload on the floor — a phone photo or a 2000px
+   * banner clears 1 MiB easily — while every test here passed, because the
+   * fixtures are a few KB. The data-URI path is unaffected.
+   *
+   * The cost is base64's ~33% inflation against Cloudinary's 60 MB ceiling
+   * for encoded uploads, so the practical raw limit is ~45 MB. That is far
+   * above any image and covers the hero-video cap; product video is declared
+   * larger (see MAX_UPLOAD_BYTES) and would need the streaming path restored
+   * once Bun handles it.
+   */
+  const dataUri = `data:${file.type};base64,${buffer.toString("base64")}`;
+  const result: UploadApiResponse = await cloudinary.uploader.upload(dataUri, {
+    folder: `${folderPrefix()}/${entityType}/${entityId}`,
+    resource_type: resourceType,
+    tags: [entityType],
   });
 
   const url = cloudinary.url(result.public_id, {
