@@ -6,7 +6,6 @@ import { CtaBanner } from "@/components/marketing/cta-banner";
 import { site, jsonLd } from "@/lib/site";
 import { getServices, getSiteConfig } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
-import { TrustStrip } from "@/components/marketing/trust-strip";
 import { ServicesStrip } from "@/components/marketing/services-strip";
 import { capabilities, homeStats, type CapabilityIconName } from "@/lib/home-content";
 
@@ -54,8 +53,6 @@ export default async function HomePage() {
           on arrival. It renders nothing on screen. */}
       <h1 className="sr-only">{copy.homeHeroHeadline}</h1>
       <HeroBanner />
-
-      <TrustStrip />
 
       <FeaturedEquipment />
 

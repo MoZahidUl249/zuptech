@@ -1,13 +1,21 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, User } from "lucide-react";
+import { Menu, ShoppingCart, User } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useCustomer } from "@/lib/customer";
 import { cn } from "@/lib/utils";
 import { ProductSearch } from "@/components/product-search";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -16,7 +24,9 @@ function initials(name: string): string {
   return (parts[0]![0] + parts[1]![0]).toUpperCase();
 }
 
-const navLinks = [
+/** The one list of sections. The desktop bar and the mobile tab bar both
+ *  render it, so the two navigations cannot drift apart. */
+export const navLinks = [
   { href: "/", label: "Home" },
   { href: "/shop", label: "Shop" },
   { href: "/services", label: "Services" },
@@ -28,6 +38,7 @@ export function SiteHeader() {
   const pathname = usePathname();
   const { count } = useCart();
   const customer = useCustomer();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -75,23 +86,13 @@ export function SiteHeader() {
 
         {/* Between the nav and the actions so it reads as part of browsing
             rather than as another call to action. Hidden on small screens,
-            where the row has no room — the mobile tab bar links to /shop,
-            which carries its own search box. */}
+            where the row has no room — the mobile menu carries its own. */}
         <ProductSearch className="hidden w-40 lg:block xl:w-56" />
 
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/contact?intent=quote"
-            className="hidden rounded-full bg-zup-ink px-[18px] py-[9px] text-[13.5px] font-semibold text-white transition-colors hover:bg-zup-ink/85 lg:inline-block"
-          >
-            Request Quote
-          </Link>
-          <Link
-            href="/shop"
-            className="hidden rounded-full bg-zup-blue px-[18px] py-[9px] text-[13.5px] font-semibold text-white transition-colors hover:bg-zup-blue-dark md:inline-block"
-          >
-            Shop Products
-          </Link>
+        {/* Account and cart are desktop-only. On mobile they would be a third
+            copy of the same two destinations, which is what the hamburger and
+            the tab bar are for. */}
+        <div className="hidden items-center gap-2.5 md:flex">
           {customer ? (
             <Link
               href="/account"
@@ -130,6 +131,89 @@ export function SiteHeader() {
             )}
           </Link>
         </div>
+
+        {/* Mobile: one control for everything the bar can't hold. The cart
+            count rides on the button so a filled basket is still visible with
+            the menu shut — the tab bar is sections only now. */}
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+          <SheetTrigger
+            aria-label={`Open menu${count > 0 ? ` (${count} items in cart)` : ""}`}
+            className="relative flex h-10 w-10 items-center justify-center rounded-full text-zup-body transition-colors hover:bg-zup-body/5 md:hidden"
+          >
+            <Menu className="h-6 w-6" strokeWidth={2} aria-hidden />
+            {count > 0 && (
+              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-zup-orange px-1 text-[10px] font-bold text-white">
+                {count}
+              </span>
+            )}
+          </SheetTrigger>
+
+          <SheetContent side="right" className="w-[86%] max-w-xs px-0">
+            <SheetHeader className="px-5">
+              <SheetTitle>Menu</SheetTitle>
+            </SheetHeader>
+
+            <div className="px-5">
+              <ProductSearch
+                className="w-full"
+                onNavigate={() => setMenuOpen(false)}
+              />
+            </div>
+
+            <nav className="flex flex-col px-2" aria-label="Mobile menu">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMenuOpen(false)}
+                  className={cn(
+                    "rounded-xl px-3 py-3 text-[15px] font-semibold transition-colors",
+                    isActive(link.href)
+                      ? "bg-zup-blue/8 text-zup-blue"
+                      : "text-zup-body hover:bg-zup-body/5",
+                  )}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+
+            <div className="mt-auto flex flex-col gap-1 border-t border-zup-body/8 px-2 pb-2 pt-3">
+              <Link
+                href="/cart"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-semibold text-zup-body transition-colors hover:bg-zup-body/5"
+              >
+                <ShoppingCart className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+                Cart
+                {count > 0 && (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-zup-orange px-1.5 text-[11px] font-bold text-white">
+                    {count}
+                  </span>
+                )}
+              </Link>
+              <Link
+                href="/account"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-semibold text-zup-body transition-colors hover:bg-zup-body/5"
+              >
+                {customer ? (
+                  <>
+                    <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-zup-blue text-[10px] font-bold text-white">
+                      {initials(customer.name)}
+                    </span>
+                    {customer.name.split(/\s+/)[0]}
+                  </>
+                ) : (
+                  <>
+                    <User className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+                    Sign in
+                  </>
+                )}
+              </Link>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </header>
   );

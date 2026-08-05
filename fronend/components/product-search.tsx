@@ -14,7 +14,14 @@ import { cn } from "@/lib/utils";
  * disagree — and a result page that can be linked, shared and bookmarked,
  * which the shop's own box could not do while its state was local-only.
  */
-export function ProductSearch({ className }: { className?: string }) {
+export function ProductSearch({
+  className,
+  /** Fired after a search navigates — lets the mobile menu close itself. */
+  onNavigate,
+}: {
+  className?: string;
+  onNavigate?: () => void;
+}) {
   const router = useRouter();
   const [q, setQ] = useState("");
 
@@ -27,6 +34,7 @@ export function ProductSearch({ className }: { className?: string }) {
         // An empty search is "show me everything", not a no-op — going to the
         // unfiltered shop is the least surprising outcome.
         router.push(term ? `/shop?q=${encodeURIComponent(term)}` : "/shop");
+        onNavigate?.();
       }}
       className={cn("relative", className)}
     >
