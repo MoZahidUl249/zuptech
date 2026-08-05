@@ -1,5 +1,6 @@
 import { products as fallbackCatalog, type Product } from "@/lib/products";
 import type { HeroSlide, SiteContact, SiteCopy } from "@/lib/admin";
+import { api, edenErrorMessage, failureStatus, type EdenFailure } from "@/lib/eden";
 
 /*
  * Central client for the ZUP TECH backend (contract: openapi.json /
@@ -11,20 +12,9 @@ import type { HeroSlide, SiteContact, SiteCopy } from "@/lib/admin";
  * No money is ever computed here or anywhere client-side — see cal-bk.md.
  */
 
-function base(): string {
-  if (typeof window !== "undefined") return "";
-  return process.env.BACKEND_URL ?? "http://localhost:3000";
-}
-
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${base()}${path}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
-  return res.json();
-}
-
-/** Thrown by postJson on a non-2xx response; carries the HTTP status and,
- *  for Better Auth errors, its stable `code` (e.g. "INVALID_EMAIL_OR_PASSWORD")
- *  so callers can branch without string-matching the message. */
+/** Thrown on a non-2xx response; carries the HTTP status and, for Better Auth
+ *  errors, its stable `code` (e.g. "INVALID_EMAIL_OR_PASSWORD") so callers can
+ *  branch without string-matching the message. */
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -36,31 +26,24 @@ export class ApiError extends Error {
   }
 }
 
-async function sendJson<T>(method: "POST" | "PATCH", path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${base()}${path}`, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    let message = `${method} ${path} → ${res.status}`;
-    let code: string | undefined;
-    try {
-      // Our own routes send {error}; Better Auth sends {message, code}.
-      const data = (await res.json()) as { error?: string; message?: string; code?: string };
-      if (data.error) message = data.error;
-      else if (data.message) message = data.message;
-      code = data.code;
-    } catch {
-      // non-JSON error body — keep the status message
-    }
-    throw new ApiError(message, res.status, code);
+/**
+ * Turns an Eden `{data, error}` result back into the throw-on-failure contract
+ * every caller in this file (and the components above it) already expects.
+ * Eden gives us the typed request and response; this keeps the error handling
+ * unchanged so nothing downstream had to be rewritten.
+ */
+async function unwrap<T>(
+  call: Promise<{ data: T | null; error: EdenFailure | null }>,
+  what: string,
+): Promise<T> {
+  const { data, error } = await call;
+  if (error) {
+    const status = failureStatus(error);
+    const { message, code } = edenErrorMessage(error, `${what} → ${status}`);
+    throw new ApiError(message, status, code);
   }
-  return res.json();
+  return data as T;
 }
-
-const postJson = <T>(path: string, body: unknown) => sendJson<T>("POST", path, body);
-const patchJson = <T>(path: string, body: unknown) => sendJson<T>("PATCH", path, body);
 
 /* ===== Catalog ===== */
 
@@ -71,7 +54,7 @@ const patchJson = <T>(path: string, body: unknown) => sendJson<T>("PATCH", path,
  */
 export async function getProducts(): Promise<Product[]> {
   try {
-    return await getJson<Product[]>("/api/products");
+    return await unwrap(api.api.products.get(), "GET /api/products");
   } catch (err) {
     console.error("[api] products unavailable, using fallback catalog:", err);
     return fallbackCatalog;
@@ -95,7 +78,7 @@ export interface ServiceCard {
 /** Bookable service cards (/services). Falls back to the bundled list. */
 export async function getServices(): Promise<ServiceCard[]> {
   try {
-    return await getJson<ServiceCard[]>("/api/services");
+    return await unwrap(api.api.services.get(), "GET /api/services");
   } catch (err) {
     console.error("[api] services unavailable, using fallback list:", err);
     return [];
@@ -105,7 +88,7 @@ export async function getServices(): Promise<ServiceCard[]> {
 /** Display-only infrastructure cards (/industrial). */
 export async function getIndustrialServices(): Promise<ServiceCard[]> {
   try {
-    return await getJson<ServiceCard[]>("/api/industrial-services");
+    return await unwrap(api.api["industrial-services"].get(), "GET /api/industrial-services");
   } catch (err) {
     console.error("[api] industrial services unavailable, using fallback list:", err);
     return [];
@@ -114,12 +97,15 @@ export async function getIndustrialServices(): Promise<ServiceCard[]> {
 
 export async function getProductBySlug(slug: string): Promise<Product | null> {
   try {
-    const res = await fetch(`${base()}/api/products/${encodeURIComponent(slug)}`, {
-      cache: "no-store",
-    });
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`${res.status}`);
-    return await res.json();
+    // 404 is "no such product", not a failure — distinguish it from the
+    // backend being unreachable, which falls through to the seed catalog.
+    const { data, error } = await api.api.products({ slug }).get();
+    if (error) {
+      const status = failureStatus(error);
+      if (status === 404) return null;
+      throw new ApiError(`GET /api/products/${slug} → ${status}`, status);
+    }
+    return data as Product;
   } catch (err) {
     console.error("[api] product unavailable, using fallback catalog:", err);
     return fallbackCatalog.find((p) => p.slug === slug) ?? null;
@@ -144,7 +130,7 @@ export interface SiteConfig {
 
 export async function getSiteConfig(): Promise<SiteConfig | null> {
   try {
-    return await getJson<SiteConfig>("/api/site-config");
+    return await unwrap(api.api["site-config"].get(), "GET /api/site-config");
   } catch (err) {
     console.error("[api] site-config unavailable, using defaults:", err);
     return null;
@@ -173,11 +159,14 @@ export async function registerCustomer(
   email: string,
   password: string,
 ): Promise<void> {
-  await postJson("/api/auth/register", { name, phone, email, password });
+  await unwrap(
+    api.api.auth.register.post({ name, phone, email, password }),
+    "POST /api/auth/register",
+  );
 }
 
 export async function loginCustomer(phone: string, password: string): Promise<void> {
-  await postJson("/api/auth/login", { phone, password });
+  await unwrap(api.api.auth.login.post({ phone, password }), "POST /api/auth/login");
 }
 
 /**
@@ -191,30 +180,37 @@ export async function claimAccount(
   password: string,
   email?: string,
 ): Promise<void> {
-  await postJson("/api/auth/claim", { phone, password, ...(email ? { email } : {}) });
+  await unwrap(
+    api.api.auth.claim.post({ phone, password, ...(email ? { email } : {}) }),
+    "POST /api/auth/claim",
+  );
 }
 
 /** Mails a 6-digit code. Always succeeds — the response never reveals whether
  *  the address belongs to an account, and the code only travels by email. */
 export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
-  return postJson("/api/auth/forgot-password", { email });
+  return unwrap(
+    api.api.auth["forgot-password"].post({ email }),
+    "POST /api/auth/forgot-password",
+  );
 }
 
 /** otp is the 6-digit code from requestPasswordReset. */
 export async function resetPassword(email: string, otp: string, password: string): Promise<void> {
-  await postJson("/api/auth/reset-password", { email, otp, password });
+  await unwrap(
+    api.api.auth["reset-password"].post({ email, otp, password }),
+    "POST /api/auth/reset-password",
+  );
 }
 
 /** The signed-in customer, or null when there is no session. */
 export async function getMe(): Promise<Customer | null> {
-  const res = await fetch(`${base()}/api/me`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`GET /api/me → ${res.status}`);
-  const data = (await res.json()) as { customer: Customer | null };
-  return data.customer;
+  const { customer } = await unwrap(api.api.me.get(), "GET /api/me");
+  return customer;
 }
 
 export async function customerLogout(): Promise<void> {
-  await fetch(`${base()}/api/auth/logout`, { method: "POST" });
+  await api.api.auth.logout.post();
 }
 
 /** Edit the signed-in customer's saved name/address/zone — phone stays fixed
@@ -223,8 +219,8 @@ export async function customerLogout(): Promise<void> {
 export async function updateProfile(
   patch: Partial<Pick<Customer, "name" | "address" | "insideDhaka">>,
 ): Promise<Customer> {
-  const data = await patchJson<{ customer: Customer }>("/api/me", patch);
-  return data.customer;
+  const { customer } = await unwrap(api.api.me.patch(patch), "PATCH /api/me");
+  return customer;
 }
 
 /* ===== Orders (session-scoped) ===== */
@@ -257,7 +253,7 @@ export interface MyOrder {
 }
 
 export async function getMyOrders(): Promise<MyOrder[]> {
-  return getJson<MyOrder[]>("/api/my/orders");
+  return unwrap(api.api.my.orders.get(), "GET /api/my/orders");
 }
 
 /**
@@ -288,7 +284,7 @@ export interface PlacedOrder {
 }
 
 export async function placeOrder(input: PlaceOrderInput): Promise<PlacedOrder> {
-  return postJson<PlacedOrder>("/api/orders", input);
+  return unwrap(api.api.orders.post(input), "POST /api/orders");
 }
 
 /* ===== Page heroes (admin-editable hero art) ===== */
@@ -320,7 +316,7 @@ export interface PageHero {
  *  page. */
 export async function getPageHeroes(): Promise<Record<string, PageHero>> {
   try {
-    const list = await getJson<PageHero[]>("/api/page-heroes");
+    const list = await unwrap(api.api["page-heroes"].get(), "GET /api/page-heroes");
     return Object.fromEntries(list.map((h) => [h.pageKey, h]));
   } catch (err) {
     console.error("[api] page heroes unavailable, using built-in designs:", err);
@@ -356,11 +352,9 @@ export interface PublicLandingPage {
  *  which is what keeps an unpublished campaign genuinely unlisted. */
 export async function getLandingPage(slug: string): Promise<PublicLandingPage | null> {
   try {
-    const res = await fetch(`${base()}/api/landing-pages/${encodeURIComponent(slug)}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as PublicLandingPage;
+    const { data, error } = await api.api["landing-pages"]({ slug }).get();
+    if (error) return null;
+    return data as PublicLandingPage;
   } catch (err) {
     console.error("[api] landing page unavailable:", err);
     return null;
@@ -380,7 +374,7 @@ export interface LeadInput {
 }
 
 export async function submitLead(lead: LeadInput): Promise<void> {
-  await postJson("/api/leads", lead);
+  await unwrap(api.api.leads.post(lead), "POST /api/leads");
 }
 
 /* ===== Industrial enquiries ===== */
@@ -443,7 +437,7 @@ export interface IndustrialLeadInput {
 }
 
 export async function submitIndustrialLead(lead: IndustrialLeadInput): Promise<void> {
-  await postJson("/api/industrial-leads", lead);
+  await unwrap(api.api["industrial-leads"].post(lead), "POST /api/industrial-leads");
 }
 
 export interface ContactInput {
@@ -454,5 +448,5 @@ export interface ContactInput {
 }
 
 export async function submitContactMessage(input: ContactInput): Promise<void> {
-  await postJson("/api/contact", input);
+  await unwrap(api.api.contact.post(input), "POST /api/contact");
 }

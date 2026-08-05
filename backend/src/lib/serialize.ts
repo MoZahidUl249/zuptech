@@ -59,7 +59,7 @@ import type {
   Warranty,
 } from "../generated/client";
 import type { PricedCart } from "./pricing";
-import { availableStock, isLowStock, maskSecret, salePrice } from "./rules";
+import { availableStock, isLowStock, maskSecret, parseOrderStatus, salePrice } from "./rules";
 
 /**
  * DB row → API payload mappers. Every response goes through one of these so
@@ -164,7 +164,7 @@ export function toOrder(o: Order & { items: OrderItem[] }): OrderDto {
     installationFee: o.installationFee,
     total: o.total,
     pay: o.pay,
-    status: o.status,
+    status: parseOrderStatus(o.status),
     createdAt: o.createdAt.toISOString(),
   };
 }
@@ -476,7 +476,10 @@ export function toSlide(s: HeroSlide): SlideDto {
     cta: s.cta,
     href: s.href,
     active: s.active,
-    fit: s.fit,
+    // The column is a free string, so a legacy or hand-edited row could hold
+    // anything; fall back to the schema default rather than emitting a value
+    // the storefront has no branch for.
+    fit: s.fit === "contain" ? "contain" : "cover",
     bg: s.bg,
   };
 }
@@ -603,7 +606,7 @@ export function toQuote(cart: PricedCart): QuoteDto {
 export function toCheckoutOrder(o: Order & { items: OrderItem[] }, summary: string): CheckoutOrderDto {
   return {
     orderId: o.id,
-    status: o.status,
+    status: parseOrderStatus(o.status),
     items: o.items.map((i) => ({
       productId: i.productId,
       qty: i.qty,

@@ -1,4 +1,5 @@
 import { t } from "elysia";
+import type { TLiteral, TUnion } from "@sinclair/typebox";
 import {
   INDUSTRIAL_LEAD_STATUSES,
   INDUSTRIAL_SCOPES,
@@ -41,17 +42,37 @@ export const savedCartItemsDto = t.Array(
   { maxItems: 50 },
 );
 
-export const orderStatusDto = t.Union(ORDER_STATUSES.map((s) => t.Literal(s)));
-export const leadStatusDto = t.Union(LEAD_STATUSES.map((s) => t.Literal(s)));
-export const invoiceStatusDto = t.Union(INVOICE_STATUSES.map((s) => t.Literal(s)));
-export const warrantyStatusDto = t.Union(WARRANTY_STATUSES.map((s) => t.Literal(s)));
+/**
+ * Builds a literal union from one of lib/rules.ts's `as const` vocabularies.
+ *
+ * The obvious `t.Union(VALUES.map((s) => t.Literal(s)))` validates correctly at
+ * runtime but is a TYPE-level trap: `.map()` on a readonly tuple returns a
+ * plain `TLiteral<string>[]`, and `t.Union` can only infer a union from a
+ * TUPLE — given an array it collapses the static type to `never`. Every DTO
+ * built that way (order/lead/invoice/warranty status, industrial
+ * sector/scope/timeline) silently typed its field as `never`, so handlers and
+ * clients got no checking at all on exactly the fields with a fixed
+ * vocabulary. The mapped-tuple assertion below keeps the per-element literal
+ * types, so the inferred static type is the real union.
+ */
+function literalUnion<const T extends readonly [string, ...string[]]>(
+  values: T,
+): TUnion<{ -readonly [K in keyof T]: TLiteral<T[K] & string> }> {
+  // The runtime value is the same union schema as before; only the declared
+  // return type differs, and that is the entire point — inference has to be
+  // stated here because t.Union cannot recover it from a mapped array.
+  return t.Union(values.map((value) => t.Literal(value)) as never) as never;
+}
 
-export const industrialLeadStatusDto = t.Union(
-  INDUSTRIAL_LEAD_STATUSES.map((s) => t.Literal(s)),
-);
-export const industrialSectorDto = t.Union(INDUSTRIAL_SECTORS.map((s) => t.Literal(s)));
-export const industrialScopeDto = t.Union(INDUSTRIAL_SCOPES.map((s) => t.Literal(s)));
-export const industrialTimelineDto = t.Union(INDUSTRIAL_TIMELINES.map((s) => t.Literal(s)));
+export const orderStatusDto = literalUnion(ORDER_STATUSES);
+export const leadStatusDto = literalUnion(LEAD_STATUSES);
+export const invoiceStatusDto = literalUnion(INVOICE_STATUSES);
+export const warrantyStatusDto = literalUnion(WARRANTY_STATUSES);
+
+export const industrialLeadStatusDto = literalUnion(INDUSTRIAL_LEAD_STATUSES);
+export const industrialSectorDto = literalUnion(INDUSTRIAL_SECTORS);
+export const industrialScopeDto = literalUnion(INDUSTRIAL_SCOPES);
+export const industrialTimelineDto = literalUnion(INDUSTRIAL_TIMELINES);
 
 /** Slugs are the storefront-visible identifier for services and categories. */
 export const slugDto = t.String({

@@ -11,6 +11,13 @@ RUN bun install --frozen-lockfile
 FROM deps AS build
 WORKDIR /app
 COPY fronend/ fronend/
+# The frontend imports the backend's `App` TYPE for the Eden client
+# (fronend/lib/eden.ts). It is erased at runtime and none of it reaches the
+# browser bundle, but `next build` typechecks, so the sources have to be here
+# to compile against — and that chain reaches Prisma's generated client, which
+# is gitignored. Generating it is therefore part of building the FRONTEND.
+COPY backend/ backend/
+RUN cd backend && bunx --bun prisma generate
 
 # NEXT_PUBLIC_* is inlined into the client bundle at BUILD time — it cannot be
 # supplied at runtime. That makes this image environment-specific: a staging

@@ -2,10 +2,18 @@
  * Response DTOs — the declared output contract of the API, matching the
  * frontend types in BACKEND.md. The mappers in lib/serialize.ts are annotated
  * with these, so a serializer drifting from the contract is a compile error
- * instead of a surprise for the storefront. Status/category fields stay
- * `string` here because the DB stores plain strings; inputs are narrowed at
- * the edge by the request DTOs.
+ * instead of a surprise for the storefront. Category fields stay `string`
+ * here because the DB stores plain strings; inputs are narrowed at the edge
+ * by the request DTOs.
+ *
+ * Order `status` is the exception: it is narrowed to `OrderStatus`, because
+ * the column only ever holds one of those five values (every write goes
+ * through orderStatusDto) and the storefront switches on them. Typing it
+ * `string` described the column rather than the contract, and left the
+ * frontend asserting a union the API never promised.
  */
+
+import type { OrderStatus } from "../lib/rules";
 
 /** A "buy N+, save X%" tier — see rules.ts `bestQuantityOffer`. */
 export interface QuantityOfferDto {
@@ -86,7 +94,7 @@ export interface QuoteDto {
 /** POST /api/orders response (cal-bk.md §2.2) — everything server-computed. */
 export interface CheckoutOrderDto {
   orderId: string;
-  status: string;
+  status: OrderStatus;
   items: QuoteLineDto[];
   subtotal: number;
   deliveryFee: number;
@@ -125,7 +133,7 @@ export interface OrderDto {
   installationFee: number;
   total: number;
   pay: string;
-  status: string;
+  status: OrderStatus;
   createdAt: string;
 }
 
@@ -364,7 +372,11 @@ export interface SlideDto {
   cta: string;
   href: string;
   active: boolean;
-  fit: string;
+  /** Narrowed to the two values the write DTO accepts — the column is a plain
+   *  string, but `updateSlidesDto` only ever admits these, and the storefront
+   *  switches on them. Typing it `string` here let the response contract drift
+   *  wider than either side actually supports. */
+  fit: "cover" | "contain";
   bg: string;
 }
 
