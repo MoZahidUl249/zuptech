@@ -2,9 +2,7 @@
 
 import { createElement, useCallback, useMemo, useRef, useState } from "react";
 import {
-  Search,
   SlidersHorizontal,
-  X,
   LayoutGrid,
   Sun,
   BatteryCharging,
@@ -304,39 +302,23 @@ export function ShopBrowser({
       </aside>
 
       <div className="min-w-0 flex-1">
+        {/*
+          No search box here. The header carries one at every breakpoint now,
+          and this sat directly beneath it — two identical "Search products…"
+          fields on the same screen. Searching from the header lands on
+          /shop?q=…, which seeds `query` below, so the behaviour is unchanged;
+          the term is shown back to the visitor in the header's own field.
+        */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4 px-1">
           <h1 className="text-[clamp(28px,4.4vw,38px)] font-bold tracking-[-0.025em]">
             Shop
           </h1>
-          {/* Desktop uses the header's search box instead — at ≥1024px the two
-              sat one above the other, both reading "Search products…". Below
-              that the header's copy is inside the hamburger, so this stays as
-              the primary way to search on mobile. */}
-          <div className="relative min-w-[200px] max-w-[340px] flex-1 lg:hidden">
-            <Search
-              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zup-soft"
-              strokeWidth={2}
-              aria-hidden
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search products…"
-              aria-label="Search products"
-              className="min-h-11 w-full rounded-full border border-zup-body/10 bg-white py-[11px] pl-10 pr-4 text-base outline-none transition-colors focus:border-zup-blue sm:text-sm [&::-webkit-search-cancel-button]:hidden"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 flex h-[26px] w-[26px] -translate-y-1/2 items-center justify-center rounded-full bg-zup-body/6 text-[13px] text-zup-mid transition-colors hover:bg-zup-body/12"
-              >
-                <X className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            )}
-          </div>
+          {query.trim() && (
+            <p className="text-[13.5px] text-zup-gray">
+              Showing results for{" "}
+              <span className="font-semibold text-zup-body">{query.trim()}</span>
+            </p>
+          )}
         </div>
 
         {/*

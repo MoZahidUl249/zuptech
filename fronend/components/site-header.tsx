@@ -48,7 +48,7 @@ export function SiteHeader() {
       <div className="mx-auto flex h-14 max-w-[1120px] items-center justify-between gap-4 px-5">
         <Link
           href="/"
-          className="flex min-w-0 items-center gap-2.5"
+          className="flex flex-none items-center gap-2.5"
           aria-label="ZUP TECH — Home"
         >
           <Image
@@ -59,7 +59,10 @@ export function SiteHeader() {
             className="h-[30px] w-[30px] object-contain"
             priority
           />
-          <span className="text-[19px] font-extrabold leading-none tracking-[0.05em] text-zup-body">
+          {/* The wordmark yields to the search box on the narrowest screens.
+              The mark stays, and the link keeps its aria-label, so the brand
+              and the route home are both still there. */}
+          <span className="hidden text-[19px] font-extrabold leading-none tracking-[0.05em] text-zup-body min-[400px]:inline">
             ZUP TECH
           </span>
         </Link>
@@ -84,10 +87,11 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        {/* Between the nav and the actions so it reads as part of browsing
-            rather than as another call to action. Hidden on small screens,
-            where the row has no room — the mobile menu carries its own. */}
-        <ProductSearch className="hidden w-40 lg:block xl:w-56" />
+        {/* In the bar at every size, not tucked behind the hamburger: on a
+            catalogue site search is a primary action, and on mobile it was the
+            one thing that needed two taps to reach. `min-w-0` lets it shrink
+            rather than push the hamburger off the row. */}
+        <ProductSearch className="min-w-0 flex-1 lg:w-40 lg:flex-none xl:w-56" />
 
         {/* Account and cart are desktop-only. On mobile they would be a third
             copy of the same two destinations, which is what the hamburger and
@@ -153,13 +157,8 @@ export function SiteHeader() {
               <SheetTitle>Menu</SheetTitle>
             </SheetHeader>
 
-            <div className="px-5">
-              <ProductSearch
-                className="w-full"
-                onNavigate={() => setMenuOpen(false)}
-              />
-            </div>
-
+            {/* No search here — it sits in the header bar at every size now,
+                so a copy in the menu would be the second one on screen. */}
             <nav className="flex flex-col px-2" aria-label="Mobile menu">
               {navLinks.map((link) => (
                 <Link
