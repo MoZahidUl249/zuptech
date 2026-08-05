@@ -21,6 +21,7 @@
     "@elysiajs/openapi": "^1.4.15",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@sinclair/typebox": "^0.34.52",
     "better-auth": "^1.6.23",
     "cheerio": "^1.2.0",
     "cloudinary": "^2.5.1",
