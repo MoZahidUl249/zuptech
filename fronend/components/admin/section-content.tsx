@@ -559,8 +559,6 @@ const COPY_GROUPS: { group: string; fields: CopyField[] }[] = [
       { key: "homeHeroHeadline", label: "Hero headline" },
       { key: "homeHeroSubhead", label: "Hero subhead", multiline: true },
       { key: "featuredHeading", label: "Featured section heading" },
-      { key: "homeIndustrialEyebrow", label: "Industrial strip eyebrow" },
-      { key: "homeIndustrialHeading", label: "Industrial strip heading" },
       { key: "homeCapabilitiesEyebrow", label: "Capabilities eyebrow" },
       { key: "homeCapabilitiesHeading", label: "Capabilities heading" },
       { key: "homeCtaHeading", label: "Closing CTA heading" },

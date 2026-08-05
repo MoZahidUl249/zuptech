@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Zap, SlidersHorizontal, Share2, Shield, BadgeCheck, ArrowRight } from "lucide-react";
+import { Zap, SlidersHorizontal, Share2, Shield, BadgeCheck } from "lucide-react";
 import { BrandHero } from "@/components/marketing/brand-hero";
 import { IndustrialConsultationForm } from "@/components/marketing/industrial-consultation-form";
 import {
@@ -222,21 +221,6 @@ export default async function IndustrialPage() {
                 </article>
               );
             })}
-            <div className="flex flex-col justify-center gap-4 rounded-[22px] bg-zup-ink px-6 py-7 sm:px-8 sm:py-8">
-              <h3 className="text-xl font-bold tracking-[-0.015em] text-zup-bg">
-                Need Custom Infrastructure?
-              </h3>
-              <p className="text-[14.5px] leading-relaxed text-[#A7ACB5]">
-                Connect with our lead systems engineer for a technical consultation.
-              </p>
-              <Link
-                href="/contact?intent=quote"
-                className="inline-flex w-fit items-center gap-2 rounded-full bg-zup-orange px-6 py-3 text-[13px] font-bold uppercase tracking-[0.04em] text-white transition-colors hover:bg-zup-orange-dark"
-              >
-                Get Technical Audit
-                <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden />
-              </Link>
-            </div>
           </div>
         </div>
       </section>

@@ -26,8 +26,6 @@ export const DEFAULT_COPY: SiteCopy = {
   homeHeroHeadline: "Intelligent Energy & Electrical Infrastructure",
   homeHeroSubhead:
     "Expert solutions for industrial substations, smart building management, and sustainable solar energy — engineered and maintained across Bangladesh.",
-  homeIndustrialEyebrow: "Industrial infrastructure",
-  homeIndustrialHeading: "Built for continuous operation",
   homeCapabilitiesEyebrow: "What we do",
   homeCapabilitiesHeading: "Specialist Capabilities",
   homeCtaHeading: "Ready to Power Your Project?",

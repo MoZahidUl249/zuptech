@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Clock, ShieldCheck, Users } from "lucide-react";
 import { site, jsonLd } from "@/lib/site";
 import { ContactForm } from "@/components/contact-form";
 import { ContactCards } from "@/components/contact-cards";
@@ -27,22 +26,6 @@ const contactJsonLd = {
   url: `${site.url}/contact`,
   about: { "@id": `${site.url}/#organization` },
 };
-
-/** Service commitments, stated up front — the questions a B2B buyer has
- *  before they bother filling in a form. */
-const commitments = [
-  { icon: Clock, title: "Same-day response", note: "Enquiries answered within one working day" },
-  {
-    icon: Users,
-    title: "Talk to an engineer",
-    note: "Not a call centre — the people who do the work",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Nationwide coverage",
-    note: "Installation & service across Bangladesh",
-  },
-];
 
 export default async function ContactPage() {
   const [config, heroes] = await Promise.all([getSiteConfig(), getPageHeroes()]);
@@ -81,31 +64,10 @@ export default async function ContactPage() {
         </div>
       </section>
 
-      {/* Commitments strip, straddling the hero's lower edge so the dark band
-          and the page body read as one composition, not two stacked slabs. */}
-      <section className="px-5">
-        <div className="relative z-10 mx-auto -mt-8 grid max-w-[1120px] grid-cols-1 gap-3 sm:grid-cols-3">
-          {commitments.map((c) => (
-            <div
-              key={c.title}
-              className="flex items-start gap-3 rounded-2xl border border-zup-body/8 bg-white px-5 py-4 shadow-[0_2px_10px_rgba(21,24,30,.05)]"
-            >
-              <c.icon
-                className="mt-0.5 h-[18px] w-[18px] flex-none text-zup-orange"
-                strokeWidth={2.2}
-                aria-hidden
-              />
-              <div>
-                <p className="text-[14px] font-bold tracking-[-0.01em]">{c.title}</p>
-                <p className="mt-0.5 text-[12.5px] leading-snug text-zup-gray">{c.note}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* Form beside the channels, rather than one wide card with the form
-          crammed into its left half and dead space on the right. */}
+          crammed into its left half and dead space on the right. The
+          commitments strip that used to straddle the hero's lower edge is
+          gone, so this section carries the gap the strip's -mt-8 used to eat. */}
       <section className="px-5 pt-12">
         <div className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
           <div className="rounded-3xl border border-zup-body/8 bg-white px-6 py-7 sm:px-8 sm:py-8">

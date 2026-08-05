@@ -1,39 +1,5 @@
 // Static copy for the homepage's post-hero sections, matching the design
-// prototype exactly. Deliberately separate from lib/industrial.ts (the full
-// /industrial page's copy) — these are shorter, homepage-teaser variants of
-// the same three ideas, not the same content reused.
-
-export type HomeIconName = "zap" | "sliders" | "flame";
-
-export interface IndustrialHighlight {
-  id: string;
-  title: string;
-  description: string;
-  icon: HomeIconName;
-}
-
-export const industrialHighlights: IndustrialHighlight[] = [
-  {
-    id: "substation-design",
-    title: "33/11/0.45 kV Substation Design",
-    description:
-      "Turnkey development from technical blueprinting to heavy hardware commissioning for regional grids.",
-    icon: "zap",
-  },
-  {
-    id: "building-management",
-    title: "Building Management Systems",
-    description:
-      "Data-driven environmental control and energy harvesting for large commercial complexes.",
-    icon: "sliders",
-  },
-  {
-    id: "fire-protection",
-    title: "Fire Protection & Detection",
-    description: "Smart sensor arrays and automated suppression systems meeting international safety standards.",
-    icon: "flame",
-  },
-];
+// prototype exactly.
 
 export type CapabilityIconName = "grid" | "sun" | "chart";
 

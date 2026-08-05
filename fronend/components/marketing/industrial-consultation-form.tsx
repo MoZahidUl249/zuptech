@@ -42,8 +42,6 @@ export function IndustrialConsultationForm({
   const [scope, setScope] = useState<IndustrialScope>(INDUSTRIAL_SCOPES[0]);
   const [timeline, setTimeline] = useState<IndustrialTimeline>(INDUSTRIAL_TIMELINES[0]);
   const [siteLocation, setSiteLocation] = useState("");
-  const [load, setLoad] = useState("");
-  const [budget, setBudget] = useState("");
   const [details, setDetails] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -74,9 +72,10 @@ export function IndustrialConsultationForm({
         sector,
         scope,
         timeline,
+        // `load` and `budget` are no longer asked for — both are optional on
+        // the backend and land as "", so existing leads keep their values and
+        // the admin's Connected load row still reads correctly for those.
         siteLocation: siteLocation.trim(),
-        load: load.trim(),
-        budget: budget.trim(),
         notes: details.trim(),
       });
       setSent(true);
@@ -247,30 +246,11 @@ export function IndustrialConsultationForm({
               </Field>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Site location">
-                <input
-                  value={siteLocation}
-                  onChange={(e) => setSiteLocation(e.target.value)}
-                  placeholder="District / area"
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Connected load">
-                <input
-                  value={load}
-                  onChange={(e) => setLoad(e.target.value)}
-                  placeholder="e.g. 850 kVA"
-                  className={inputCls}
-                />
-              </Field>
-            </div>
-
-            <Field label="Indicative budget (optional)">
+            <Field label="Site location">
               <input
-                value={budget}
-                onChange={(e) => setBudget(e.target.value)}
-                placeholder="e.g. BDT 40-60 lakh"
+                value={siteLocation}
+                onChange={(e) => setSiteLocation(e.target.value)}
+                placeholder="District / area"
                 className={inputCls}
               />
             </Field>

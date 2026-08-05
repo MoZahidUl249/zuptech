@@ -411,8 +411,6 @@ export interface SiteCopy {
   homeHeroEyebrow: string;
   homeHeroHeadline: string;
   homeHeroSubhead: string;
-  homeIndustrialEyebrow: string;
-  homeIndustrialHeading: string;
   homeCapabilitiesEyebrow: string;
   homeCapabilitiesHeading: string;
   homeCtaHeading: string;
@@ -576,8 +574,6 @@ export function emptyState(): AdminState {
       homeHeroEyebrow: "",
       homeHeroHeadline: "",
       homeHeroSubhead: "",
-      homeIndustrialEyebrow: "",
-      homeIndustrialHeading: "",
       homeCapabilitiesEyebrow: "",
       homeCapabilitiesHeading: "",
       homeCtaHeading: "",

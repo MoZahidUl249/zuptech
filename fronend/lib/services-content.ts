@@ -34,43 +34,6 @@ export const residentialCards: ResidentialCard[] = [
   },
 ];
 
-export type ServiceIconName = "zap" | "sliders" | "shield";
-
-export interface IndustrialCapability {
-  id: string;
-  title: string;
-  description: string;
-  icon: ServiceIconName;
-}
-
-export const industrialCapabilities: IndustrialCapability[] = [
-  {
-    id: "hv-substation-design",
-    title: "High-Voltage Substation Design",
-    description: "Full-cycle engineering from site planning to transformer deployment and commissioning.",
-    icon: "zap",
-  },
-  {
-    id: "bms-industrial",
-    title: "Building Management Systems",
-    description: "Automated control networks that optimise HVAC, lighting and power usage across large facilities.",
-    icon: "sliders",
-  },
-  {
-    id: "critical-power-distribution",
-    title: "Critical Power Distribution",
-    description: "Zero-downtime solutions for data centres, hospitals and manufacturing plants.",
-    icon: "shield",
-  },
-];
-
-export const specTable: { parameter: string; standard: string }[] = [
-  { parameter: "Voltage capacity", standard: "Up to 765 kV" },
-  { parameter: "Fault tolerance", standard: "99.999% reliability" },
-  { parameter: "Compliance", standard: "IEEE / IEC 61850" },
-  { parameter: "Monitoring", standard: "24/7 SCADA integration" },
-];
-
 export type TrustIconName = "certified" | "support" | "safety" | "health";
 
 export interface TrustBadge {

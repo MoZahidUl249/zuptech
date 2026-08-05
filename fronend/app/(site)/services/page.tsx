@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Zap, SlidersHorizontal, Shield, BadgeCheck, Headset, ShieldCheck, HeartPulse } from "lucide-react";
+import { BadgeCheck, Headset, ShieldCheck, HeartPulse } from "lucide-react";
 import { BrandHero } from "@/components/marketing/brand-hero";
 import { CtaBanner } from "@/components/marketing/cta-banner";
 import { ConsultancyForm } from "@/components/marketing/consultancy-form";
@@ -7,10 +7,7 @@ import { site, jsonLd } from "@/lib/site";
 import { getPageHeroes, getServices } from "@/lib/api";
 import {
   residentialCards,
-  industrialCapabilities,
-  specTable,
   trustBadges,
-  type ServiceIconName,
   type TrustIconName,
 } from "@/lib/services-content";
 
@@ -27,12 +24,6 @@ export const metadata: Metadata = {
   },
 };
 
-const serviceIcons: Record<ServiceIconName, typeof Zap> = {
-  zap: Zap,
-  sliders: SlidersHorizontal,
-  shield: Shield,
-};
-
 const trustIcons: Record<TrustIconName, typeof BadgeCheck> = {
   certified: BadgeCheck,
   support: Headset,
@@ -42,7 +33,10 @@ const trustIcons: Record<TrustIconName, typeof BadgeCheck> = {
 
 const servicesJsonLd = {
   "@context": "https://schema.org",
-  "@graph": [...residentialCards, ...industrialCapabilities].map((s) => ({
+  // Only what the page actually shows — the industrial capability list was
+  // removed from the layout, and structured data must not advertise services
+  // a visitor can't find on the page it describes.
+  "@graph": residentialCards.map((s) => ({
     "@type": "Service",
     "@id": `${site.url}/services#${s.id}`,
     name: s.title,
@@ -116,57 +110,6 @@ export default async function ServicesPage() {
                 </div>
               </article>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* INDUSTRIAL */}
-      <section id="industrial" className="scroll-mt-16 bg-zup-ink px-5 py-16" aria-labelledby="industrial-heading">
-        <div className="mx-auto max-w-[1120px]">
-          <span className="mb-3 block text-xs font-bold uppercase tracking-[0.14em] text-zup-orange">
-            Heavy infrastructure
-          </span>
-          <h2
-            id="industrial-heading"
-            className="mb-4 max-w-[640px] text-[clamp(24px,3.6vw,32px)] font-bold leading-tight tracking-[-0.02em] text-zup-bg"
-          >
-            Powering the Grid of Tomorrow
-          </h2>
-          <p className="mb-9 max-w-[640px] text-[14.5px] leading-relaxed text-[#A7ACB5]">
-            ZUP TECH&apos;s industrial division specialises in high-stakes electrical
-            environments. We design, deploy and maintain the skeletal structure of modern power
-            distribution.
-          </p>
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-            <div className="flex flex-col gap-6">
-              {industrialCapabilities.map((cap) => {
-                const Icon = serviceIcons[cap.icon];
-                return (
-                  <div key={cap.id} className="flex items-start gap-4 border-l-2 border-zup-orange pl-4">
-                    <Icon className="mt-0.5 h-5 w-5 flex-none text-zup-orange" strokeWidth={2} aria-hidden />
-                    <div>
-                      <h3 className="mb-1 text-[16px] font-bold text-zup-bg">{cap.title}</h3>
-                      <p className="text-[13.5px] leading-relaxed text-[#A7ACB5]">
-                        {cap.description}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="rounded-2xl border-l-2 border-zup-orange bg-white/3 px-6 py-2 sm:px-7">
-              {specTable.map((row, i) => (
-                <div
-                  key={row.parameter}
-                  className={`flex items-center justify-between gap-4 py-4 text-[13px] font-semibold uppercase tracking-[0.03em] ${
-                    i > 0 ? "border-t border-white/8" : ""
-                  }`}
-                >
-                  <span className="text-[#8A9099]">{row.parameter}</span>
-                  <span className="text-right text-zup-bg">{row.standard}</span>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </section>
