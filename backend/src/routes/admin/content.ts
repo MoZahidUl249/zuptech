@@ -47,7 +47,14 @@ export const adminContent = new Elysia({ name: "routes/admin/content", detail: {
         return Promise.all(
           body.slides.map((slide, index) =>
             tx.heroSlide.create({
-              data: { ...slide, image: slide.image ?? null, sort: index },
+              data: {
+                ...slide,
+                image: slide.image ?? null,
+                // Omitted by any client that predates video slides, and those
+                // were all stills.
+                mediaType: slide.mediaType ?? "image",
+                sort: index,
+              },
             }),
           ),
         );
@@ -69,7 +76,9 @@ export const adminContent = new Elysia({ name: "routes/admin/content", detail: {
     async ({ body, staffCtx }) => {
       assertCan(staffCtx, "homepage", "manage");
       const media = await uploadMedia(body.file, "heroslide", crypto.randomUUID(), 0);
-      return { url: media.url };
+      // The kind comes back with the URL so the admin can store it on the
+      // slide without re-deriving it from the file or the URL shape.
+      return { url: media.url, mediaType: media.mediaType };
     },
     { body: uploadSlideImageDto },
   )

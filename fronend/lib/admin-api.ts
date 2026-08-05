@@ -336,6 +336,7 @@ export const putSlides = (slides: HeroSlide[]) =>
     api.admin.api.slides.put({
       slides: slides.map((s) => ({
         image: s.image,
+        mediaType: s.mediaType ?? "image",
         cta: s.cta,
         href: s.href,
         active: s.active,

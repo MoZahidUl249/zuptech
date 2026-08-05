@@ -523,14 +523,21 @@ model StockMovement {
 /// ===== Site content (admin-managed, publicly readable) =====
 
 model HeroSlide {
-  id     String  @id @default(cuid())
-  image  String? // URL — only active slides WITH an image render
-  cta    String
-  href   String
-  active Boolean @default(true)
-  fit    String  @default("cover") // "cover" | "contain"
-  bg     String  @default("")
-  sort   Int     @default(0)
+  id    String  @id @default(cuid())
+  /// Media URL — only active slides WITH one render. Holds an image or a
+  /// video depending on `mediaType`; the column is shared because a slide
+  /// carries exactly one piece of art either way.
+  image String? // URL — only active slides WITH an image render
+  /// "image" | "video". Stored rather than inferred from the URL: guessing
+  /// from a file extension or a Cloudinary path shape would silently break
+  /// the moment either changes, and the player differs entirely.
+  mediaType String  @default("image")
+  cta       String
+  href      String
+  active    Boolean @default(true)
+  fit       String  @default("cover") // "cover" | "contain"
+  bg        String  @default("")
+  sort      Int     @default(0)
 }
 
 /// The /solutions page's engineering-service cards (Lighting Automation,

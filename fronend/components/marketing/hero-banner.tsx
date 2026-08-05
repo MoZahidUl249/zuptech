@@ -26,6 +26,7 @@ export function HeroBanner() {
         slides={slides.map((s) => ({
           id: s.id,
           image: s.image,
+          mediaType: s.mediaType,
           cta: s.cta,
           href: s.href,
           fit: s.fit,

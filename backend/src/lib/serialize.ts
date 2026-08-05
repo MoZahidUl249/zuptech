@@ -62,6 +62,7 @@ import type { PricedCart } from "./pricing";
 import {
   availableStock,
   coerceTo,
+  HERO_MEDIA_TYPES,
   INDUSTRIAL_LEAD_STATUSES,
   INVOICE_STATUSES,
   isLowStock,
@@ -496,6 +497,7 @@ export function toSlide(s: HeroSlide): SlideDto {
     // anything; fall back to the schema default rather than emitting a value
     // the storefront has no branch for.
     fit: s.fit === "contain" ? "contain" : "cover",
+    mediaType: coerceTo(HERO_MEDIA_TYPES, s.mediaType, "image"),
     bg: s.bg,
   };
 }

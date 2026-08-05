@@ -1,6 +1,7 @@
 import { t } from "elysia";
 import type { TLiteral, TUnion } from "@sinclair/typebox";
 import {
+  HERO_MEDIA_TYPES,
   INDUSTRIAL_LEAD_STATUSES,
   INDUSTRIAL_SCOPES,
   INDUSTRIAL_SECTORS,
@@ -78,6 +79,8 @@ export const industrialTimelineDto = literalUnion(INDUSTRIAL_TIMELINES);
 
 export const paymentKindDto = literalUnion(PAYMENT_KINDS);
 export const paymentEnvironmentDto = literalUnion(PAYMENT_ENVIRONMENTS);
+
+export const heroMediaTypeDto = literalUnion(HERO_MEDIA_TYPES);
 
 /** Slugs are the storefront-visible identifier for services and categories. */
 export const slugDto = t.String({

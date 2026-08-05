@@ -1,4 +1,5 @@
 import { t } from "elysia";
+import { heroMediaTypeDto } from "./common";
 
 /** Whole-document PUT — the panel edits the full slide set and saves it back. */
 export const updateSlidesDto = t.Object({
@@ -8,6 +9,9 @@ export const updateSlidesDto = t.Object({
       // (hence the former 2,000,000 cap) — uploads now go through
       // POST /admin/api/slides/image, so this only ever holds a URL.
       image: t.Optional(t.Nullable(t.String({ maxLength: 2000 }))),
+      /** Optional so a client that predates video keeps working — the route
+       *  defaults it to "image", which is what those slides always were. */
+      mediaType: t.Optional(heroMediaTypeDto),
       cta: t.String({ maxLength: 80 }),
       href: t.String({ maxLength: 300 }),
       active: t.Boolean(),
@@ -91,7 +95,24 @@ export const updateIntegrationsDto = t.Object({
  * upload first, then paste the returned URL into the slide's `image` field.
  */
 export const uploadSlideImageDto = t.Object({
-  file: t.File({ type: "image", maxSize: "8m" }),
+  // Accepts video as well as stills: a hero slide can be a motion clip, and
+  // the media kind is recorded on the slide's `mediaType`.
+  //
+  // No `type` constraint here on purpose. A t.Union of two t.File stops Elysia
+  // recognising the field as a file at all (the body never parses — every
+  // upload 422s "Property 'file' is missing"), and the array form
+  // `type: ["image", "video"]` fails the check outright ("Expected kind
+  // 'File'"). Only a single string prefix works, which cannot express
+  // "image or video".
+  //
+  // Nothing is lost by dropping it: uploadMedia runs classifyAndValidate
+  // (lib/media-validate.ts), which allow-lists the exact MIME types AND sniffs
+  // the magic bytes — strictly stronger than the prefix match this replaces,
+  // since it also rejects a file lying about its type.
+  //
+  // The ceiling is the video one, as an 8 MB cap would reject almost any
+  // usable clip; the admin still holds stills to 8 MB before uploading.
+  file: t.File({ maxSize: "60m" }),
 });
 
 export type UpdateSlidesDto = typeof updateSlidesDto.static;

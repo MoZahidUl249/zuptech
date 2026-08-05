@@ -14,6 +14,7 @@
  */
 
 import type {
+  HeroMediaType,
   IndustrialLeadStatus,
   InvoiceStatus,
   LeadStatus,
@@ -378,6 +379,8 @@ export interface IndustrialLeadDto {
 export interface SlideDto {
   id: string;
   image: string | null;
+  /** Whether `image` is a still or a video the hero should play inline. */
+  mediaType: HeroMediaType;
   cta: string;
   href: string;
   active: boolean;

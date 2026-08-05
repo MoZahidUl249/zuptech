@@ -6,14 +6,18 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** How long a slide holds before advancing. */
+/** How long a still slide holds before advancing. */
 const ADVANCE_MS = 6000;
+/** Video slides hold longer, so a clip gets seen rather than cut off. */
+const VIDEO_ADVANCE_MS = 12000;
 /** Horizontal travel, in px, before a drag counts as a swipe rather than a tap. */
 const SWIPE_THRESHOLD = 50;
 
 export interface HeroCarouselSlide {
   id: string;
   image: string | null;
+  /** "video" plays the media inline, muted and looping. Defaults to a still. */
+  mediaType?: "image" | "video";
   /** Empty string means decorative — the slide is then aria-hidden from the list. */
   alt?: string;
   /** Optional click-through. With `cta` it renders a button; without, the whole slide links. */
@@ -74,14 +78,23 @@ export function HeroCarousel({
     [count],
   );
 
+  // Timed off the slide on screen, not a fixed cadence: a 6s hold cuts a video
+  // off part-way, and holding every still for 12s would drag.
+  const dwell =
+    slides[count > 0 ? index % count : 0]?.mediaType === "video"
+      ? VIDEO_ADVANCE_MS
+      : ADVANCE_MS;
+
   useEffect(() => {
     // No auto-advance under prefers-reduced-motion. That used to mean the
     // visitor never saw past slide one, because the arrows were desktop-only;
     // they render at every breakpoint now, so stopping the timer costs nothing.
     if (!multi || paused || reduceMotion) return;
-    const t = setInterval(() => setIndex((i) => (i + 1) % count), ADVANCE_MS);
-    return () => clearInterval(t);
-  }, [count, multi, paused, reduceMotion]);
+    // setTimeout, not setInterval: the delay changes per slide, and an
+    // interval would keep firing at whatever cadence it was created with.
+    const t = setTimeout(() => setIndex((i) => (i + 1) % count), dwell);
+    return () => clearTimeout(t);
+  }, [count, multi, paused, reduceMotion, dwell, index]);
 
   // Clamp rather than correct in an effect: the admin can delete slides while
   // the page is open, and re-rendering to fix state would cascade.
@@ -159,7 +172,26 @@ export function HeroCarousel({
             style={{ background: s.bg || undefined }}
             className="relative h-full w-full shrink-0 grow-0 basis-full"
           >
-            {s.image ? (
+            {s.image && s.mediaType === "video" ? (
+              <video
+                src={s.image}
+                // Muted + inline is what browsers require before they will
+                // autoplay at all; a hero clip that needed a click would just
+                // sit there as a black rectangle.
+                autoPlay={!reduceMotion && i === active}
+                muted
+                loop
+                playsInline
+                // Under reduced motion the clip is left paused on its first
+                // frame, which reads as a still rather than nothing.
+                preload="metadata"
+                aria-hidden
+                className={cn(
+                  "h-full w-full",
+                  (s.fit ?? "cover") === "contain" ? "object-contain" : "object-cover",
+                )}
+              />
+            ) : s.image ? (
               <Image
                 src={s.image}
                 alt={s.alt ?? ""}

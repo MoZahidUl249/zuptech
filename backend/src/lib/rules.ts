@@ -463,6 +463,12 @@ export type PaymentKind = (typeof PAYMENT_KINDS)[number];
 export const PAYMENT_ENVIRONMENTS = ["Live", "Test"] as const;
 export type PaymentEnvironment = (typeof PAYMENT_ENVIRONMENTS)[number];
 
+/** What a hero slide's art actually is. A video slide plays inline, muted and
+ *  looping; an image slide is a still. The two need different markup, so the
+ *  kind is stored rather than guessed from the URL. */
+export const HERO_MEDIA_TYPES = ["image", "video"] as const;
+export type HeroMediaType = (typeof HERO_MEDIA_TYPES)[number];
+
 /** What an OrderEvent row records. Append-only — never reuse a kind's meaning. */
 export const ORDER_EVENT_KINDS = [
   "placed",

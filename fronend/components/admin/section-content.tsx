@@ -44,6 +44,9 @@ const CTA_TARGETS = ["/shop", "/services", "/industrial", "/contact"];
 
 /** Mirrors uploadSlideImageDto's maxSize ("8m") in content.dto.ts. */
 const MAX_SLIDE_BYTES = 8_000_000;
+/** Hero clips get a far higher ceiling than stills — mirrors the video branch
+ *  of uploadSlideImageDto in backend/src/dtos/content.dto.ts. */
+const MAX_SLIDE_VIDEO_BYTES = 60_000_000;
 
 const FIT_OPTIONS = [
   { value: "cover" as const, label: "Cover" },
@@ -171,8 +174,13 @@ export function HomePageSection() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
               <BannerImagePicker
                 value={s.image}
+                mediaType={s.mediaType}
                 disabled={readOnly}
-                onPick={(v) => setSlide(s.id, { image: v })}
+                onPick={(v, kind) =>
+                  // Clearing the media resets the kind too, so a removed video
+                  // can't leave the next upload mislabelled.
+                  setSlide(s.id, { image: v, mediaType: v ? (kind ?? "image") : "image" })
+                }
               />
               <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
                 <Field label="Button label">
@@ -423,12 +431,16 @@ function SlideHrefField({
  */
 function BannerImagePicker({
   value,
+  mediaType,
   disabled,
   onPick,
 }: {
   value: string | null;
+  mediaType?: "image" | "video";
   disabled?: boolean;
-  onPick: (v: string | null) => void;
+  /** Reports the media kind alongside the URL — a video slide needs a player,
+   *  not an <img>, and the server tells us which it stored. */
+  onPick: (v: string | null, kind?: "image" | "video") => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -439,7 +451,11 @@ function BannerImagePicker({
       <div className="relative flex h-24 flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-zup-body/20 bg-zup-bg text-center">
         {value ? (
           <>
-            <Image src={value} alt="Banner preview" fill unoptimized className="object-cover" />
+            {mediaType === "video" ? (
+              <video src={value} muted loop playsInline className="h-full w-full object-cover" />
+            ) : (
+              <Image src={value} alt="Banner preview" fill unoptimized className="object-cover" />
+            )}
             {!disabled ? (
               <button
                 type="button"
@@ -475,29 +491,39 @@ function BannerImagePicker({
         <input
           ref={ref}
           type="file"
-          accept={IMAGE_ACCEPT}
+          accept={`${IMAGE_ACCEPT},video/*`}
           className="hidden"
-          aria-label="Upload banner image"
+          aria-label="Upload banner image or video"
           onChange={async (e) => {
             const f = e.target.files?.[0];
             e.target.value = "";
             if (!f) return;
 
-            const problem = checkImageFile(f, MAX_SLIDE_BYTES);
-            if (problem) {
-              toast(problem);
-              return;
+            const isVideo = f.type.startsWith("video/");
+            // Stills keep the tighter image checks; a clip only has to fit the
+            // video ceiling, since dimension advice is meaningless for one.
+            if (isVideo) {
+              if (f.size > MAX_SLIDE_VIDEO_BYTES) {
+                toast("Video too large — keep hero clips under 60 MB");
+                return;
+              }
+            } else {
+              const problem = checkImageFile(f, MAX_SLIDE_BYTES);
+              if (problem) {
+                toast(problem);
+                return;
+              }
             }
 
             setBusy(true);
             try {
-              const dims = await readImageDimensions(f);
-              const { url } = await uploadSlideImage(f);
-              onPick(url);
-              setCaption(describeImage(dims, f.size, f.type));
+              const dims = isVideo ? null : await readImageDimensions(f);
+              const { url, mediaType: kind } = await uploadSlideImage(f);
+              onPick(url, kind);
+              setCaption(isVideo ? describeImage(null, f.size, f.type) : describeImage(dims, f.size, f.type));
               // Advisory only — a slightly-small banner is the admin's call.
               const warning = dims ? bannerDimensionWarning(dims) : null;
-              toast(warning ?? "Banner image updated");
+              toast(warning ?? (isVideo ? "Banner video updated" : "Banner image updated"));
             } catch (err) {
               toast(err instanceof Error ? err.message : "Couldn't upload that image");
             } finally {
@@ -507,7 +533,8 @@ function BannerImagePicker({
         />
       </div>
       <p className="text-ui-micro leading-tight text-zup-faint">
-        {caption ?? `2000×800 recommended · ${IMAGE_FORMATS_LABEL} · under 8 MB`}
+        {caption ??
+          `2000×800 recommended · ${IMAGE_FORMATS_LABEL} under 8 MB · or MP4/WebM under 60 MB`}
       </p>
     </div>
   );

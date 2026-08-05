@@ -7,6 +7,7 @@ import { ShoppingCart, User } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useCustomer } from "@/lib/customer";
 import { cn } from "@/lib/utils";
+import { ProductSearch } from "@/components/product-search";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -71,6 +72,12 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
+
+        {/* Between the nav and the actions so it reads as part of browsing
+            rather than as another call to action. Hidden on small screens,
+            where the row has no room — the mobile tab bar links to /shop,
+            which carries its own search box. */}
+        <ProductSearch className="hidden w-40 lg:block xl:w-56" />
 
         <div className="flex items-center gap-2.5">
           <Link

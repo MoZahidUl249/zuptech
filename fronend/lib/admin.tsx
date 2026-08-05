@@ -390,6 +390,8 @@ export interface ContactMessage {
 export interface HeroSlide {
   id: string;
   image: string | null; // path or uploaded data-URL
+  /** Whether `image` is a still or a clip the hero plays inline. */
+  mediaType?: "image" | "video";
   cta: string;
   href: string;
   active: boolean;
