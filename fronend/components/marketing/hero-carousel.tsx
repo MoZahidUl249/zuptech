@@ -345,7 +345,7 @@ function subscribeToMotionPreference(onChange: () => void) {
  * assuming "motion is fine" keeps the markup identical for everyone. The client
  * corrects it on hydration, before the first 6s tick.
  */
-function usePrefersReducedMotion(): boolean {
+export function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(
     subscribeToMotionPreference,
     () => window.matchMedia(REDUCED_MOTION).matches,

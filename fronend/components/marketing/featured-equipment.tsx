@@ -1,24 +1,62 @@
 "use client";
 
-import { useRef } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ProductCard } from "@/components/product-card";
 import { useFeaturedProducts } from "@/lib/admin-bridge";
+import { usePrefersReducedMotion } from "@/components/marketing/hero-carousel";
+
+/** How long a card holds before the row advances. Matches the hero's dwell. */
+const ADVANCE_MS = 6000;
+/** Card width + gap — the distance one step travels. */
+const STEP_PX = 220 + 14;
 
 export function FeaturedEquipment() {
   const products = useFeaturedProducts();
   const rowRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = usePrefersReducedMotion();
+  const [paused, setPaused] = useState(false);
 
-  const scroll = (dir: 1 | -1) => {
-    rowRef.current?.scrollBy({ left: dir * 280, behavior: "smooth" });
-  };
+  const scroll = useCallback((dir: 1 | -1) => {
+    const el = rowRef.current;
+    if (!el) return;
+    // At the end, wrap to the start rather than stalling against the edge —
+    // an auto-advancing row that dead-ends looks broken. 4px of slack absorbs
+    // sub-pixel scroll widths.
+    if (dir === 1 && el.scrollLeft + el.clientWidth >= el.scrollWidth - 4) {
+      el.scrollTo({ left: 0, behavior: "smooth" });
+      return;
+    }
+    if (dir === -1 && el.scrollLeft <= 4) {
+      el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
+      return;
+    }
+    el.scrollBy({ left: dir * STEP_PX, behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    // Nothing to advance through, and no motion under a reduced-motion
+    // preference — the row stays a plain scroller the visitor drives.
+    if (reduceMotion || paused || products.length < 2) return;
+    const t = setInterval(() => scroll(1), ADVANCE_MS);
+    return () => clearInterval(t);
+  }, [reduceMotion, paused, products.length, scroll]);
 
   return (
     // The visible heading is gone, so the region names itself. Without this
     // the section would be an unlabelled landmark — the arrows are the only
     // thing left in the header row.
-    <section className="px-5 py-10" aria-label="Featured products">
+    <section
+      className="px-5 py-10"
+      aria-label="Featured products"
+      // Pause while the visitor is reading or touching the row, so it can't
+      // slide a card out from under a tap.
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
+      onTouchStart={() => setPaused(true)}
+    >
       <div className="mx-auto max-w-[1120px]">
         {/* The arrows are the whole header row now. They carry the row's own
             margin rather than sitting inside a wrapper, because the wrapper
@@ -54,15 +92,6 @@ export function FeaturedEquipment() {
               className="w-[220px] flex-none snap-start"
             />
           ))}
-        </div>
-
-        <div className="mt-7 flex justify-center">
-          <Link
-            href="/shop"
-            className="rounded-full bg-zup-ink px-6 py-3 text-[13.5px] font-bold uppercase tracking-[0.04em] text-white transition-colors hover:bg-zup-body"
-          >
-            View All Products →
-          </Link>
         </div>
       </div>
     </section>

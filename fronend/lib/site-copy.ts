@@ -16,22 +16,13 @@ import { site } from "@/lib/site";
  * backend still renders real text instead of empty headings.
  */
 export const DEFAULT_COPY: SiteCopy = {
-  featuredHeading: "Featured Equipment",
   servicesHeading: "Engineering Services",
   servicesSubtitle:
     "Design, installation and maintenance for power and electrical infrastructure across Bangladesh.",
   footerDescription: site.tagline,
 
-  homeHeroEyebrow: "Future-proof power",
+  // The only homepage copy still rendered: the page's visually-hidden <h1>.
   homeHeroHeadline: "Intelligent Energy & Electrical Infrastructure",
-  homeHeroSubhead:
-    "Expert solutions for industrial substations, smart building management, and sustainable solar energy — engineered and maintained across Bangladesh.",
-  homeCapabilitiesEyebrow: "What we do",
-  homeCapabilitiesHeading: "Specialist Capabilities",
-  homeCtaHeading: "Ready to Power Your Project?",
-  homeCtaSubtext:
-    "Tell us what you need and our engineers will scope it with you — no obligation.",
-  homeCtaButton: "Request a Quote",
 
   industrialHeroEyebrow: "Industrial & infrastructure",
   industrialHeroHeadline: "Powering Global Infrastructure",

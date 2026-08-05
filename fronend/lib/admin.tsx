@@ -402,20 +402,12 @@ export interface HeroSlide {
 /** Admin-editable page copy. A blank string means "use the frontend's
  *  built-in default" — see DEFAULT_COPY / resolveCopy in lib/admin-bridge.ts. */
 export interface SiteCopy {
-  featuredHeading: string;
   servicesHeading: string;
   servicesSubtitle: string;
   footerDescription: string;
 
-  /* Home page */
-  homeHeroEyebrow: string;
+  /* Home page — only the visually-hidden <h1> is still rendered. */
   homeHeroHeadline: string;
-  homeHeroSubhead: string;
-  homeCapabilitiesEyebrow: string;
-  homeCapabilitiesHeading: string;
-  homeCtaHeading: string;
-  homeCtaSubtext: string;
-  homeCtaButton: string;
 
   /* Industrial page */
   industrialHeroEyebrow: string;
@@ -567,18 +559,10 @@ export function emptyState(): AdminState {
     messages: [],
     slides: [],
     copy: {
-      featuredHeading: "",
       servicesHeading: "",
       servicesSubtitle: "",
       footerDescription: "",
-      homeHeroEyebrow: "",
       homeHeroHeadline: "",
-      homeHeroSubhead: "",
-      homeCapabilitiesEyebrow: "",
-      homeCapabilitiesHeading: "",
-      homeCtaHeading: "",
-      homeCtaSubtext: "",
-      homeCtaButton: "",
       industrialHeroEyebrow: "",
       industrialHeroHeadline: "",
       industrialHeroSubhead: "",

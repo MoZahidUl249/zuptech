@@ -554,17 +554,12 @@ interface CopyField {
 const COPY_GROUPS: { group: string; fields: CopyField[] }[] = [
   {
     group: "Home page",
-    fields: [
-      { key: "homeHeroEyebrow", label: "Hero eyebrow" },
-      { key: "homeHeroHeadline", label: "Hero headline" },
-      { key: "homeHeroSubhead", label: "Hero subhead", multiline: true },
-      { key: "featuredHeading", label: "Featured section heading" },
-      { key: "homeCapabilitiesEyebrow", label: "Capabilities eyebrow" },
-      { key: "homeCapabilitiesHeading", label: "Capabilities heading" },
-      { key: "homeCtaHeading", label: "Closing CTA heading" },
-      { key: "homeCtaSubtext", label: "Closing CTA subtext", multiline: true },
-      { key: "homeCtaButton", label: "Closing CTA button label" },
-    ],
+    // The homepage is now the banner carousel, the product row and the
+    // services strip. Its hero text, capabilities band, stats and closing CTA
+    // were all removed from the layout, so the fields that fed them are gone
+    // from here too rather than left editing text nothing renders. The
+    // headline stays: it is the page's visually-hidden <h1>.
+    fields: [{ key: "homeHeroHeadline", label: "Hero headline (screen readers & search)" }],
   },
   {
     group: "Industrial page",

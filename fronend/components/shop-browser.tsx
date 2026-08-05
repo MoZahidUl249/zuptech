@@ -308,7 +308,11 @@ export function ShopBrowser({
           <h1 className="text-[clamp(28px,4.4vw,38px)] font-bold tracking-[-0.025em]">
             Shop
           </h1>
-          <div className="relative min-w-[200px] max-w-[340px] flex-1">
+          {/* Desktop uses the header's search box instead — at ≥1024px the two
+              sat one above the other, both reading "Search products…". Below
+              that the header's copy is inside the hamburger, so this stays as
+              the primary way to search on mobile. */}
+          <div className="relative min-w-[200px] max-w-[340px] flex-1 lg:hidden">
             <Search
               className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zup-soft"
               strokeWidth={2}

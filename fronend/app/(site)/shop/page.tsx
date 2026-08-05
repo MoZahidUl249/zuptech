@@ -42,7 +42,15 @@ export default async function ShopPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(itemListJsonLd) }}
       />
-      <ShopBrowser products={products} initialQuery={q ?? ""} />
+      {/*
+        Keyed on the query so a new search from the header remounts the
+        browser. `initialQuery` only seeds useState, so without this a visitor
+        already on /shop could search again, watch the URL change, and see the
+        same results — the state kept the first query forever. That was
+        invisible while the page had its own search box; now that the header's
+        is the only one on desktop, it is the search.
+      */}
+      <ShopBrowser key={q ?? ""} products={products} initialQuery={q ?? ""} />
     </main>
   );
 }
