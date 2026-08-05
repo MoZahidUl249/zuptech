@@ -30,7 +30,15 @@ export function BrandHero({
 }) {
   // The grid texture is the *plain* look; with art behind it, it would fight
   // the photo instead of decorating it.
-  const hasArt = Boolean(hero && hero.mode !== "plain");
+  //
+  // Checked against the art itself, not just the mode: a page set to "posters"
+  // with none uploaded (or "image" with the background cleared) renders no
+  // backdrop, and suppressing the grid for it left an empty dark band.
+  const hasArt = Boolean(
+    hero &&
+      ((hero.mode === "image" && hero.background) ||
+        (hero.mode === "posters" && hero.posters.length > 0)),
+  );
   return (
     <section className="relative overflow-hidden bg-zup-ink px-5 py-20 sm:py-26">
       <HeroBackdrop hero={hero} />

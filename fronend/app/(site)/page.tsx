@@ -5,7 +5,7 @@ import { HeroBanner } from "@/components/marketing/hero-banner";
 import { FeaturedEquipment } from "@/components/marketing/featured-equipment";
 import { CtaBanner } from "@/components/marketing/cta-banner";
 import { site, jsonLd } from "@/lib/site";
-import { getServices, getSiteConfig } from "@/lib/api";
+import { getPageHeroes, getServices, getSiteConfig } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
 import { TrustStrip } from "@/components/marketing/trust-strip";
 import { ServicesStrip } from "@/components/marketing/services-strip";
@@ -41,7 +41,11 @@ const orgJsonLd = {
 export default async function HomePage() {
   // Server component: copy read here lands in the SSR HTML (SEO-visible, no
   // post-hydration swap).
-  const [services, config] = await Promise.all([getServices(), getSiteConfig()]);
+  const [services, config, heroes] = await Promise.all([
+    getServices(),
+    getSiteConfig(),
+    getPageHeroes(),
+  ]);
   const copy = resolveCopy(config?.copy);
 
   return (
@@ -58,6 +62,9 @@ export default async function HomePage() {
         subhead={copy.homeHeroSubhead}
         primaryCta={{ label: "Our Services", href: "/services" }}
         secondaryCta={{ label: "Shop Products", href: "/shop" }}
+        // Admin → Page pictures → Home page. Was never passed, so that screen
+        // let staff configure homepage art that nothing rendered.
+        hero={heroes.home}
       />
 
       {/* Admin-managed promo banners (Admin → Home page → Hero banner slides) */}

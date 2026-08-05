@@ -181,7 +181,20 @@ function HeroEditor({
               onChange={(e) =>
                 onChange({ ...hero, overlay: Number(e.target.value) })
               }
-              onMouseUp={(e) =>
+              // Mouse-up alone lost the change for anyone on a touch screen or
+              // using the keyboard: the value moved on screen and was never
+              // PUT, so it silently reverted on reload.
+              onPointerUp={(e) =>
+                void run(
+                  () =>
+                    putPageHero(hero.pageKey, {
+                      mode: hero.mode,
+                      overlay: Number((e.target as HTMLInputElement).value),
+                    }),
+                  "Overlay saved",
+                )
+              }
+              onKeyUp={(e) =>
                 void run(
                   () =>
                     putPageHero(hero.pageKey, {
