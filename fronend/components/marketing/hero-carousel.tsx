@@ -173,23 +173,11 @@ export function HeroCarousel({
             className="relative h-full w-full shrink-0 grow-0 basis-full"
           >
             {s.image && s.mediaType === "video" ? (
-              <video
+              <SlideVideo
                 src={s.image}
-                // Muted + inline is what browsers require before they will
-                // autoplay at all; a hero clip that needed a click would just
-                // sit there as a black rectangle.
-                autoPlay={!reduceMotion && i === active}
-                muted
-                loop
-                playsInline
-                // Under reduced motion the clip is left paused on its first
-                // frame, which reads as a still rather than nothing.
-                preload="metadata"
-                aria-hidden
-                className={cn(
-                  "h-full w-full",
-                  (s.fit ?? "cover") === "contain" ? "object-contain" : "object-cover",
-                )}
+                active={i === active}
+                reduceMotion={reduceMotion}
+                fit={s.fit ?? "cover"}
               />
             ) : s.image ? (
               <Image
@@ -258,6 +246,65 @@ export function HeroCarousel({
         </>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Playback is driven from an effect, not the `autoPlay` attribute.
+ *
+ * `autoPlay` is only consulted while the element is loading its source, so a
+ * video slide that isn't the first one mounts inactive and never starts: React
+ * flips the attribute when the slide comes round, the browser ignores it, and
+ * the slide sits on a frozen first frame. The reverse costs too — a clip that
+ * did start keeps decoding for the whole session while three slides away.
+ *
+ * So: play when the slide is on screen, pause and rewind when it leaves, so
+ * each visit to the slide starts the clip from the top.
+ */
+function SlideVideo({
+  src,
+  active,
+  reduceMotion,
+  fit,
+}: {
+  src: string;
+  active: boolean;
+  reduceMotion: boolean;
+  fit: "cover" | "contain";
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Under reduced motion the clip is left paused on its first frame, which
+    // reads as a still rather than as nothing.
+    if (active && !reduceMotion) {
+      // Rejects on a backgrounded tab or if the policy declines despite the
+      // mute — there is nothing to recover, and the frame on screen is fine.
+      void el.play().catch(() => {});
+      return;
+    }
+    el.pause();
+    if (!active) el.currentTime = 0;
+  }, [active, reduceMotion]);
+
+  return (
+    <video
+      ref={ref}
+      src={src}
+      // Muted + inline is what browsers require before they will play without
+      // a gesture at all; a hero clip that needed a click would just sit there
+      // as a black rectangle.
+      muted
+      loop
+      playsInline
+      // Only the metadata up front — play() fetches the rest when the slide is
+      // actually reached, so three off-screen clips cost nothing on load.
+      preload="metadata"
+      aria-hidden
+      className={cn("h-full w-full", fit === "contain" ? "object-contain" : "object-cover")}
+    />
   );
 }
 
