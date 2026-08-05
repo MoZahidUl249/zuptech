@@ -347,14 +347,21 @@ export const putSlides = (slides: HeroSlide[]) =>
     "PUT /admin/api/slides",
   );
 
-/** Upload a hero banner image to the media-storage service and get its URL back.
+/*
+ * Every upload below hands Eden a plain `{ file }` object — never a FormData.
+ * Eden builds the multipart body itself, and it decides to do so by walking the
+ * body's own enumerable properties looking for a File (`hasFile`, treaty2). A
+ * FormData instance has none, so it takes the JSON branch instead and posts
+ * `JSON.stringify(formData)` — the literal string `{}`. The request looks fine
+ * from here and comes back 422 `Expected kind 'File' … received: {}`, which
+ * reads like a schema bug and is not one.
+ */
+
+/** Upload a hero banner image to Cloudinary (server-side) and get its URL back.
  *  The URL is then stored on the slide by the next putSlides() — the upload
  *  itself creates no slide row. */
-export const uploadSlideImage = (file: File) => {
-  const form = new FormData();
-  form.append("file", file);
-  return unwrap(api.admin.api.slides.image.post(form as never), "POST /admin/api/slides/image");
-};
+export const uploadSlideImage = (file: File) =>
+  unwrap(api.admin.api.slides.image.post({ file }), "POST /admin/api/slides/image");
 
 /* ===== Catalog taxonomy (Section → Category) ===== */
 
@@ -423,17 +430,17 @@ export const putPageHero = (
 
 /** Uploading also switches the hero into the matching mode server-side, so
  *  the admin sees the art immediately instead of an invisible upload. */
-export const uploadHeroBackground = (pageKey: string, file: File) => {
-  const form = new FormData();
-  form.append("file", file);
-  return unwrap(api.admin.api["page-heroes"]({ pageKey }).background.post(form as never), "POST /admin/api/page-heroes/:pageKey/background");
-};
+export const uploadHeroBackground = (pageKey: string, file: File) =>
+  unwrap(
+    api.admin.api["page-heroes"]({ pageKey }).background.post({ file }),
+    "POST /admin/api/page-heroes/:pageKey/background",
+  );
 
-export const uploadHeroPoster = (pageKey: string, file: File) => {
-  const form = new FormData();
-  form.append("file", file);
-  return unwrap(api.admin.api["page-heroes"]({ pageKey }).posters.post(form as never), "POST /admin/api/page-heroes/:pageKey/posters");
-};
+export const uploadHeroPoster = (pageKey: string, file: File) =>
+  unwrap(
+    api.admin.api["page-heroes"]({ pageKey }).posters.post({ file }),
+    "POST /admin/api/page-heroes/:pageKey/posters",
+  );
 
 export const patchHeroPoster = (id: string, patch: { alt?: string; href?: string }) =>
   unwrap(api.admin.api["hero-posters"]({ id }).patch(patch), "PATCH /admin/api/hero-posters/:id");
@@ -504,14 +511,11 @@ export const deleteProduct = (id: string) =>
 
 /** Append one photo to a product's gallery (goes to the media-storage
  *  service server-side; the API key never reaches the browser). */
-export const uploadProductPhoto = (productId: string, file: File) => {
-  const form = new FormData();
-  form.append("file", file);
-  return unwrap(
-    api.admin.api.products({ id: productId }).photos.post(form as never),
+export const uploadProductPhoto = (productId: string, file: File) =>
+  unwrap(
+    api.admin.api.products({ id: productId }).photos.post({ file }),
     "POST /admin/api/products/:id/photos",
   ).then(toAdminProduct);
-};
 
 /** Remove one gallery photo by its position (later photos shift down). */
 export const deleteProductPhoto = (productId: string, index: number) =>
@@ -521,14 +525,11 @@ export const deleteProductPhoto = (productId: string, index: number) =>
   ).then(toAdminProduct);
 
 /** Upload/replace the product's promo video (same storage-service path as photos). */
-export const uploadProductVideo = (productId: string, file: File) => {
-  const form = new FormData();
-  form.append("file", file);
-  return unwrap(
-    api.admin.api.products({ id: productId }).video.post(form as never),
+export const uploadProductVideo = (productId: string, file: File) =>
+  unwrap(
+    api.admin.api.products({ id: productId }).video.post({ file }),
     "POST /admin/api/products/:id/video",
   ).then(toAdminProduct);
-};
 
 export const deleteProductVideo = (productId: string) =>
   unwrap(
@@ -572,11 +573,8 @@ export const patchService = (kind: ServiceKind, id: string, patch: Partial<Servi
 export const deleteService = (kind: ServiceKind, id: string) =>
   unwrap(api.admin.api[kind]({ id }).delete(), `DELETE /admin/api/${kind}/:id`);
 
-export const uploadServiceImage = (kind: ServiceKind, id: string, file: File) => {
-  const form = new FormData();
-  form.append("file", file);
-  return unwrap(api.admin.api[kind]({ id }).image.post(form as never), `POST /admin/api/${kind}/:id/image`);
-};
+export const uploadServiceImage = (kind: ServiceKind, id: string, file: File) =>
+  unwrap(api.admin.api[kind]({ id }).image.post({ file }), `POST /admin/api/${kind}/:id/image`);
 
 /** Local-state owner for one catalogue, mirroring useLandingPages — services
  *  stay out of AdminState because its whole-object diff-sync has no story for
