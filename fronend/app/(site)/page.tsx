@@ -47,12 +47,7 @@ export default async function HomePage() {
 
       <FeaturedEquipment />
 
-      <ServicesStrip
-        services={services}
-        heading={copy.servicesHeading}
-        subtitle={copy.servicesSubtitle}
-      />
-
+      <ServicesStrip services={services} />
     </main>
   );
 }

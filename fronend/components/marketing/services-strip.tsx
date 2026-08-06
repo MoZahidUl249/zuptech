@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import type { ServiceCard } from "@/lib/api";
 
 /**
@@ -10,43 +9,15 @@ import type { ServiceCard } from "@/lib/api";
  * /industrial. Renders nothing when the catalogue is empty, so an
  * unreachable backend leaves no empty heading behind.
  */
-export function ServicesStrip({
-  services,
-  heading,
-  subtitle,
-}: {
-  services: ServiceCard[];
-  heading: string;
-  subtitle: string;
-}) {
+export function ServicesStrip({ services }: { services: ServiceCard[] }) {
   if (services.length === 0) return null;
 
   return (
-    <section className="px-5 py-16" aria-labelledby="home-services-heading">
+    // The heading, the standfirst and the "All services" link are gone, so the
+    // region names itself rather than pointing at a heading that no longer
+    // exists — the cards are the whole section now.
+    <section className="px-5 py-10" aria-label="Our services">
       <div className="mx-auto max-w-[1120px]">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2
-              id="home-services-heading"
-              className="text-[clamp(24px,3.6vw,34px)] font-bold tracking-[-0.02em]"
-            >
-              {heading}
-            </h2>
-            {subtitle ? (
-              <p className="mt-2 max-w-[640px] text-[15.5px] leading-relaxed text-zup-gray">
-                {subtitle}
-              </p>
-            ) : null}
-          </div>
-          <Link
-            href="/services"
-            className="inline-flex items-center gap-1.5 rounded-full border border-zup-body/14 px-5 py-2.5 text-[13.5px] font-bold text-zup-body transition-colors hover:bg-secondary"
-          >
-            All services
-            <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden />
-          </Link>
-        </div>
-
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {services.slice(0, 4).map((s) => (
             <Link

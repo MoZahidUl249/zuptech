@@ -16,9 +16,6 @@ import { site } from "@/lib/site";
  * backend still renders real text instead of empty headings.
  */
 export const DEFAULT_COPY: SiteCopy = {
-  servicesHeading: "Engineering Services",
-  servicesSubtitle:
-    "Design, installation and maintenance for power and electrical infrastructure across Bangladesh.",
   footerDescription: site.tagline,
 
   // The only homepage copy still rendered: the page's visually-hidden <h1>.

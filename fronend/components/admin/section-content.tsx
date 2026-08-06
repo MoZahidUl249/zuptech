@@ -591,10 +591,8 @@ const COPY_GROUPS: { group: string; fields: CopyField[] }[] = [
     ],
   },
   {
-    group: "Services page & footer",
+    group: "Footer",
     fields: [
-      { key: "servicesHeading", label: "Services section heading" },
-      { key: "servicesSubtitle", label: "Services section subtitle", multiline: true },
       { key: "footerDescription", label: "Footer description", multiline: true },
     ],
   },
