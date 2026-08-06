@@ -24,10 +24,8 @@ export const DEFAULT_COPY: SiteCopy = {
   // The only homepage copy still rendered: the page's visually-hidden <h1>.
   homeHeroHeadline: "Intelligent Energy & Electrical Infrastructure",
 
-  industrialHeroEyebrow: "Industrial & infrastructure",
+  // Like the homepage: the text hero is gone, the headline stays as the <h1>.
   industrialHeroHeadline: "Powering Global Infrastructure",
-  industrialHeroSubhead:
-    "High-voltage systems, smart grids and turnkey distribution — designed, commissioned and maintained to industrial standards.",
   industrialGridHeading: "High-Voltage Grid Solutions",
   industrialGridBody:
     "From substation design through commissioning and long-term maintenance, we deliver the infrastructure heavy operations depend on.",

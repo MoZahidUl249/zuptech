@@ -564,9 +564,10 @@ const COPY_GROUPS: { group: string; fields: CopyField[] }[] = [
   {
     group: "Industrial page",
     fields: [
-      { key: "industrialHeroEyebrow", label: "Hero eyebrow" },
-      { key: "industrialHeroHeadline", label: "Hero headline" },
-      { key: "industrialHeroSubhead", label: "Hero subhead", multiline: true },
+      // The eyebrow and subhead went with the page's text hero — it is the
+      // banner carousel now, same as the homepage. The headline stays as the
+      // page's visually-hidden <h1>.
+      { key: "industrialHeroHeadline", label: "Hero headline (screen readers & search)" },
       { key: "industrialGridHeading", label: "Grid solutions heading" },
       { key: "industrialGridBody", label: "Grid solutions body", multiline: true },
       { key: "industrialServicesHeading", label: "Services heading" },

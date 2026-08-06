@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Zap, SlidersHorizontal, Share2, Shield, BadgeCheck } from "lucide-react";
-import { BrandHero } from "@/components/marketing/brand-hero";
+import { HeroBanner } from "@/components/marketing/hero-banner";
 import { IndustrialConsultationForm } from "@/components/marketing/industrial-consultation-form";
 import {
   industrialServices,
@@ -9,12 +9,7 @@ import {
   type IndustrialIcon,
 } from "@/lib/industrial";
 import { site, jsonLd } from "@/lib/site";
-import {
-  getIndustrialServices,
-  getPageHeroes,
-  getSiteConfig,
-  type ServiceCard,
-} from "@/lib/api";
+import { getIndustrialServices, getSiteConfig, type ServiceCard } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
 
 export const metadata: Metadata = {
@@ -73,11 +68,9 @@ function toCards(live: ServiceCard[]): IndustrialCard[] {
 export default async function IndustrialPage() {
   // Server component: reading copy here puts it in the SSR HTML, so it's
   // SEO-visible and there's no post-hydration text swap.
-  const [live, config, heroes] = await Promise.all([
-    getIndustrialServices(),
-    getSiteConfig(),
-    getPageHeroes(),
-  ]);
+  // No getPageHeroes(): the hero is the banner carousel alone now, so
+  // Admin → Page pictures has nothing left to place on this page.
+  const [live, config] = await Promise.all([getIndustrialServices(), getSiteConfig()]);
   const cards = toCards(live);
   const copy = resolveCopy(config?.copy);
 
@@ -102,14 +95,12 @@ export default async function IndustrialPage() {
         dangerouslySetInnerHTML={{ __html: jsonLd(industrialJsonLd) }}
       />
 
-      <BrandHero
-        eyebrow={copy.industrialHeroEyebrow}
-        headline={copy.industrialHeroHeadline}
-        subhead={copy.industrialHeroSubhead}
-        primaryCta={{ label: "Our Services", href: "#core-services" }}
-        secondaryCta={{ label: "Technical Specs", href: "#operational-standards" }}
-        hero={heroes.industrial}
-      />
+      {/* Same hero as the homepage: the admin's banner slides, full-bleed, and
+          nothing else. The headline survives as a visually-hidden <h1> so the
+          page still has exactly one, for search engines and for a screen
+          reader arriving here. */}
+      <h1 className="sr-only">{copy.industrialHeroHeadline}</h1>
+      <HeroBanner />
 
       {/* HIGH-VOLTAGE GRID SOLUTIONS */}
       <section className="px-5 py-16" aria-labelledby="grid-solutions-heading">

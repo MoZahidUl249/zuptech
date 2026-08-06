@@ -410,9 +410,7 @@ export interface SiteCopy {
   homeHeroHeadline: string;
 
   /* Industrial page */
-  industrialHeroEyebrow: string;
   industrialHeroHeadline: string;
-  industrialHeroSubhead: string;
   industrialGridHeading: string;
   industrialGridBody: string;
   industrialServicesHeading: string;
@@ -563,9 +561,7 @@ export function emptyState(): AdminState {
       servicesSubtitle: "",
       footerDescription: "",
       homeHeroHeadline: "",
-      industrialHeroEyebrow: "",
       industrialHeroHeadline: "",
-      industrialHeroSubhead: "",
       industrialGridHeading: "",
       industrialGridBody: "",
       industrialServicesHeading: "",

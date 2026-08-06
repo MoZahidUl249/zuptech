@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { BadgeCheck, Headset, ShieldCheck, HeartPulse } from "lucide-react";
-import { BrandHero } from "@/components/marketing/brand-hero";
+import { HeroBanner } from "@/components/marketing/hero-banner";
 import { CtaBanner } from "@/components/marketing/cta-banner";
 import { ConsultancyForm } from "@/components/marketing/consultancy-form";
 import { site, jsonLd } from "@/lib/site";
-import { getPageHeroes, getServices } from "@/lib/api";
+import { getServices } from "@/lib/api";
 import {
   residentialCards,
   trustBadges,
@@ -49,7 +49,9 @@ const servicesJsonLd = {
 export default async function ServicesPage() {
   // Server component: the bookable catalogue has to be resolved here because
   // POST /api/leads needs a real Service.id, not a display label.
-  const [bookable, heroes] = await Promise.all([getServices(), getPageHeroes()]);
+  // No getPageHeroes(): the hero is the banner carousel alone now, so
+  // Admin → Page pictures has nothing left to place on this page.
+  const bookable = await getServices();
 
   return (
     <main>
@@ -58,14 +60,12 @@ export default async function ServicesPage() {
         dangerouslySetInnerHTML={{ __html: jsonLd(servicesJsonLd) }}
       />
 
-      <BrandHero
-        eyebrow="Future-proof power"
-        headline="Integrated Energy Solutions"
-        subhead="From residential solar to massive-scale industrial grid infrastructure. Engineering excellence for the next generation of energy."
-        primaryCta={{ label: "Our Services", href: "#residential" }}
-        secondaryCta={{ label: "Technical Specs", href: "#industrial" }}
-        hero={heroes.services}
-      />
+      {/* Same hero as the homepage: the admin's banner slides, full-bleed, and
+          nothing else. The headline survives as a visually-hidden <h1> so the
+          page still has exactly one, for search engines and for a screen
+          reader arriving here. */}
+      <h1 className="sr-only">Integrated Energy Solutions</h1>
+      <HeroBanner />
 
       {/* RESIDENTIAL */}
       <section id="residential" className="scroll-mt-16 px-5 py-16" aria-labelledby="residential-heading">
