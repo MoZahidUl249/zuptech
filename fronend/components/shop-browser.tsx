@@ -108,6 +108,32 @@ export function ShopBrowser({
    * goes through this, so they all behave identically — including the
    * tap-again-to-clear toggle, which used to only work in two of the four.
    */
+  /** Products in one sector — the scope every category list and count uses. */
+  const inSector = useCallback(
+    (c: Cat) => (c === "All" ? products : products.filter((p) => productSection(p) === c)),
+    [products],
+  );
+
+  /**
+   * Picking a sector re-scopes the category list beneath it.
+   *
+   * A category belongs to exactly one sector (Category.name is globally
+   * unique — see backend/CLAUDE.md), so a category selected under Home cannot
+   * survive a switch to Industrial. Left alone it would filter to nothing and
+   * the shopper would see "0 products" with the cause scrolled off-screen, so
+   * a category that doesn't exist in the incoming sector falls back to All.
+   */
+  const selectCat = useCallback(
+    (c: Cat) => {
+      setCat(c);
+      setTag((current) => {
+        if (current === "All") return "All";
+        return inSector(c).some((p) => productTags(p).includes(current)) ? current : "All";
+      });
+    },
+    [inSector],
+  );
+
   const selectTag = useCallback(
     (t: Tag) => {
       setTag((current) => (current === t && t !== "All" ? "All" : t));
@@ -163,20 +189,22 @@ export function ShopBrowser({
     setQuery("");
   };
 
-  const catCount = (c: Cat) =>
-    c === "All" ? products.length : products.filter((p) => productSection(p) === c).length;
+  const catCount = (c: Cat) => inSector(c).length;
   const tagCount = (t: Tag) => {
-    const base = cat === "All" ? products : products.filter((p) => productSection(p) === cat);
+    const base = inSector(cat);
     return t === "All" ? base.length : base.filter((p) => productTags(p).includes(t)).length;
   };
 
-  // Tags are admin-managed and open-ended — build the "Type" filter from
-  // whatever the live catalog actually has, not a fixed list.
-  const availableTags = useMemo(
-    () => Array.from(new Set(products.flatMap(productTags))).sort(),
-    [products],
+  /**
+   * The category list, scoped to the selected sector — pick Industrial and only
+   * industrial categories are offered. Built from the products actually in that
+   * sector rather than a fixed list, so a category never appears with nothing
+   * behind it, and admin-added categories show up on their own.
+   */
+  const tags: Tag[] = useMemo(
+    () => ["All", ...Array.from(new Set(inSector(cat).flatMap(productTags))).sort()],
+    [inSector, cat],
   );
-  const tags: Tag[] = ["All", ...availableTags];
 
   // Each product carries its category's logo, so the filter list can show real
   // per-category art instead of one generic icon for everything the admin adds.
@@ -204,7 +232,7 @@ export function ShopBrowser({
               <button
                 key={c}
                 type="button"
-                onClick={() => setCat(c)}
+                onClick={() => selectCat(c)}
                 className="flex min-h-7 items-center gap-2.5 py-0.5 text-left"
               >
                 <span
@@ -309,17 +337,16 @@ export function ShopBrowser({
           /shop?q=…, which seeds `query` below, so the behaviour is unchanged;
           the term is shown back to the visitor in the header's own field.
         */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-4 px-1">
-          <h1 className="text-[clamp(28px,4.4vw,38px)] font-bold tracking-[-0.025em]">
-            Shop
-          </h1>
-          {query.trim() && (
-            <p className="text-[13.5px] text-zup-gray">
-              Showing results for{" "}
-              <span className="font-semibold text-zup-body">{query.trim()}</span>
-            </p>
-          )}
-        </div>
+        {/* The page title is visually hidden, not deleted: the products speak
+            for themselves above the fold, but a page still needs one <h1> for
+            search engines and for a screen reader arriving here. */}
+        <h1 className="sr-only">Shop</h1>
+        {query.trim() && (
+          <p className="mb-3 px-1 text-[13.5px] text-zup-gray">
+            Showing results for{" "}
+            <span className="font-semibold text-zup-body">{query.trim()}</span>
+          </p>
+        )}
 
         {/*
           Category rail + filter sheet. This used to sit below a grid of tall
@@ -358,7 +385,7 @@ export function ShopBrowser({
                         <button
                           key={c}
                           type="button"
-                          onClick={() => setCat(c)}
+                          onClick={() => selectCat(c)}
                           className={cn(
                             "min-h-[46px] flex-1 rounded-xl border-[1.5px] px-2 py-3 text-sm font-semibold",
                             on
