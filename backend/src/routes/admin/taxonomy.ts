@@ -165,7 +165,7 @@ export const adminTaxonomy = new Elysia({
 
   /**
    * Set (or clear, with `svg: ""`) a category's logo. The markup is stored on
-   * the row rather than uploaded, because the media-storage service only takes
+   * the row rather than uploaded, because the media pipeline only takes
    * raster formats. The storefront renders it inline, so anything active is
    * refused here — see `sanitizeSvgLogo`.
    */

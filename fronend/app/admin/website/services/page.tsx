@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { ServicesSection } from "@/components/admin/section-services";
+import { ServicesPageScreen } from "@/components/admin/website/page-screens";
 
-export const metadata: Metadata = { title: "Services" };
+export const metadata: Metadata = { title: "Services page" };
 
 export default function Page() {
-  return <ServicesSection />;
+  return <ServicesPageScreen />;
 }

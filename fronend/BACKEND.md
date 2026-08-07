@@ -14,7 +14,7 @@ app in this repo; **all data currently lives client-side in `localStorage` as a
 demo**. The backend's job is to replace those stores with real APIs without
 changing the UI.
 
-- Storefront: `/` `/shop` `/products/[slug]` `/solutions` `/contact` `/cart` `/checkout` `/account`
+- Storefront: `/` `/shop` `/products/[slug]` `/services` `/industrial` `/contact` `/cart` `/checkout` `/account` `/lp/[slug]`
 - Admin panel: `/admin` (noindexed; role-based access)
 - Currency: BDT, lakh-style formatting (`৳ 9,18,000`). Phone format: `01XXXXXXXXX` (BD).
 
@@ -53,7 +53,7 @@ Types below mirror `lib/admin.tsx`, `lib/products.ts`, `lib/orders.ts` exactly.
   cat: "Home" | "Industrial";
   tags: string[];
   price: number;           // BDT
-  minDp: number;           // minimum down payment, % of price (0–100)
+  minDeposit: number;      // minimum down payment, BDT (display-only)
   rating: number;          // aggregate, shown + used in JSON-LD
   sold: number;            // units sold counter
   imgHint: string;         // placeholder label until real images exist
@@ -168,7 +168,7 @@ UI masks it; today it sits in localStorage — that must end with the backend.
 ### Public (storefront)
 | Method & path | Purpose |
 |---|---|
-| `GET /api/products` | Visible products (respect `visible`), incl. `minDp` |
+| `GET /api/products` | Visible products (respect `visible`), incl. `minDeposit` |
 | `GET /api/products/:slug` | Product detail |
 | `GET /api/site-config` | One payload for the bridge: `{ featuredIds, slides, contact, copy, gtm: { id or null }, paymentOptions: [{label, sub}] }` — **never include gateway keys/secrets** |
 | `POST /api/orders` | Create order (guest checkout). Validates phone `^01\d{9}$`, address len > 3, recomputes totals server-side, decrements/reserves stock, auto-creates customer by phone |
@@ -213,7 +213,7 @@ payment request; webhook confirms → status `Confirmed`.
 5. **Receiving a PO** adds qty to stock **and** writes a StockMovement (`+qty`, "PO-xxxx received", by staff).
 6. **Manual stock adjust** writes a movement with the delta and reason "Manual stock adjustment".
 7. **Featured products**: ordered list; products deleted from catalog are removed from it; only catalog-linked products can be featured.
-8. **Min down payment**: informational on product page today ("Minimum down payment for this product X%."). If checkout later takes deposits, amount = `ceil(price × minDp / 100)`.
+8. **Min down payment**: informational on the product page today ("Minimum down payment for this product ৳X."). `minDeposit` is the amount itself — no longer a percentage to compute from.
 9. **Hero slides**: only `active` slides **with an image** render; zero active → storefront falls back to defaults.
 10. **GTM**: load only when enabled AND id matches `^GTM-[A-Z0-9]{4,10}$`.
 11. **Checkout payment options** = enabled PaymentMethods; if the selected one is disabled mid-session the first remaining option is used.
@@ -236,7 +236,7 @@ payment request; webhook confirms → status `Confirmed`.
 - [ ] Server-side session auth (httpOnly, Secure, SameSite cookies) for staff & customers; bcrypt/argon2 password hashes; rate-limit login + OTP.
 - [ ] Enforce the RBAC matrix on **every** admin endpoint (module → none/view/manage).
 - [ ] Gateway API keys/secrets in env/secret manager only; masked in API responses; never in the public site-config payload.
-- [ ] Validate/normalize all input server-side (phone regex, GTM id regex, address length, qty ≥ 1, price/cost ≥ 0, minDp 0–100); recompute all money server-side — never trust client totals.
+- [ ] Validate/normalize all input server-side (phone regex, GTM id regex, address length, qty ≥ 1, price/cost ≥ 0, minDeposit ≥ 0); recompute all money server-side — never trust client totals.
 - [ ] Product images: object storage + size/type validation (frontend caps at 1.5 MB, images/* only).
 - [ ] Keep the headers set in `next.config.ts` (nosniff, DENY framing, referrer & permissions policy); add a CSP with nonces once script inventory is known (GTM requires `https://www.googletagmanager.com`).
 - [ ] `/admin` is noindexed and disallowed in robots.txt already; consider IP allowlisting or 2FA for staff.

@@ -5,7 +5,8 @@ import { classifyAndValidate, type MediaType } from "./media-validate";
 /**
  * Media storage on Cloudinary. Every upload/delete goes through this module
  * so entity rows only ever hold a plain Cloudinary delivery URL — the same
- * shape a hand-written media-storage service used to hand back.
+ * shape a hand-written media service used to hand back, kept so callers
+ * did not have to change when uploads moved to Cloudinary.
  */
 
 function cloudName(): string | undefined {

@@ -18,24 +18,17 @@ import { site } from "@/lib/site";
 export const DEFAULT_COPY: SiteCopy = {
   footerDescription: site.tagline,
 
-  // The only homepage copy still rendered: the page's visually-hidden <h1>.
+  // One headline per page — each page's <h1>, hidden on the ones whose hero is
+  // the banner carousel.
   homeHeroHeadline: "Intelligent Energy & Electrical Infrastructure",
-
-  // Like the homepage: the text hero is gone, the headline stays as the <h1>.
+  servicesHeroHeadline: "Integrated Energy Solutions",
   industrialHeroHeadline: "Powering Global Infrastructure",
-  industrialGridHeading: "High-Voltage Grid Solutions",
-  industrialGridBody:
-    "From substation design through commissioning and long-term maintenance, we deliver the infrastructure heavy operations depend on.",
-  industrialServicesHeading: "Core Infrastructure Services",
-  industrialServicesSubtitle:
-    "End-to-end capability across design, build, commissioning and maintenance.",
-  industrialStandardsHeading: "Operational Standards",
-  industrialStandardsBody: "The design targets we engineer and commission against.",
 
   contactHeading: "Talk to us",
   contactFormHeading: "Or send a message",
   contactOfficeHeading: "Head Office",
-  contactTeamHeading: "Meet the team",
+  // No default: these are the client's own numbers, and inventing one would
+  // put a fake service line on a real contact page. Blank hides the row.
   contactServiceLine: "",
   contactTendersEmail: "",
 };

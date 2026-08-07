@@ -12,7 +12,7 @@ import { prisma } from "../../lib/db";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { nextId } from "../../lib/ids";
 import { assertCan } from "../../lib/rbac";
-import { reorderQty } from "../../lib/rules";
+import { reorderQty, LIST_CAP } from "../../lib/rules";
 import { toMovement, toPurchaseOrder, toSupplier } from "../../lib/serialize";
 import { staffGuard } from "./guard";
 
@@ -61,7 +61,7 @@ export const adminInventory = new Elysia({ name: "routes/admin/inventory", detai
 
   .get("/admin/api/purchase-orders", async ({ staffCtx }) => {
     assertCan(staffCtx, "inventory", "view");
-    const pos = await prisma.purchaseOrder.findMany({ orderBy: { number: "desc" } });
+    const pos = await prisma.purchaseOrder.findMany({ take: LIST_CAP, orderBy: { number: "desc" } });
     return pos.map(toPurchaseOrder);
   })
 

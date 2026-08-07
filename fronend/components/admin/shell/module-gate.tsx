@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Lock } from "lucide-react";
 import { useAdmin } from "@/lib/admin";
-import { navItemFor } from "../nav";
+import { navItemFor, navItemModules } from "../nav";
 import { EmptyState } from "../primitives";
 
 /**
@@ -21,7 +21,9 @@ export function ModuleGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const item = navItemFor(pathname);
 
-  if (item && can(item.module) === "none") {
+  // A screen that spans two modules opens for anyone holding either — the cards
+  // inside it gate themselves, so the parts they can't touch show read-only.
+  if (item && navItemModules(item).every((m) => can(m) === "none")) {
     return (
       <EmptyState
         icon={Lock}

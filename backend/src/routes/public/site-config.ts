@@ -23,37 +23,18 @@ export const siteConfig = new Elysia({ name: "routes/public/site-config", detail
       featuredIds: config.featuredIds,
       // Only active slides with an image render (§4.9); zero → UI defaults.
       slides: slides.filter((s) => s.active && s.image).map(toSlide),
+      // Every key here has a renderer on the storefront. That is the rule the
+      // site-content cleanup restored, and serialize.test.ts pins it.
       copy: {
-        featuredHeading: config.featuredHeading,
-        servicesHeading: config.servicesHeading,
-        servicesSubtitle: config.servicesSubtitle,
         footerDescription: config.footerDescription,
 
-        homeHeroEyebrow: config.homeHeroEyebrow,
         homeHeroHeadline: config.homeHeroHeadline,
-        homeHeroSubhead: config.homeHeroSubhead,
-        homeIndustrialEyebrow: config.homeIndustrialEyebrow,
-        homeIndustrialHeading: config.homeIndustrialHeading,
-        homeCapabilitiesEyebrow: config.homeCapabilitiesEyebrow,
-        homeCapabilitiesHeading: config.homeCapabilitiesHeading,
-        homeCtaHeading: config.homeCtaHeading,
-        homeCtaSubtext: config.homeCtaSubtext,
-        homeCtaButton: config.homeCtaButton,
-
-        industrialHeroEyebrow: config.industrialHeroEyebrow,
+        servicesHeroHeadline: config.servicesHeroHeadline,
         industrialHeroHeadline: config.industrialHeroHeadline,
-        industrialHeroSubhead: config.industrialHeroSubhead,
-        industrialGridHeading: config.industrialGridHeading,
-        industrialGridBody: config.industrialGridBody,
-        industrialServicesHeading: config.industrialServicesHeading,
-        industrialServicesSubtitle: config.industrialServicesSubtitle,
-        industrialStandardsHeading: config.industrialStandardsHeading,
-        industrialStandardsBody: config.industrialStandardsBody,
 
         contactHeading: config.contactHeading,
         contactFormHeading: config.contactFormHeading,
         contactOfficeHeading: config.contactOfficeHeading,
-        contactTeamHeading: config.contactTeamHeading,
         contactServiceLine: config.contactServiceLine,
         contactTendersEmail: config.contactTendersEmail,
       },
@@ -67,6 +48,12 @@ export const siteConfig = new Elysia({ name: "routes/public/site-config", detail
         city: config.city,
         postalCode: config.postalCode,
         hours: config.hours,
+        officeName: config.officeName,
+        warehouseName: config.warehouseName,
+        warehouseAddress: config.warehouseAddress,
+        hoursWeekday: config.hoursWeekday,
+        hoursWeekend: config.hoursWeekend,
+        hoursEmergency: config.hoursEmergency,
       },
       // GTM loads only when enabled AND the id looks like a container id (§4.10).
       gtm: config.gtmEnabled && GTM_ID_RE.test(config.gtmId) ? { id: config.gtmId } : null,

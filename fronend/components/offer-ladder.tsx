@@ -1,5 +1,6 @@
 import { Tag, TrendingDown, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatBDT } from "@/lib/site";
 import type { Product } from "@/lib/products";
 import { nextRung, offerLadder, type OfferRung } from "@/lib/pricing-display";
 
@@ -82,12 +83,14 @@ function OfferBadges({ rungs, className }: { rungs: OfferRung[]; className?: str
   );
 }
 
-/** "Save 5% per unit" → "5% off"; "Free delivery" → "free delivery". Badges
- *  have no room for the full sentence. */
+/** "Save ৳500 per unit" → "৳500 off"; "Free delivery" → "free delivery". Badges
+ *  have no room for the full sentence.
+ *
+ *  Reads the rung's own amount rather than parsing a number back out of the
+ *  sentence it just built, which is what this used to do. */
 function shortDetail(rung: OfferRung): string {
   if (rung.kind === "delivery") return rung.detail.toLowerCase();
-  const match = /(\d+)%/.exec(rung.detail);
-  return match ? `${match[1]}% off` : rung.detail;
+  return `${formatBDT(rung.amount)} off`;
 }
 
 /* ===== panel — product page + landing page ===== */
@@ -226,9 +229,12 @@ function OfferLine({ rungs, className }: { rungs: OfferRung[]; className?: strin
   // delivery rung is the best one earned — and only that one is worth saying.
   // If it's a full break, say nothing: the cart already states "Free delivery"
   // from the server's own zeroed fee, which is the authoritative claim. This
-  // fills in only the partial break the cart total can't express.
+  // fills in only the partial break the cart total can't express, which is why
+  // the test is on the rung's own wording rather than on the amount: whether a
+  // given amount clears the fee depends on the delivery zone.
   const bestDelivery = rungs.filter((r) => r.state === "active" && r.kind === "delivery").at(-1);
-  const delivery = bestDelivery && bestDelivery.percentage < 100 ? bestDelivery : undefined;
+  const delivery =
+    bestDelivery && !/free delivery/i.test(bestDelivery.detail) ? bestDelivery : undefined;
   const next = nextRung(rungs);
   if (!delivery && !next) return null;
 

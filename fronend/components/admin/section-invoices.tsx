@@ -21,6 +21,7 @@ import {
   invoiceStatusTone,
   selectCls,
 } from "./ui";
+import { ConfirmSelect } from "./confirm-select";
 import { InvoiceDocument } from "./invoice-document";
 
 /*
@@ -78,17 +79,13 @@ export function InvoicesSection() {
           <Pill tone={invoiceStatusTone(selected.status)}>{selected.status}</Pill>
           <div className="ml-auto flex items-center gap-2">
             {readOnly ? null : (
-              <select
+              <ConfirmSelect
                 value={selected.status}
+                options={INVOICE_STATUSES}
                 disabled={busy}
-                aria-label="Invoice status"
-                onChange={(e) => void setStatus(selected, e.target.value as InvoiceStatus)}
-                className={selectCls}
-              >
-                {INVOICE_STATUSES.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
+                label="Invoice status"
+                onConfirm={(next) => setStatus(selected, next)}
+              />
             )}
             <button
               type="button"
@@ -187,17 +184,13 @@ export function InvoicesSection() {
                   {readOnly ? (
                     <Pill tone={invoiceStatusTone(i.status)}>{i.status}</Pill>
                   ) : (
-                    <select
+                    <ConfirmSelect
                       value={i.status}
+                      options={INVOICE_STATUSES}
                       disabled={busy}
-                      aria-label={`Status of ${i.id}`}
-                      onChange={(e) => void setStatus(i, e.target.value as InvoiceStatus)}
-                      className={selectCls}
-                    >
-                      {INVOICE_STATUSES.map((s) => (
-                        <option key={s}>{s}</option>
-                      ))}
-                    </select>
+                      label={`Status of ${i.id}`}
+                      onConfirm={(next) => setStatus(i, next)}
+                    />
                   )}
                 </Td>
                 <Td>

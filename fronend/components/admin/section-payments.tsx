@@ -190,7 +190,7 @@ function MethodCard({
 
       {!readOnly ? (
         <p className="mt-4 text-xs font-semibold text-zup-soft">
-          Changes save automatically as you type.
+          Nothing is sent until you press Save at the bottom of the screen — including the API secret.
         </p>
       ) : null}
     </Card>

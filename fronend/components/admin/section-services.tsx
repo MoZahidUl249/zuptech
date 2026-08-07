@@ -22,8 +22,18 @@ import {
   readImageDimensions,
 } from "@/lib/image-upload";
 import { cn, slugify } from "@/lib/utils";
+import { ServiceCardView } from "@/components/marketing/service-card";
 import { ConfirmDialog } from "./confirm-dialog";
-import { Card, Field, BtnPrimary, BtnGhost, BtnDanger, TagsInput, inputCls } from "./ui";
+import {
+  Card,
+  Field,
+  Segmented,
+  BtnPrimary,
+  BtnGhost,
+  BtnDanger,
+  TagsInput,
+  inputCls,
+} from "./ui";
 
 /** Mirrors uploadServiceImageDto's maxSize ("8m") in services.dto.ts. */
 const MAX_SERVICE_IMAGE_BYTES = 8_000_000;
@@ -32,24 +42,27 @@ const MAX_SERVICE_IMAGE_BYTES = 8_000_000;
 const NAME_MAX = 120;
 const DSC_MAX = 600;
 
-export function ServicesSection() {
-  return (
-    <>
-      <ServiceCatalogueCard
-        kind="services"
-        title="Services"
-        blurb="The bookable service cards on /services. Customers can submit an enquiry against these, so a card with enquiries attached can't be deleted."
-      />
-      <ServiceCatalogueCard
-        kind="industrial-services"
-        title="Industrial services"
-        blurb="The infrastructure capability cards on /industrial. Display-only — no enquiries attach to these."
-      />
-    </>
-  );
-}
+/** Mirrors SERVICE_IMAGE_SIDES in backend/src/lib/rules.ts. */
+const IMAGE_SIDE_OPTIONS = [
+  { value: "left" as const, label: "Left" },
+  { value: "right" as const, label: "Right" },
+];
 
-function ServiceCatalogueCard({
+/** Mirrors SERVICE_BULLET_STYLES in backend/src/lib/rules.ts. Labelled by what
+ *  the marker looks like, not by its internal name. */
+const BULLET_STYLE_OPTIONS = [
+  { value: "tick" as const, label: "Tick" },
+  { value: "dot" as const, label: "Dot" },
+  { value: "plain" as const, label: "Plain" },
+];
+
+/**
+ * One catalogue of service cards. Mounted by the admin screen for whichever
+ * page shows it — the bookable list appears on both the Home page and the
+ * Services page screens, because it feeds both surfaces and there is only one
+ * list behind them.
+ */
+export function ServiceCatalogueCard({
   kind,
   title,
   blurb,
@@ -69,6 +82,7 @@ function ServiceCatalogueCard({
     async (id: string, patch: Partial<Omit<AdminService, "id" | "image">>) => {
       try {
         replace(await patchService(kind, id, patch));
+        toast("Saved");
       } catch (err) {
         toast(err instanceof Error ? err.message : "Couldn't save that change");
         void reload(); // pull back to server truth so the UI isn't lying
@@ -88,9 +102,13 @@ function ServiceCatalogueCard({
         dsc: "Describe this service…",
         features: [],
         sort: list.length,
+        // Alternate down the column so consecutive new cards zig-zag rather
+        // than stacking every photo on the same edge.
+        imageSide: list.length % 2 === 0 ? "left" : "right",
+        bulletStyle: "tick",
       });
       setList((prev) => [...prev, row]);
-      toast("Service added — fill in the details below");
+      toast("Service added — fill in the details, then save the card");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't add a service");
     } finally {
@@ -206,19 +224,82 @@ function ServiceRow({
   onMove: (index: number, dir: -1 | 1) => void;
   onRemove: (row: AdminService) => void;
 }) {
-  // Local draft so typing stays responsive; committed on blur.
+  // A draft, not a live write: nothing reaches the server until Save. The
+  // preview reads the draft, so the card still moves as you type.
   const [name, setName] = useState(s.name);
   const [dsc, setDsc] = useState(s.dsc);
+  const [features, setFeatures] = useState(s.features);
+  const [imageSide, setImageSide] = useState(s.imageSide);
+  const [bulletStyle, setBulletStyle] = useState(s.bulletStyle);
+  const [saving, setSaving] = useState(false);
+
+  const draft: AdminService = {
+    ...s,
+    name: name.trim() || s.name,
+    dsc: dsc.trim() || s.dsc,
+    features,
+    imageSide,
+    bulletStyle,
+  };
+
+  const dirty =
+    name !== s.name ||
+    dsc !== s.dsc ||
+    JSON.stringify(features) !== JSON.stringify(s.features) ||
+    imageSide !== s.imageSide ||
+    bulletStyle !== s.bulletStyle;
+  const valid = name.trim().length > 0 && dsc.trim().length > 0;
+
+  const undo = () => {
+    setName(s.name);
+    setDsc(s.dsc);
+    setFeatures(s.features);
+    setImageSide(s.imageSide);
+    setBulletStyle(s.bulletStyle);
+  };
+
+  const saveCard = async () => {
+    setSaving(true);
+    try {
+      // Re-slug alongside the name while the slug still looks auto-generated,
+      // so hand-picked slugs are never clobbered.
+      const wasAuto =
+        s.slug.startsWith("new-service-") || s.slug === slugify(s.name, "service");
+      await onSave(s.id, {
+        name: name.trim(),
+        dsc: dsc.trim(),
+        features,
+        imageSide,
+        bulletStyle,
+        ...(wasAuto ? { slug: slugify(name.trim(), "service") } : {}),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="rounded-xl border border-zup-body/10 bg-white p-4">
-      <div className="flex flex-wrap items-start gap-4">
-        <ServiceImageSlot
-          kind={kind}
-          service={s}
-          disabled={readOnly}
-          onUploaded={onImage}
-        />
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-4">
+        <div className="flex flex-col gap-3">
+          <ServiceImageSlot
+            kind={kind}
+            service={s}
+            disabled={readOnly}
+            onUploaded={onImage}
+          />
+          <Field label="Photo on">
+            <Segmented
+              size="sm"
+              label={`Which side the photo sits on for ${s.name}`}
+              options={IMAGE_SIDE_OPTIONS}
+              value={imageSide}
+              disabled={readOnly}
+              onChange={setImageSide}
+            />
+          </Field>
+        </div>
 
         <div className="flex min-w-60 flex-1 flex-col gap-3">
           <Field label="Name">
@@ -227,21 +308,6 @@ function ServiceRow({
               maxLength={NAME_MAX}
               disabled={readOnly}
               onChange={(e) => setName(e.target.value)}
-              onBlur={() => {
-                const next = name.trim();
-                if (!next || next === s.name) {
-                  setName(s.name);
-                  return;
-                }
-                // Re-slug alongside the name while the slug still looks
-                // auto-generated, so hand-picked slugs are never clobbered.
-                const wasAuto =
-                  s.slug.startsWith("new-service-") || s.slug === slugify(s.name, "service");
-                void onSave(s.id, {
-                  name: next,
-                  ...(wasAuto ? { slug: slugify(next, "service") } : {}),
-                });
-              }}
               className={inputCls}
             />
           </Field>
@@ -253,32 +319,60 @@ function ServiceRow({
               maxLength={DSC_MAX}
               disabled={readOnly}
               onChange={(e) => setDsc(e.target.value)}
-              onBlur={() => {
-                const next = dsc.trim();
-                if (!next) {
-                  setDsc(s.dsc); // backend rejects an empty description
-                  return;
-                }
-                if (next !== s.dsc) void onSave(s.id, { dsc: next });
-              }}
               className={cn(inputCls, "min-h-16 resize-y")}
             />
           </Field>
 
           <Field label="Feature tags">
             <TagsInput
-              tags={s.features}
-              onChange={(features) => {
+              tags={features}
+              onChange={(next) => {
                 if (readOnly) return;
-                if (features.length > 12) {
+                if (next.length > 12) {
                   toast("Up to 12 feature tags per service");
                   return;
                 }
-                void onSave(s.id, { features });
+                setFeatures(next);
               }}
               placeholder="Add a feature, press Enter…"
             />
           </Field>
+
+          <Field label="Bullet point">
+            <div className="flex flex-col gap-1.5">
+              <Segmented
+                size="sm"
+                label={`Bullet style for ${s.name}`}
+                options={BULLET_STYLE_OPTIONS}
+                value={bulletStyle}
+                disabled={readOnly}
+                onChange={setBulletStyle}
+              />
+              <span className="text-ui-micro text-zup-faint">
+                What sits in front of each feature line — a tick, a round dot, or
+                nothing at all.
+              </span>
+            </div>
+          </Field>
+
+          {!readOnly ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <BtnPrimary onClick={() => void saveCard()} disabled={!dirty || !valid || saving}>
+                {saving ? "Saving…" : "Save card"}
+              </BtnPrimary>
+              {dirty ? (
+                <>
+                  <BtnGhost onClick={undo}>Undo</BtnGhost>
+                  <span className="text-ui-sm text-zup-soft">Not saved yet</span>
+                </>
+              ) : null}
+              {dirty && !valid ? (
+                <span className="text-ui-sm font-semibold text-warn-fg">
+                  Name and description are required
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {!readOnly ? (
@@ -308,6 +402,16 @@ function ServiceRow({
             />
           </div>
         ) : null}
+        </div>
+
+        {/* The card itself, not a mock-up of it — ServiceCardView is the same
+            component the home page renders, so the two cannot drift. */}
+        <div className="w-full lg:w-[420px] lg:flex-none xl:w-[520px]">
+          <p className="mb-2 text-ui-micro font-bold uppercase tracking-[0.06em] text-zup-soft">
+            How it looks on the site
+          </p>
+          <ServiceCardView service={draft} unoptimizedImage className="shadow-sm" />
+        </div>
       </div>
     </div>
   );
@@ -392,7 +496,7 @@ function ServiceImageSlot({
         />
       </div>
       <p className="max-w-28 text-ui-micro leading-tight text-zup-faint">
-        {caption ?? `Square, 800×800+. ${IMAGE_FORMATS_LABEL}, under 8 MB.`}
+        {caption ?? `Landscape 4:3, 1200×900+. ${IMAGE_FORMATS_LABEL}, under 8 MB.`}
       </p>
     </div>
   );

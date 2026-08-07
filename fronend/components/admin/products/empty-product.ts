@@ -12,9 +12,9 @@ export function emptyDraftProduct(): AdminProduct {
     sku: "", // assigned by the server on create
     price: 0,
     cost: 0,
-    minDp: 0,
+    minDeposit: 0,
     onSale: false,
-    salePercentage: 0,
+    salePrice: 0,
     deliveryFeeInsideDhaka: 0,
     deliveryFeeOutsideDhaka: 0,
     installationFeeInsideDhaka: 0,

@@ -20,22 +20,23 @@ import type {
   LeadStatus,
   OrderEventKind,
   OrderStatus,
-  PageHeroMode,
   PoStatus,
+  ServiceBulletStyle,
+  ServiceImageSide,
   WarrantyStatus,
 } from "../lib/rules";
 
-/** A "buy N+, save X%" tier — see rules.ts `bestQuantityOffer`. */
+/** A "buy N+, take ৳X off each unit" tier — see rules.ts `bestQuantityOffer`. */
 export interface QuantityOfferDto {
   minQty: number;
-  percentage: number;
+  amount: number;
 }
 
-/** A "buy N+, X% off delivery" tier — see rules.ts `deliveryDiscountPercent`.
- *  100 means the line ships free at that quantity. */
+/** A "buy N+, take ৳X off delivery" tier — see rules.ts
+ *  `deliveryDiscountAmount`. An amount at or above the zone fee ships free. */
 export interface FreeDeliveryOfferDto {
   minQty: number;
-  percentage: number;
+  amount: number;
 }
 
 export interface PublicProductDto {
@@ -47,10 +48,9 @@ export interface PublicProductDto {
   categoryLogo: string; // Category.svgLogo, "" = none
   section: string; // Section.name — the storefront's top-level filter
   price: number;
-  minDp: number;
+  minDeposit: number; // BDT, display-only
   onSale: boolean;
-  salePercentage: number;
-  salePrice: number; // price after discount; equals price when onSale is false
+  salePrice: number; // what the customer pays; equals price when not on sale
   quantityOffers: QuantityOfferDto[]; // "buy N+, save X%" tiers, ordered by minQty ascending
   deliveryFeeInsideDhaka: number; // BDT, per unit
   deliveryFeeOutsideDhaka: number; // BDT, per unit
@@ -248,11 +248,6 @@ export interface CustomerProfileDto {
   insideDhaka: boolean;
 }
 
-/** A signed-in customer's synced cart — GET/PUT /api/cart. */
-export interface CartDto {
-  items: { productId: string; qty: number }[];
-}
-
 export interface ContactMessageDto {
   id: string;
   name: string;
@@ -268,30 +263,12 @@ export interface LeadDto {
   serviceId: string;
   service: string; // resolved Service.name — what the admin table renders
   customer: string;
-  city: string;
+  address: string;
   phone: string;
+  email: string;
   notes: string;
   status: LeadStatus;
   createdAt: string;
-}
-
-/** One poster in a hero's rotation. */
-export interface HeroPosterDto {
-  id: string;
-  image: string;
-  alt: string;
-  href: string;
-  sort: number;
-}
-
-/** A page's hero art. Served to both the storefront and the admin — there is
- *  nothing staff-only about it, so one shape covers both. */
-export interface PageHeroDto {
-  pageKey: string;
-  mode: PageHeroMode;
-  background: string;
-  overlay: number;
-  posters: HeroPosterDto[];
 }
 
 /** A campaign page as the admin list renders it. `productName`/`productSlug`
@@ -340,7 +317,6 @@ export interface PublicLandingPageDto {
   offerPrice: number;
   compareAtPrice: number;
   /** Derived server-side so the page and the ad creative can't disagree. */
-  discountPercentage: number;
   /** compareAtPrice − offerPrice, 0 when there's nothing to compare against.
    *  Derived here for the same reason: the page renders it, never recomputes it. */
   youSave: number;
@@ -404,9 +380,27 @@ export interface ServiceDto {
   /** Display order. Exposed so the admin can reorder by swapping two rows'
    *  values — array position alone isn't enough when sort values are sparse. */
   sort: number;
+  /** Which half of the 50/50 storefront card the photo takes. */
+  imageSide: ServiceImageSide;
+  /** The marker in front of each feature line. */
+  bulletStyle: ServiceBulletStyle;
 }
 
 export type IndustrialServiceDto = ServiceDto;
+
+/** The home page's showcase cards. Same shape, different table — the storefront
+ *  renders all three catalogues through one card component. */
+export type ShowcaseCardDto = ServiceDto;
+
+/** A person on the contact page. */
+export interface TeamMemberDto {
+  id: string;
+  name: string;
+  role: string;
+  bio: string;
+  photo: string;
+  sort: number;
+}
 
 export interface CategoryDto {
   id: string;

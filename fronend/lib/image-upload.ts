@@ -2,15 +2,16 @@
  * Client-side guards for admin image uploads.
  *
  * The real enforcement is server-side (Elysia `t.File({ type: "image",
- * maxSize })` on the route, then the media-storage service's own MIME
- * allowlist), but failing here gives the admin a useful message instead of an
- * opaque 415/422 after a long upload.
+ * maxSize })` on the route, then the MIME allowlist and magic-byte sniffing in
+ * backend/src/lib/media-validate.ts), but failing here gives the admin a
+ * useful message instead of an opaque 415/422 after a long upload.
  *
- * Kept in sync with storage/.env's ALLOWED_IMAGE_MIME_TYPES.
+ * Kept in sync with ACCEPTED in backend/src/lib/media-validate.ts.
  */
 
-/** Raster formats the media-storage service will accept. It rasterizes what it
- *  stores, so SVG is rejected — that's why `accept="image/*"` isn't enough. */
+/** Raster formats the backend accepts. SVG is rejected — it is markup, and an
+ *  uploaded one is an XSS sink; that's why `accept="image/*"` isn't enough.
+ *  Category logos take SVG *markup* through a sanitizer instead. */
 export const ACCEPTED_IMAGE_TYPES = [
   "image/jpeg",
   "image/png",

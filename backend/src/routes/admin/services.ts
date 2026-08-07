@@ -7,7 +7,7 @@ import {
 import { prisma } from "../../lib/db";
 import { conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
-import { toIndustrialService, toService } from "../../lib/serialize";
+import { toIndustrialService, toService, toShowcaseCard } from "../../lib/serialize";
 import { deleteMediaByUrl, uploadMedia } from "../../lib/storage";
 import { staffGuard } from "./guard";
 
@@ -166,6 +166,77 @@ export const adminServices = new Elysia({
       });
       if (existing.image) await deleteMediaByUrl(existing.image);
       return toIndustrialService(service);
+    },
+    { body: uploadServiceImageDto },
+  )
+
+  /* ===== Showcase cards (home page only, nothing books them) ===== */
+
+  .get("/admin/api/showcase-cards", async ({ staffCtx }) => {
+    assertCan(staffCtx, "sitecontent", "view");
+    const cards = await prisma.showcaseCard.findMany({ orderBy: { sort: "asc" } });
+    return cards.map(toShowcaseCard);
+  })
+
+  .post(
+    "/admin/api/showcase-cards",
+    async ({ body, staffCtx, set }) => {
+      assertCan(staffCtx, "sitecontent", "manage");
+      const clash = await prisma.showcaseCard.findUnique({ where: { slug: body.slug } });
+      if (clash) throw conflict(`Slug "${body.slug}" is already in use`);
+
+      const card = await prisma.showcaseCard.create({ data: body });
+      set.status = 201;
+      return toShowcaseCard(card);
+    },
+    { body: createServiceDto },
+  )
+
+  .patch(
+    "/admin/api/showcase-cards/:id",
+    async ({ params, body, staffCtx }) => {
+      assertCan(staffCtx, "sitecontent", "manage");
+      const existing = await prisma.showcaseCard.findUnique({ where: { id: params.id } });
+      if (!existing) throw notFound("Showcase card");
+
+      if (body.slug && body.slug !== existing.slug) {
+        const clash = await prisma.showcaseCard.findUnique({ where: { slug: body.slug } });
+        if (clash) throw conflict(`Slug "${body.slug}" is already in use`);
+      }
+
+      const card = await prisma.showcaseCard.update({ where: { id: params.id }, data: body });
+      return toShowcaseCard(card);
+    },
+    { body: updateServiceDto },
+  )
+
+  // No "still has enquiries" guard like the bookable catalogue has: a showcase
+  // card is never the target of a lead, so there is nothing to orphan.
+  .delete("/admin/api/showcase-cards/:id", async ({ params, staffCtx }) => {
+    assertCan(staffCtx, "sitecontent", "manage");
+    const existing = await prisma.showcaseCard.findUnique({ where: { id: params.id } });
+    if (!existing) throw notFound("Showcase card");
+
+    await prisma.showcaseCard.delete({ where: { id: params.id } });
+    if (existing.image) await deleteMediaByUrl(existing.image);
+    return { ok: true };
+  })
+
+  .post(
+    "/admin/api/showcase-cards/:id/image",
+    async ({ params, body, staffCtx }) => {
+      assertCan(staffCtx, "sitecontent", "manage");
+      const existing = await prisma.showcaseCard.findUnique({ where: { id: params.id } });
+      if (!existing) throw notFound("Showcase card");
+
+      const media = await uploadMedia(body.file, "showcasecard", existing.id, 0);
+
+      const card = await prisma.showcaseCard.update({
+        where: { id: existing.id },
+        data: { image: media.url },
+      });
+      if (existing.image) await deleteMediaByUrl(existing.image);
+      return toShowcaseCard(card);
     },
     { body: uploadServiceImageDto },
   );

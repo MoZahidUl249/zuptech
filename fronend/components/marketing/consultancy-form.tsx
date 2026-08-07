@@ -2,14 +2,8 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { CalendarCheck, UserCog, FileText } from "lucide-react";
 import { submitLead } from "@/lib/api";
-
-const perks = [
-  { icon: CalendarCheck, label: "Callback within 1 working day" },
-  { icon: UserCog, label: "Senior engineer, not a call centre" },
-  { icon: FileText, label: "Scoped written proposal" },
-];
+import { cn } from "@/lib/utils";
 
 /** Bookable services, resolved by the page from GET /api/services. The ids
  *  are real Service.id values — POST /api/leads 404s on anything else, which
@@ -19,13 +13,34 @@ export interface ConsultancyFormOption {
   title: string;
 }
 
-export function ConsultancyForm({ options = [] }: { options?: ConsultancyFormOption[] }) {
+export function ConsultancyForm({
+  options = [],
+  serviceId: controlledServiceId,
+  onServiceIdChange,
+  anchorId = "book",
+  compact,
+}: {
+  options?: ConsultancyFormOption[];
+  /** Supply both to drive the selection from outside — the service cards above
+   *  the form set it when their booking button is pressed. Left out, the form
+   *  owns the selection as it always did. */
+  serviceId?: string;
+  onServiceIdChange?: (id: string) => void;
+  /** Scroll target. Overridable because the home page renders this form and
+   *  the industrial one on the same document, and two `id="book"` is invalid
+   *  HTML — `getElementById` would only ever find the first. */
+  anchorId?: string;
+  /** Single column, no pitch panel — for a half-width slot like the home
+   *  page's form pair, where the two-panel card would fold to ~180px halves. */
+  compact?: boolean;
+}) {
   const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [city, setCity] = useState("");
-  const [serviceId, setServiceId] = useState(options[0]?.id ?? "");
+  const [address, setAddress] = useState("");
+  const [ownServiceId, setOwnServiceId] = useState(options[0]?.id ?? "");
+  const serviceId = controlledServiceId ?? ownServiceId;
+  const setServiceId = onServiceIdChange ?? setOwnServiceId;
   const [details, setDetails] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -48,15 +63,10 @@ export function ConsultancyForm({ options = [] }: { options?: ConsultancyFormOpt
       await submitLead({
         serviceId,
         customer: name.trim(),
-        city: city.trim() || "Not given",
         phone: phone.trim(),
-        notes: [
-          company.trim() ? `Company: ${company.trim()}` : null,
-          email.trim() ? `Email: ${email.trim()}` : null,
-          details.trim() || null,
-        ]
-          .filter(Boolean)
-          .join(" — "),
+        email: email.trim(),
+        address: address.trim(),
+        notes: details.trim(),
       });
       setSent(true);
     } catch {
@@ -67,31 +77,30 @@ export function ConsultancyForm({ options = [] }: { options?: ConsultancyFormOpt
   };
 
   return (
-    <div className="grid grid-cols-1 gap-0 overflow-hidden rounded-3xl border border-zup-body/6 md:grid-cols-2">
-      <div className="flex flex-col gap-5 px-6 py-8 sm:px-9 sm:py-10">
-        <div>
-          <span className="text-xs font-bold uppercase tracking-[0.14em] text-zup-orange">
-            Book a consultation
-          </span>
-          <h2 className="mt-2 text-[26px] font-bold tracking-[-0.02em]">Try Our Consultancy</h2>
-          <p className="mt-2 text-[14.5px] leading-relaxed text-zup-gray">
-            Tell us about your site and load profile. A senior engineer calls you back within
-            one working day.
-          </p>
-          <div className="mt-3 h-[3px] w-14 rounded-full bg-zup-orange" aria-hidden />
-        </div>
-        <div className="flex flex-col gap-3">
-          {perks.map((perk) => (
-            <div key={perk.label} className="flex items-center gap-2.5 text-[13.5px] font-semibold text-zup-mid">
-              <perk.icon className="h-4 w-4 flex-none text-zup-orange" strokeWidth={2} aria-hidden />
-              {perk.label}
-            </div>
-          ))}
-        </div>
+    // One column, always. This used to be a two-panel card with a pitch —
+    // eyebrow, standfirst, three promises — filling the half beside the fields.
+    // With that copy gone there is nothing to put there, and a form with an
+    // empty panel next to it looks broken rather than spacious. `compact` now
+    // only trims the scale for the home page's narrower slot.
+    <div
+      id={anchorId}
+      className={cn(
+        "flex scroll-mt-24 flex-col overflow-hidden rounded-3xl border border-zup-body/6 bg-white",
+        !compact && "mx-auto max-w-[620px]",
+      )}
+    >
+      <div className={cn("px-6 pt-7 sm:px-8", !compact && "sm:px-9 sm:pt-9")}>
+        <h2 className={cn("font-bold tracking-[-0.02em]", compact ? "text-[22px]" : "text-[26px]")}>
+          Book our services
+        </h2>
+        <div className="mt-3 h-[3px] w-14 rounded-full bg-zup-orange" aria-hidden />
       </div>
 
       <form
-        className="flex flex-col gap-4 bg-[#FAFBFC] px-6 py-8 sm:px-9 sm:py-10"
+        className={cn(
+          "flex flex-col gap-4 px-6 py-7 sm:px-8",
+          !compact && "sm:px-9 sm:py-8",
+        )}
         onSubmit={(e) => {
           e.preventDefault();
           if (!busy && !sent) void submit();
@@ -117,14 +126,6 @@ export function ConsultancyForm({ options = [] }: { options?: ConsultancyFormOpt
                 className={inputCls}
               />
             </Field>
-            <Field label="Company">
-              <input
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                placeholder="Organisation"
-                className={inputCls}
-              />
-            </Field>
             <Field label="Phone">
               <input
                 value={phone}
@@ -135,20 +136,12 @@ export function ConsultancyForm({ options = [] }: { options?: ConsultancyFormOpt
                 className={inputCls}
               />
             </Field>
-            <Field label="Email">
+            <Field label="Email (optional)">
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 type="email"
-                className={inputCls}
-              />
-            </Field>
-            <Field label="City">
-              <input
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="Where is the site?"
                 className={inputCls}
               />
             </Field>
@@ -175,11 +168,19 @@ export function ConsultancyForm({ options = [] }: { options?: ConsultancyFormOpt
                 </select>
               )}
             </Field>
-            <Field label="Site & load details">
+            <Field label="Address">
+              <input
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Where is the site?"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Details">
               <textarea
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
-                placeholder="Location, connected load, timeline…"
+                placeholder="Anything we should know before we call"
                 rows={3}
                 className={`${inputCls} resize-y`}
               />
@@ -189,7 +190,7 @@ export function ConsultancyForm({ options = [] }: { options?: ConsultancyFormOpt
               disabled={busy || unavailable}
               className="mt-1 min-h-13 rounded-full bg-zup-orange text-sm font-bold uppercase tracking-[0.03em] text-white shadow-[0_8px_22px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark disabled:opacity-60"
             >
-              {busy ? "Sending…" : "Book a Consultation →"}
+              {busy ? "Sending…" : "Book our services →"}
             </button>
           </>
         )}

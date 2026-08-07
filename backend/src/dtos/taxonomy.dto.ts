@@ -27,7 +27,7 @@ export const updateCategoryDto = t.Partial(t.Object(categoryFields));
 
 /**
  * Category logos are SVG markup stored on the row, not files on the
- * media-storage service (which only takes raster formats and rasterizes what
+ * media pipeline (Cloudinary, which only takes raster formats and rasterizes what
  * it stores). `""` clears the logo. The markup is validated and rejected if it
  * carries anything active — see `sanitizeSvgLogo` in lib/rules.ts.
  */

@@ -102,60 +102,63 @@ const categories = [
 // the seed doesn't depend on cuids that differ between environments.
 // prettier-ignore
 const products = [
-  { id: "ips1000", slug: "1000va-ips-battery-combo", name: "1000VA IPS + Battery Combo", category: "Backup", price: 42500, minDp: 20, rating: 4.7, sold: 312, imgHint: "IPS unit photo", specs: ["1000VA / 800W pure sine-wave output", "Includes 100Ah tubular battery", "6–8 hr backup for fans, lights & Wi-Fi", "1-year service warranty, Dhaka-wide install"], description: "A complete home backup package: a 1000VA pure sine-wave IPS paired with a 100Ah tubular battery, sized to run fans, lights and Wi-Fi for 6–8 hours per outage. Installed Dhaka-wide with a 1-year service warranty.", video: "https://www.youtube.com/watch?v=ips1000demo", sku: "ZT-IPS-1000", cost: 34000, stock: 14, reserved: 2, reorderAt: 5, visible: true, deliveryFeeInsideDhaka: 150, deliveryFeeOutsideDhaka: 350, installationFeeInsideDhaka: 500, installationFeeOutsideDhaka: 800, warrantyMonths: 12 },
-  { id: "solar500", slug: "solar-home-system-500w", name: "Solar Home System 500W", category: "Solar", price: 55000, minDp: 25, rating: 4.8, sold: 189, imgHint: "solar panel kit photo", specs: ["500W mono panels + hybrid inverter", "Runs TV, lights, fans daytime free", "Net-metering ready", "Installed by certified engineers"], description: "A 500W monocrystalline solar home system with hybrid inverter — run your TV, lights and fans on free daytime power. Net-metering ready and installed end-to-end by certified ZUP TECH engineers.", sku: "ZT-SHS-500", cost: 45000, stock: 8, reserved: 1, reorderAt: 4, visible: true, deliveryFeeInsideDhaka: 300, deliveryFeeOutsideDhaka: 600, installationFeeInsideDhaka: 1500, installationFeeOutsideDhaka: 2500, warrantyMonths: 60 },
-  { id: "stab30", slug: "3-phase-voltage-stabilizer-30kva", name: "3-Phase Voltage Stabilizer 30 kVA", category: "Protection", price: 92000, minDp: 30, rating: 4.6, sold: 74, imgHint: "stabilizer photo", specs: ["Servo type, 30 kVA, 3-phase", "Input range 280–460V", "Protects CNC, compressors, chillers", "On-site commissioning included"], description: "Servo-type 30 kVA three-phase voltage stabilizer with a wide 280–460V input range. Protects sensitive industrial machinery — CNC machines, compressors and chillers — with on-site commissioning included.", sku: "ZT-STB-30K", cost: 76000, stock: 3, reserved: 0, reorderAt: 3, visible: true, deliveryFeeInsideDhaka: 800, deliveryFeeOutsideDhaka: 1800, installationFeeInsideDhaka: 3000, installationFeeOutsideDhaka: 5000, warrantyMonths: 24 },
-  { id: "trafo200", slug: "200kva-distribution-transformer", name: "200 kVA Distribution Transformer", category: "Switchgear", price: 485000, minDp: 40, rating: 4.9, sold: 41, imgHint: "transformer photo", specs: ["11/0.415 kV, 200 kVA, ONAN", "BSTI & REB spec compliant", "Copper wound, low-loss core", "Delivery + crane placement included"], description: "An 11/0.415 kV, 200 kVA ONAN distribution transformer built to BSTI and REB specifications. Copper wound with a low-loss core — delivery and crane placement are included in the price.", sku: "ZT-TRF-200", cost: 410000, stock: 2, reserved: 1, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 3000, deliveryFeeOutsideDhaka: 8000, installationFeeInsideDhaka: 10000, installationFeeOutsideDhaka: 18000, warrantyMonths: 60 },
-  { id: "panelLT", slug: "lt-switchgear-panel-custom", name: "LT Switchgear Panel (Custom)", category: "Switchgear", price: 145000, minDp: 35, rating: 4.7, sold: 58, imgHint: "LT panel photo", specs: ["Custom-built to your load schedule", "Reputed-brand breakers & meters", "Powder-coated IP54 enclosure", "Drawings approved before build"], description: "A low-tension switchgear panel custom-built to your exact load schedule, using reputed-brand breakers and meters in a powder-coated IP54 enclosure. You approve the drawings before we build.", sku: "ZT-PNL-LT", cost: 112000, stock: 5, reserved: 0, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 1000, deliveryFeeOutsideDhaka: 2500, installationFeeInsideDhaka: 4000, installationFeeOutsideDhaka: 7000, warrantyMonths: 24 },
-  { id: "solar10k", slug: "industrial-solar-kit-10kw", name: "Industrial Solar Kit 10 kW", category: "Solar", price: 620000, minDp: 40, rating: 4.8, sold: 23, imgHint: "rooftop solar photo", specs: ["10 kW on-grid, tier-1 panels", "Payback typically under 4 years", "Full EPC: design → commissioning", "Generation monitoring app"], description: "A 10 kW on-grid industrial solar kit with tier-1 panels and full EPC delivery — design through commissioning — plus a generation monitoring app. Payback is typically under 4 years.", sku: "ZT-SOL-10K", cost: 520000, stock: 4, reserved: 1, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 2000, deliveryFeeOutsideDhaka: 5000, installationFeeInsideDhaka: 15000, installationFeeOutsideDhaka: 25000, warrantyMonths: 60 },
-  { id: "ats63", slug: "automatic-transfer-switch-63a", name: "Automatic Transfer Switch 63A", category: "Backup", price: 12800, minDp: 10, rating: 4.5, sold: 146, imgHint: "ATS photo", specs: ["Seamless mains ↔ generator switching", "63A, 2-pole, DIN mount", "Under 20ms transfer time", "Installation service available"], description: "A 63A two-pole automatic transfer switch for seamless switching between mains and generator power, with under-20ms transfer time. DIN-mount design; professional installation available.", sku: "ZT-ATS-63", cost: 10500, stock: 0, reserved: 0, reorderAt: 6, visible: false, deliveryFeeInsideDhaka: 100, deliveryFeeOutsideDhaka: 250, installationFeeInsideDhaka: 300, installationFeeOutsideDhaka: 500, warrantyMonths: 12 },
-  { id: "vprot", slug: "voltage-protector-220v-40a", name: "Voltage Protector 220V 40A", category: "Protection", price: 1650, minDp: 10, rating: 4.6, sold: 921, imgHint: "voltage protector photo", specs: ["Cuts off on high/low voltage", "Protects fridge, AC, TV", "Auto-reconnect with delay", "Plug-and-play install"], description: "A 220V 40A voltage protector that cuts power instantly on dangerous high or low voltage, protecting your fridge, AC and TV. Auto-reconnects with a safe delay — plug-and-play installation.", sku: "ZT-VPR-40", cost: 1100, stock: 230, reserved: 12, reorderAt: 50, visible: true, deliveryFeeInsideDhaka: 60, deliveryFeeOutsideDhaka: 150, installationFeeInsideDhaka: 0, installationFeeOutsideDhaka: 0, warrantyMonths: 12 },
-  { id: "flood100", slug: "led-flood-light-100w-ip66", name: "LED Flood Light 100W IP66", category: "Lighting", price: 2400, minDp: 10, rating: 4.4, sold: 534, imgHint: "flood light photo", specs: ["100W, 10,000 lumen, 6500K", "IP66 weatherproof", "50,000 hr lifespan", "2-year replacement warranty"], description: "A 100W LED flood light delivering 10,000 lumens at 6500K in an IP66 weatherproof housing. Rated for 50,000 hours and backed by a 2-year replacement warranty.", sku: "ZT-FLD-100", cost: 1700, stock: 96, reserved: 4, reorderAt: 30, visible: true, deliveryFeeInsideDhaka: 80, deliveryFeeOutsideDhaka: 200, installationFeeInsideDhaka: 100, installationFeeOutsideDhaka: 200, warrantyMonths: 24 },
-  { id: "mccb400", slug: "mccb-breaker-400a-3-pole", name: "MCCB Breaker 400A 3-Pole", category: "Protection", price: 18500, minDp: 15, rating: 4.7, sold: 203, imgHint: "MCCB photo", specs: ["400A frame, 36kA breaking capacity", "Adjustable thermal-magnetic trip", "Panel or DIN mounting", "Genuine, with test certificate"], description: "A genuine 400A three-pole MCCB with 36kA breaking capacity and adjustable thermal-magnetic trip. Suitable for panel or DIN mounting, supplied with test certificate.", sku: "ZT-MCB-400", cost: 14200, stock: 41, reserved: 0, reorderAt: 10, visible: true, deliveryFeeInsideDhaka: 150, deliveryFeeOutsideDhaka: 400, installationFeeInsideDhaka: 400, installationFeeOutsideDhaka: 700, warrantyMonths: 12 },
+  { id: "ips1000", slug: "1000va-ips-battery-combo", name: "1000VA IPS + Battery Combo", category: "Backup", price: 42500, minDeposit: 8500, rating: 4.7, sold: 312, imgHint: "IPS unit photo", specs: ["1000VA / 800W pure sine-wave output", "Includes 100Ah tubular battery", "6–8 hr backup for fans, lights & Wi-Fi", "1-year service warranty, Dhaka-wide install"], description: "A complete home backup package: a 1000VA pure sine-wave IPS paired with a 100Ah tubular battery, sized to run fans, lights and Wi-Fi for 6–8 hours per outage. Installed Dhaka-wide with a 1-year service warranty.", video: "https://www.youtube.com/watch?v=ips1000demo", sku: "ZT-IPS-1000", cost: 34000, stock: 14, reserved: 2, reorderAt: 5, visible: true, deliveryFeeInsideDhaka: 150, deliveryFeeOutsideDhaka: 350, installationFeeInsideDhaka: 500, installationFeeOutsideDhaka: 800, warrantyMonths: 12 },
+  { id: "solar500", slug: "solar-home-system-500w", name: "Solar Home System 500W", category: "Solar", price: 55000, minDeposit: 13750, rating: 4.8, sold: 189, imgHint: "solar panel kit photo", specs: ["500W mono panels + hybrid inverter", "Runs TV, lights, fans daytime free", "Net-metering ready", "Installed by certified engineers"], description: "A 500W monocrystalline solar home system with hybrid inverter — run your TV, lights and fans on free daytime power. Net-metering ready and installed end-to-end by certified ZUP TECH engineers.", sku: "ZT-SHS-500", cost: 45000, stock: 8, reserved: 1, reorderAt: 4, visible: true, deliveryFeeInsideDhaka: 300, deliveryFeeOutsideDhaka: 600, installationFeeInsideDhaka: 1500, installationFeeOutsideDhaka: 2500, warrantyMonths: 60 },
+  { id: "stab30", slug: "3-phase-voltage-stabilizer-30kva", name: "3-Phase Voltage Stabilizer 30 kVA", category: "Protection", price: 92000, minDeposit: 27600, rating: 4.6, sold: 74, imgHint: "stabilizer photo", specs: ["Servo type, 30 kVA, 3-phase", "Input range 280–460V", "Protects CNC, compressors, chillers", "On-site commissioning included"], description: "Servo-type 30 kVA three-phase voltage stabilizer with a wide 280–460V input range. Protects sensitive industrial machinery — CNC machines, compressors and chillers — with on-site commissioning included.", sku: "ZT-STB-30K", cost: 76000, stock: 3, reserved: 0, reorderAt: 3, visible: true, deliveryFeeInsideDhaka: 800, deliveryFeeOutsideDhaka: 1800, installationFeeInsideDhaka: 3000, installationFeeOutsideDhaka: 5000, warrantyMonths: 24 },
+  { id: "trafo200", slug: "200kva-distribution-transformer", name: "200 kVA Distribution Transformer", category: "Switchgear", price: 485000, minDeposit: 194000, rating: 4.9, sold: 41, imgHint: "transformer photo", specs: ["11/0.415 kV, 200 kVA, ONAN", "BSTI & REB spec compliant", "Copper wound, low-loss core", "Delivery + crane placement included"], description: "An 11/0.415 kV, 200 kVA ONAN distribution transformer built to BSTI and REB specifications. Copper wound with a low-loss core — delivery and crane placement are included in the price.", sku: "ZT-TRF-200", cost: 410000, stock: 2, reserved: 1, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 3000, deliveryFeeOutsideDhaka: 8000, installationFeeInsideDhaka: 10000, installationFeeOutsideDhaka: 18000, warrantyMonths: 60 },
+  { id: "panelLT", slug: "lt-switchgear-panel-custom", name: "LT Switchgear Panel (Custom)", category: "Switchgear", price: 145000, minDeposit: 50750, rating: 4.7, sold: 58, imgHint: "LT panel photo", specs: ["Custom-built to your load schedule", "Reputed-brand breakers & meters", "Powder-coated IP54 enclosure", "Drawings approved before build"], description: "A low-tension switchgear panel custom-built to your exact load schedule, using reputed-brand breakers and meters in a powder-coated IP54 enclosure. You approve the drawings before we build.", sku: "ZT-PNL-LT", cost: 112000, stock: 5, reserved: 0, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 1000, deliveryFeeOutsideDhaka: 2500, installationFeeInsideDhaka: 4000, installationFeeOutsideDhaka: 7000, warrantyMonths: 24 },
+  { id: "solar10k", slug: "industrial-solar-kit-10kw", name: "Industrial Solar Kit 10 kW", category: "Solar", price: 620000, minDeposit: 248000, rating: 4.8, sold: 23, imgHint: "rooftop solar photo", specs: ["10 kW on-grid, tier-1 panels", "Payback typically under 4 years", "Full EPC: design → commissioning", "Generation monitoring app"], description: "A 10 kW on-grid industrial solar kit with tier-1 panels and full EPC delivery — design through commissioning — plus a generation monitoring app. Payback is typically under 4 years.", sku: "ZT-SOL-10K", cost: 520000, stock: 4, reserved: 1, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 2000, deliveryFeeOutsideDhaka: 5000, installationFeeInsideDhaka: 15000, installationFeeOutsideDhaka: 25000, warrantyMonths: 60 },
+  { id: "ats63", slug: "automatic-transfer-switch-63a", name: "Automatic Transfer Switch 63A", category: "Backup", price: 12800, minDeposit: 1280, rating: 4.5, sold: 146, imgHint: "ATS photo", specs: ["Seamless mains ↔ generator switching", "63A, 2-pole, DIN mount", "Under 20ms transfer time", "Installation service available"], description: "A 63A two-pole automatic transfer switch for seamless switching between mains and generator power, with under-20ms transfer time. DIN-mount design; professional installation available.", sku: "ZT-ATS-63", cost: 10500, stock: 0, reserved: 0, reorderAt: 6, visible: false, deliveryFeeInsideDhaka: 100, deliveryFeeOutsideDhaka: 250, installationFeeInsideDhaka: 300, installationFeeOutsideDhaka: 500, warrantyMonths: 12 },
+  { id: "vprot", slug: "voltage-protector-220v-40a", name: "Voltage Protector 220V 40A", category: "Protection", price: 1650, minDeposit: 165, rating: 4.6, sold: 921, imgHint: "voltage protector photo", specs: ["Cuts off on high/low voltage", "Protects fridge, AC, TV", "Auto-reconnect with delay", "Plug-and-play install"], description: "A 220V 40A voltage protector that cuts power instantly on dangerous high or low voltage, protecting your fridge, AC and TV. Auto-reconnects with a safe delay — plug-and-play installation.", sku: "ZT-VPR-40", cost: 1100, stock: 230, reserved: 12, reorderAt: 50, visible: true, deliveryFeeInsideDhaka: 60, deliveryFeeOutsideDhaka: 150, installationFeeInsideDhaka: 0, installationFeeOutsideDhaka: 0, warrantyMonths: 12 },
+  { id: "flood100", slug: "led-flood-light-100w-ip66", name: "LED Flood Light 100W IP66", category: "Lighting", price: 2400, minDeposit: 240, rating: 4.4, sold: 534, imgHint: "flood light photo", specs: ["100W, 10,000 lumen, 6500K", "IP66 weatherproof", "50,000 hr lifespan", "2-year replacement warranty"], description: "A 100W LED flood light delivering 10,000 lumens at 6500K in an IP66 weatherproof housing. Rated for 50,000 hours and backed by a 2-year replacement warranty.", sku: "ZT-FLD-100", cost: 1700, stock: 96, reserved: 4, reorderAt: 30, visible: true, deliveryFeeInsideDhaka: 80, deliveryFeeOutsideDhaka: 200, installationFeeInsideDhaka: 100, installationFeeOutsideDhaka: 200, warrantyMonths: 24 },
+  { id: "mccb400", slug: "mccb-breaker-400a-3-pole", name: "MCCB Breaker 400A 3-Pole", category: "Protection", price: 18500, minDeposit: 2775, rating: 4.7, sold: 203, imgHint: "MCCB photo", specs: ["400A frame, 36kA breaking capacity", "Adjustable thermal-magnetic trip", "Panel or DIN mounting", "Genuine, with test certificate"], description: "A genuine 400A three-pole MCCB with 36kA breaking capacity and adjustable thermal-magnetic trip. Suitable for panel or DIN mounting, supplied with test certificate.", sku: "ZT-MCB-400", cost: 14200, stock: 41, reserved: 0, reorderAt: 10, visible: true, deliveryFeeInsideDhaka: 150, deliveryFeeOutsideDhaka: 400, installationFeeInsideDhaka: 400, installationFeeOutsideDhaka: 700, warrantyMonths: 12 },
 ];
 
 /* ===== Offer ladders =====
  *
  * Both tier kinds are relations, so they're written after the products exist.
  * Keyed by product id; the highest satisfied minQty wins and tiers never stack
- * (see rules.ts `bestQuantityOffer` / `deliveryDiscountPercent`).
+ * (see rules.ts `bestQuantityOffer` / `deliveryDiscountAmount`). Amounts are
+ * flat BDT: off the unit price for `quantity`, off the zone delivery fee for
+ * `delivery` — where an amount at or above the fee means the line ships free.
  */
 
 const offers: Record<
   string,
   {
-    quantity?: { minQty: number; percentage: number }[];
-    delivery?: { minQty: number; percentage: number }[];
+    quantity?: { minQty: number; amount: number }[];
+    delivery?: { minQty: number; amount: number }[];
   }
 > = {
   // The showcase product: both ladders, so the storefront has something to render.
+  // ৳42,500 list; delivery ৳150 inside Dhaka / ৳350 outside.
   ips1000: {
     quantity: [
-      { minQty: 3, percentage: 5 },
-      { minQty: 5, percentage: 10 },
+      { minQty: 3, amount: 2125 },
+      { minQty: 5, amount: 4250 },
     ],
     delivery: [
-      { minQty: 2, percentage: 50 },
-      { minQty: 5, percentage: 100 },
+      { minQty: 2, amount: 75 },
+      { minQty: 5, amount: 350 }, // ≥ both zone fees: free either way
     ],
   },
   vprot: {
     quantity: [
-      { minQty: 5, percentage: 8 },
-      { minQty: 10, percentage: 12 },
-      { minQty: 25, percentage: 18 },
+      { minQty: 5, amount: 132 },
+      { minQty: 10, amount: 198 },
+      { minQty: 25, amount: 297 },
     ],
-    delivery: [{ minQty: 10, percentage: 100 }],
+    delivery: [{ minQty: 10, amount: 150 }],
   },
   flood100: {
-    quantity: [{ minQty: 4, percentage: 7 }],
-    delivery: [{ minQty: 4, percentage: 100 }],
+    quantity: [{ minQty: 4, amount: 168 }],
+    delivery: [{ minQty: 4, amount: 200 }],
   },
   // Delivery-only ladder — proves the two are independent.
   mccb400: {
     delivery: [
-      { minQty: 2, percentage: 40 },
-      { minQty: 5, percentage: 100 },
+      { minQty: 2, amount: 60 },
+      { minQty: 5, amount: 400 },
     ],
   },
 };
@@ -194,11 +197,11 @@ const orders = [
 
 // `service` is the Service *slug*, resolved to a serviceId at write time.
 const leads = [
-  { id: "l1", service: "industrial-commercial-solar", customer: "Rahim & Co. Textiles", city: "Gazipur", status: "Quoted" },
-  { id: "l2", service: "33-11-kv-substation", customer: "Delta Spinning Mills", city: "Narayanganj", status: "Survey booked" },
-  { id: "l3", service: "fire-protection-detection", customer: "City Tower Ltd.", city: "Dhaka", status: "New" },
-  { id: "l4", service: "on-grid-off-grid-solar", customer: "Kamal Ahmed", city: "Chattogram", status: "Contacted" },
-  { id: "l5", service: "building-management-system", customer: "Meridian Apartments", city: "Dhaka", status: "New" },
+  { id: "l1", service: "industrial-commercial-solar", customer: "Rahim & Co. Textiles", address: "Gazipur", status: "Quoted" },
+  { id: "l2", service: "33-11-kv-substation", customer: "Delta Spinning Mills", address: "Narayanganj", status: "Survey booked" },
+  { id: "l3", service: "fire-protection-detection", customer: "City Tower Ltd.", address: "Dhaka", status: "New" },
+  { id: "l4", service: "on-grid-off-grid-solar", customer: "Kamal Ahmed", address: "Chattogram", status: "Contacted" },
+  { id: "l5", service: "building-management-system", customer: "Meridian Apartments", address: "Dhaka", status: "New" },
 ];
 
 const suppliers = [
@@ -308,6 +311,52 @@ const services = [
   },
 ];
 
+/** A fresh install reads better when the photo alternates sides down the
+ *  column, so the seed derives the side from the card's position rather than
+ *  repeating it on every entry. Set on create only — once a card exists, its
+ *  side is the admin's to choose. */
+const imageSideFor = (sort: number) => (sort % 2 === 0 ? "left" : "right");
+
+/**
+ * The home page's own cards. Seeded as copies of the first four services so a
+ * fresh install's front page reads the same as before the split — but they are
+ * their own rows from that moment on. Editing one changes the home page and
+ * nothing else, which is the entire reason the model exists.
+ */
+const showcaseCards = [
+  {
+    slug: "showcase-lighting-automation",
+    name: "Lighting Automation System",
+    dsc:
+      "Scene-based and scheduled lighting control for offices, factories and homes — occupancy sensors, dimming and daylight harvesting that cut lighting energy use significantly.",
+    features: ["Occupancy sensors", "Scheduling & scenes", "Daylight harvesting", "DALI / KNX"],
+    sort: 0,
+  },
+  {
+    slug: "showcase-substation",
+    name: "33/11/0.45 kV Sub-Station",
+    dsc:
+      "Design, supply, installation, testing and commissioning of 33/11/0.45 kV substations — transformers, switchgear, protection and utility approvals handled end to end.",
+    features: ["Transformers & switchgear", "Protection & metering", "Approvals & testing", "Annual maintenance"],
+    sort: 1,
+  },
+  {
+    slug: "showcase-building-management",
+    name: "Building Management System",
+    dsc: "Centralized monitoring and control of HVAC, power, lifts and utilities — one dashboard for your whole building.",
+    features: ["HVAC control", "Energy dashboards", "Alarms & access", "SCADA integration"],
+    sort: 2,
+  },
+  {
+    slug: "showcase-industrial-solar",
+    name: "Industrial & Commercial Solar",
+    dsc:
+      "Large-scale rooftop and ground-mount solar for factories and commercial sites — full EPC with structural study, financing options and O&M.",
+    features: ["MW-scale EPC", "Structural study", "Financing options", "O&M"],
+    sort: 3,
+  },
+];
+
 // The industrial/EPC catalogue — display-only, not bookable via a lead.
 const industrialServices = [
   {
@@ -342,10 +391,6 @@ const industrialServices = [
 
 const siteConfig = {
   featuredIds: ["ips1000", "solar500", "trafo200", "vprot", "stab30", "solar10k", "flood100", "mccb400"],
-  featuredHeading: "Featured products",
-  servicesHeading: "Our services",
-  servicesSubtitle:
-    "The engineering team behind our shop — designing, building and servicing power systems across Bangladesh.",
   footerDescription: "Power solutions & services company. Makes life simple.",
   phone: "+8801700000000",
   phoneDisplay: "+880 17 0000 0000",
@@ -356,6 +401,14 @@ const siteConfig = {
   city: "Dhaka",
   postalCode: "1213",
   hours: "9am–8pm",
+  // The contact page's office card. Placeholders, same as the phone numbers
+  // above — the client sets the real ones from the admin.
+  officeName: "ZUP TECH Ltd.",
+  warehouseName: "Warehouse & service centre",
+  warehouseAddress: "Plot 00, Tejgaon Industrial Area, Dhaka 1208",
+  hoursWeekday: "Sat – Thu · 9am – 8pm",
+  hoursWeekend: "Friday · Closed",
+  hoursEmergency: "Emergency service · 24/7",
   gtmId: "",
   gtmEnabled: false,
 };
@@ -485,8 +538,9 @@ async function main() {
   for (const service of services) {
     const row = await prisma.service.upsert({
       where: { slug: service.slug },
-      create: service,
-      // image is left alone so an uploaded picture survives a re-seed.
+      create: { ...service, imageSide: imageSideFor(service.sort) },
+      // image is left alone so an uploaded picture survives a re-seed, and
+      // imageSide for the same reason — it is an editorial choice once made.
       update: { name: service.name, dsc: service.dsc, features: service.features, sort: service.sort },
     });
     serviceIds.set(row.slug, row.id);
@@ -494,8 +548,16 @@ async function main() {
   for (const service of industrialServices) {
     await prisma.industrialService.upsert({
       where: { slug: service.slug },
-      create: service,
+      create: { ...service, imageSide: imageSideFor(service.sort) },
       update: { name: service.name, dsc: service.dsc, features: service.features, sort: service.sort },
+    });
+  }
+
+  for (const card of showcaseCards) {
+    await prisma.showcaseCard.upsert({
+      where: { slug: card.slug },
+      create: { ...card, imageSide: imageSideFor(card.sort) },
+      update: { name: card.name, dsc: card.dsc, features: card.features, sort: card.sort },
     });
   }
 

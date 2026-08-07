@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { unwrap } from "@/lib/admin-http";
 import { api } from "@/lib/eden";
 import { emptyState } from "@/lib/admin";
+import type { ServiceBulletStyle, ServiceImageSide } from "@/lib/api";
 import type {
   AdminModule,
   AdminProduct,
@@ -389,67 +390,12 @@ export const patchCategory = (
 
 export const deleteCategory = (id: string) => unwrap(api.admin.api.categories({ id }).delete(), "DELETE /admin/api/categories/:id");
 
-/** Logos are SVG *markup* on the row, not files — the media-storage service
+/** Logos are SVG *markup* on the row, not files — the media pipeline
  *  only takes raster formats. `""` clears it. The backend rejects anything
  *  with active content (script, external refs), so a paste from an untrusted
  *  source fails loudly rather than shipping to the storefront. */
 export const setCategoryLogo = (id: string, svg: string) =>
   unwrap(api.admin.api.categories({ id }).logo.put({ svg }), "PUT /admin/api/categories/:id/logo");
-
-/* ===== Page heroes ===== */
-
-export const PAGE_HERO_KEYS = ["home", "shop", "services", "industrial", "contact"] as const;
-export type PageHeroKey = (typeof PAGE_HERO_KEYS)[number];
-export type PageHeroMode = "plain" | "image" | "posters";
-
-export interface HeroPoster {
-  id: string;
-  image: string;
-  alt: string;
-  href: string;
-  sort: number;
-}
-
-export interface PageHero {
-  pageKey: string;
-  mode: PageHeroMode;
-  background: string;
-  overlay: number;
-  posters: HeroPoster[];
-}
-
-/** Always returns one entry per key — pages never edited come back as
- *  `mode: "plain"`, so the admin renders an editor without a create step. */
-export const getPageHeroes = () => unwrap(api.admin.api["page-heroes"].get(), "GET /admin/api/page-heroes");
-
-
-export const putPageHero = (
-  pageKey: string,
-  body: { mode: PageHeroMode; overlay: number; background?: string },
-) => unwrap(api.admin.api["page-heroes"]({ pageKey }).put(body), "PUT /admin/api/page-heroes/:pageKey");
-
-/** Uploading also switches the hero into the matching mode server-side, so
- *  the admin sees the art immediately instead of an invisible upload. */
-export const uploadHeroBackground = (pageKey: string, file: File) =>
-  unwrap(
-    api.admin.api["page-heroes"]({ pageKey }).background.post({ file }),
-    "POST /admin/api/page-heroes/:pageKey/background",
-  );
-
-export const uploadHeroPoster = (pageKey: string, file: File) =>
-  unwrap(
-    api.admin.api["page-heroes"]({ pageKey }).posters.post({ file }),
-    "POST /admin/api/page-heroes/:pageKey/posters",
-  );
-
-export const patchHeroPoster = (id: string, patch: { alt?: string; href?: string }) =>
-  unwrap(api.admin.api["hero-posters"]({ id }).patch(patch), "PATCH /admin/api/hero-posters/:id");
-
-export const deleteHeroPoster = (id: string) =>
-  unwrap(api.admin.api["hero-posters"]({ id }).delete(), "DELETE /admin/api/hero-posters/:id");
-
-export const reorderHeroPosters = (pageKey: string, ids: string[]) =>
-  unwrap(api.admin.api["page-heroes"]({ pageKey }).posters.order.put({ ids }), "PUT /admin/api/page-heroes/:pageKey/posters/order");
 
 export const putCopy = (copy: SiteCopy) => unwrap(api.admin.api.copy.put(copy), "PUT /admin/api/copy");
 export const putContact = (contact: SiteContact) => unwrap(api.admin.api.contact.put(contact), "PUT /admin/api/contact");
@@ -469,9 +415,9 @@ function productBody(p: AdminProduct) {
     slug: p.slug,
     categoryId: p.categoryId,
     price: p.price,
-    minDp: p.minDp,
+    minDeposit: p.minDeposit,
     onSale: p.onSale,
-    salePercentage: p.salePercentage,
+    salePrice: p.salePrice,
     deliveryFeeInsideDhaka: p.deliveryFeeInsideDhaka,
     deliveryFeeOutsideDhaka: p.deliveryFeeOutsideDhaka,
     installationFeeInsideDhaka: p.installationFeeInsideDhaka,
@@ -494,13 +440,21 @@ function productBody(p: AdminProduct) {
   };
 }
 
+/**
+ * Create a product.
+ *
+ * Deliberately does NOT send `id`. It used to send `p.id`, which for a new row
+ * was the client-side `tempId("product")` value — and the backend takes a given
+ * id as final, so every product added through the admin got a permanent primary
+ * key of `product-new-1`. Omitting it lets the server derive one from the slug,
+ * the way the seeded catalogue's ids read.
+ */
 export const createProduct = (p: AdminProduct) =>
   unwrap(api.admin.api.products.post({
-    id: p.id,
     ...productBody(p),
     stock: p.stock,
     reserved: p.reserved,
-  }), "POST /admin/api/products");
+  }), "POST /admin/api/products").then(toAdminProduct);
 
 export const patchProduct = (p: AdminProduct) =>
   unwrap(api.admin.api.products({ id: p.id }).patch(productBody(p)), "PATCH /admin/api/products/:id");
@@ -509,7 +463,7 @@ export const deleteProduct = (id: string) =>
   unwrap(api.admin.api.products({ id: id }).delete(), "DELETE /admin/api/products/:id");
 
 
-/** Append one photo to a product's gallery (goes to the media-storage
+/** Append one photo to a product's gallery (uploaded to Cloudinary by the
  *  service server-side; the API key never reaches the browser). */
 export const uploadProductPhoto = (productId: string, file: File) =>
   unwrap(
@@ -545,7 +499,10 @@ export const deleteProductVideo = (productId: string) =>
  * image keyed on its server-assigned id.
  */
 
-export type ServiceKind = "services" | "industrial-services";
+/** The three card catalogues. All three share one editor and one set of
+ *  endpoints — they differ only in which table they write to, and in that only
+ *  `services` can have a lead attached. */
+export type ServiceKind = "services" | "industrial-services" | "showcase-cards";
 
 export interface AdminService {
   id: string;
@@ -555,6 +512,10 @@ export interface AdminService {
   image: string;
   features: string[];
   sort: number;
+  /** Which half of the storefront card the photo takes. */
+  imageSide: ServiceImageSide;
+  /** The marker in front of each feature line. */
+  bulletStyle: ServiceBulletStyle;
 }
 
 /** Fields the backend accepts on create/update (id and image are server-owned). */
@@ -617,6 +578,80 @@ export function useServices(kind: ServiceKind) {
   /** Patch one row in place — avoids a full refetch on every keystroke-save. */
   const replace = useCallback(
     (row: AdminService) => setList((prev) => prev.map((s) => (s.id === row.id ? row : s))),
+    [],
+  );
+
+  return { list, setList, replace, loading, error, reload };
+}
+
+/* ===== Team (the contact page's people) =====
+ *
+ * Same per-item shape as the card catalogues, and for the same reason: the
+ * photo is uploaded against a stable row id, so a member has to exist on the
+ * server before their picture can be attached.
+ */
+
+export interface AdminTeamMember {
+  id: string;
+  name: string;
+  role: string;
+  bio: string;
+  photo: string;
+  sort: number;
+}
+
+type TeamInput = Omit<AdminTeamMember, "id" | "photo">;
+
+export const getTeam = () => unwrap(api.admin.api.team.get(), "GET /admin/api/team");
+
+export const createTeamMember = (body: TeamInput) =>
+  unwrap(api.admin.api.team.post(body), "POST /admin/api/team");
+
+export const patchTeamMember = (id: string, patch: Partial<TeamInput>) =>
+  unwrap(api.admin.api.team({ id }).patch(patch), "PATCH /admin/api/team/:id");
+
+export const deleteTeamMember = (id: string) =>
+  unwrap(api.admin.api.team({ id }).delete(), "DELETE /admin/api/team/:id");
+
+export const uploadTeamPhoto = (id: string, file: File) =>
+  unwrap(api.admin.api.team({ id }).photo.post({ file }), "POST /admin/api/team/:id/photo");
+
+/** Local-state owner, same shape as useServices. */
+export function useTeam() {
+  const [list, setList] = useState<AdminTeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const fetchList = useCallback(
+    (signal?: AbortSignal) =>
+      getTeam()
+        .then((data) => {
+          if (signal?.aborted) return;
+          setList(data);
+          setError(false);
+        })
+        .catch(() => {
+          if (!signal?.aborted) setError(true);
+        })
+        .finally(() => {
+          if (!signal?.aborted) setLoading(false);
+        }),
+    [],
+  );
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    void fetchList(ctrl.signal);
+    return () => ctrl.abort();
+  }, [fetchList]);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    await fetchList();
+  }, [fetchList]);
+
+  const replace = useCallback(
+    (row: AdminTeamMember) => setList((prev) => prev.map((m) => (m.id === row.id ? row : m))),
     [],
   );
 

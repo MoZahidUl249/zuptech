@@ -13,7 +13,11 @@ import {
 export const createLeadDto = t.Object({
   serviceId: t.String({ minLength: 1, maxLength: 50 }),
   customer: t.String({ minLength: 2, maxLength: 120 }),
-  city: t.String({ minLength: 2, maxLength: 80 }),
+  // Optional, unlike the `city` it replaced: that was required with a
+  // two-character minimum, so the booking form posted the literal string
+  // "Not given" whenever a visitor left it blank.
+  address: t.Optional(t.String({ maxLength: 200 })),
+  email: t.Optional(t.String({ maxLength: 200 })),
   phone: t.Optional(t.String({ maxLength: 20 })),
   notes: t.Optional(t.String({ maxLength: 2000 })),
 });

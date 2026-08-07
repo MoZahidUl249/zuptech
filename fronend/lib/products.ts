@@ -4,17 +4,18 @@ export type ProductCategory = "Home" | "Industrial";
 // from whatever tags the live catalog actually has.
 export type ProductTag = string;
 
-/** One quantity-discount tier: buy `minQty`+ and `percentage`% comes off. */
+/** One quantity-discount tier: buy `minQty`+ and `amount` (BDT) comes off each
+ *  unit. */
 export interface QuantityOffer {
   minQty: number;
-  percentage: number;
+  amount: number;
 }
 
-/** One free-delivery tier: buy `minQty`+ and `percentage`% comes off the
- *  delivery fee. 100 = the line ships free. */
+/** One free-delivery tier: buy `minQty`+ and `amount` (BDT) comes off the
+ *  delivery fee. An amount at or above the fee means the line ships free. */
 export interface FreeDeliveryOffer {
   minQty: number;
-  percentage: number;
+  amount: number;
 }
 
 export interface Product {
@@ -22,8 +23,8 @@ export interface Product {
   slug: string;
   name: string;
   price: number;
-  /** Minimum down payment required to order, as a percentage of the price. */
-  minDp: number;
+  /** Minimum down payment required to order, in BDT. Display-only. */
+  minDeposit: number;
   rating: number;
   sold: number;
   imgHint: string;
@@ -52,8 +53,8 @@ export interface Product {
    * price is what it is: strike-through, "you save", offer tiers, free
    * delivery thresholds. */
   onSale?: boolean;
-  salePercentage?: number;
-  /** Server-computed: price minus the sale discount. Read-only. */
+  /** What the customer pays. Admin-entered while on sale, otherwise equal to
+   *  `price` — the server resolves it, the client never derives it. */
   salePrice?: number;
   quantityOffers?: QuantityOffer[];
   deliveryFeeInsideDhaka?: number;
@@ -93,7 +94,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Backup"],
     price: 42500,
-    minDp: 20,
+    minDeposit: 8500,
     rating: 4.7,
     sold: 312,
     imgHint: "IPS unit photo",
@@ -113,7 +114,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Solar"],
     price: 55000,
-    minDp: 25,
+    minDeposit: 13750,
     rating: 4.8,
     sold: 189,
     imgHint: "solar panel kit photo",
@@ -133,7 +134,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Protection"],
     price: 92000,
-    minDp: 30,
+    minDeposit: 27600,
     rating: 4.6,
     sold: 74,
     imgHint: "stabilizer photo",
@@ -153,7 +154,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Switchgear"],
     price: 485000,
-    minDp: 40,
+    minDeposit: 194000,
     rating: 4.9,
     sold: 41,
     imgHint: "transformer photo",
@@ -173,7 +174,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Switchgear"],
     price: 145000,
-    minDp: 35,
+    minDeposit: 50750,
     rating: 4.7,
     sold: 58,
     imgHint: "LT panel photo",
@@ -193,7 +194,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Solar"],
     price: 620000,
-    minDp: 40,
+    minDeposit: 248000,
     rating: 4.8,
     sold: 23,
     imgHint: "rooftop solar photo",
@@ -213,7 +214,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Backup", "Protection"],
     price: 12800,
-    minDp: 10,
+    minDeposit: 1280,
     rating: 4.5,
     sold: 146,
     imgHint: "ATS photo",
@@ -233,7 +234,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Protection"],
     price: 1650,
-    minDp: 10,
+    minDeposit: 165,
     rating: 4.6,
     sold: 921,
     imgHint: "voltage protector photo",
@@ -253,7 +254,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Lighting"],
     price: 2400,
-    minDp: 10,
+    minDeposit: 240,
     rating: 4.4,
     sold: 534,
     imgHint: "flood light photo",
@@ -273,7 +274,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Protection", "Switchgear"],
     price: 18500,
-    minDp: 15,
+    minDeposit: 2775,
     rating: 4.7,
     sold: 203,
     imgHint: "MCCB photo",

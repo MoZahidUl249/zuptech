@@ -1,108 +1,92 @@
 "use client";
 
 import { MapPin } from "lucide-react";
-import { useSiteContact } from "@/lib/admin-bridge";
-import { headOffice, warehouse } from "@/lib/contact-content";
+import { useSiteContact, useSiteCopy } from "@/lib/admin-bridge";
 
-/** Head Office details + Warehouse & Service Centre cards for the Contact page. */
+/**
+ * Head office details and the warehouse card on the contact page.
+ *
+ * Every value here comes from the admin. It used to read a frontend constants
+ * file whose phone number and tenders address were placeholders flagged as a
+ * launch blocker — and which no admin could correct, because the fields that
+ * were supposed to feed them (contactServiceLine, contactTendersEmail,
+ * contactOfficeHeading) were saved and then never read by anything.
+ *
+ * Rows hide themselves when their value is blank rather than showing an empty
+ * dt/dd pair, so a half-filled config degrades to a shorter card.
+ */
 export function ContactOffice() {
   const contact = useSiteContact();
+  const copy = useSiteCopy();
+
+  const rows = [
+    { label: "Sales", value: contact.phoneDisplay, href: `tel:${contact.phone}` },
+    {
+      label: "Service line",
+      value: copy.contactServiceLine,
+      href: `tel:${copy.contactServiceLine.replace(/\s+/g, "")}`,
+    },
+    { label: "Email", value: contact.email, href: `mailto:${contact.email}` },
+    {
+      label: "Tenders / RFQ",
+      value: copy.contactTendersEmail,
+      href: `mailto:${copy.contactTendersEmail}`,
+    },
+  ].filter((r) => r.value);
+
+  const hours = [contact.hoursWeekday, contact.hoursWeekend, contact.hoursEmergency].filter(
+    Boolean,
+  );
+
   return (
-    <div className="mb-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+    <div className="mb-4 grid grid-cols-1 gap-3.5">
       <div className="rounded-[20px] border border-zup-body/6 bg-white px-6 py-6.5">
         <span className="mb-3 flex items-start gap-2 text-xs font-bold uppercase tracking-[0.1em] text-zup-orange">
           <MapPin className="mt-0.5 h-4 w-4 flex-none" strokeWidth={2} aria-hidden />
-          Head Office
+          {copy.contactOfficeHeading}
         </span>
         <p className="mb-4 text-[14.5px] font-bold leading-relaxed">
-          {headOffice.name}
+          {contact.officeName}
           <br />
           <span className="font-normal text-zup-gray">
             {contact.street}
             <br />
             {contact.city} {contact.postalCode}
-            <br />
-            Bangladesh
           </span>
         </p>
         <dl className="mb-4 flex flex-col gap-1 border-t border-zup-body/6 pt-3.5 text-[13px]">
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-zup-gray">Sales</dt>
-            <dd>
-              <a href={`tel:${contact.phone}`} className="font-bold text-zup-blue hover:underline">
-                {contact.phoneDisplay}
-              </a>
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-zup-gray">Service line</dt>
-            <dd>
-              <a
-                href={`tel:${headOffice.serviceLine.replace(/\s+/g, "")}`}
-                className="font-bold text-zup-blue hover:underline"
-              >
-                {headOffice.serviceLine}
-              </a>
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-zup-gray">Email</dt>
-            <dd>
-              <a href={`mailto:${contact.email}`} className="font-bold text-zup-blue hover:underline">
-                {contact.email}
-              </a>
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-zup-gray">Tenders / RFQ</dt>
-            <dd>
-              <a
-                href={`mailto:${headOffice.tendersEmail}`}
-                className="font-bold text-zup-blue hover:underline"
-              >
-                {headOffice.tendersEmail}
-              </a>
-            </dd>
-          </div>
-        </dl>
-        <div className="flex flex-col gap-1 border-t border-zup-body/6 pt-3.5 text-[13px]">
-          {headOffice.hours.map((row) => (
-            <div key={row.days} className="flex items-center justify-between gap-3">
-              <span className="text-zup-gray">{row.days}</span>
-              <span
-                className={
-                  row.time === "24/7" || row.time === "Closed"
-                    ? "font-bold text-zup-orange"
-                    : "font-semibold"
-                }
-              >
-                {row.time}
-              </span>
+          {rows.map((row) => (
+            <div key={row.label} className="flex items-center justify-between gap-3">
+              <dt className="text-zup-gray">{row.label}</dt>
+              <dd>
+                <a href={row.href} className="font-bold text-zup-blue hover:underline">
+                  {row.value}
+                </a>
+              </dd>
             </div>
           ))}
+        </dl>
+        {hours.length > 0 ? (
+          <div className="flex flex-col gap-1 border-t border-zup-body/6 pt-3.5 text-[13px]">
+            {hours.map((row) => (
+              <div key={row} className="text-zup-gray">
+                {row}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      {contact.warehouseName || contact.warehouseAddress ? (
+        <div className="rounded-[20px] bg-zup-ink px-6 py-5">
+          <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.1em] text-zup-sky">
+            {contact.warehouseName}
+          </span>
+          <p className="text-[13.5px] leading-relaxed text-[#D5D8DD]">
+            {contact.warehouseAddress}
+          </p>
         </div>
-      </div>
-
-      <div
-        className="flex h-[220px] items-center justify-center overflow-hidden rounded-[20px] border border-zup-body/6 bg-[repeating-linear-gradient(-45deg,#EFF1F4_0_14px,#F6F7F9_14px_28px)] sm:h-auto"
-        role="img"
-        aria-label={`Map — ${contact.street}, ${contact.city}`}
-      >
-        <span className="rounded-lg bg-white/85 px-3 py-1.5 font-mono text-[11px] text-zup-faint">
-          Map screenshot of the Banani office · 800×600
-        </span>
-      </div>
-
-      <div className="rounded-[20px] bg-zup-ink px-6 py-5 sm:col-span-2">
-        <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.1em] text-zup-sky">
-          {warehouse.title}
-        </span>
-        <p className="text-[13.5px] leading-relaxed text-[#D5D8DD]">
-          {warehouse.line1}
-          <br />
-          {warehouse.line2}
-        </p>
-      </div>
+      ) : null}
     </div>
   );
 }

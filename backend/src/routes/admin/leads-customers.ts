@@ -8,6 +8,7 @@ import {
   updateLeadStatusDto,
 } from "../../dtos/leads.dto";
 import { prisma } from "../../lib/db";
+import { LIST_CAP } from "../../lib/rules";
 import { notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { toCustomer, toIndustrialLead, toLead, toMessage } from "../../lib/serialize";
@@ -23,6 +24,7 @@ export const adminLeadsCustomers = new Elysia({ name: "routes/admin/leads-custom
     async ({ query, staffCtx }) => {
       assertCan(staffCtx, "leads", "view");
       const leads = await prisma.serviceLead.findMany({
+        take: LIST_CAP,
         where: query.status ? { status: query.status } : undefined,
         orderBy: { createdAt: "desc" },
         include: { service: true },
@@ -68,6 +70,7 @@ export const adminLeadsCustomers = new Elysia({ name: "routes/admin/leads-custom
     async ({ query, staffCtx }) => {
       assertCan(staffCtx, "leads", "view");
       const leads = await prisma.industrialLead.findMany({
+        take: LIST_CAP,
         where: {
           ...(query.status ? { status: query.status } : {}),
           ...(query.sector ? { sector: query.sector } : {}),
@@ -110,6 +113,7 @@ export const adminLeadsCustomers = new Elysia({ name: "routes/admin/leads-custom
       assertCan(staffCtx, "customers", "view");
       const q = query.q?.trim();
       const customers = await prisma.customer.findMany({
+        take: LIST_CAP,
         where: q
           ? {
               OR: [

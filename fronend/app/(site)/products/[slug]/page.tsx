@@ -83,7 +83,7 @@ export default async function ProductPage({
               .map((tier) => ({
                 "@type": "UnitPriceSpecification",
                 priceCurrency: "BDT",
-                price: product.price - Math.floor((product.price * tier.percentage) / 100),
+                price: Math.max(0, product.price - tier.amount),
                 eligibleQuantity: {
                   "@type": "QuantitativeValue",
                   minValue: tier.minQty,
@@ -220,7 +220,7 @@ export default async function ProductPage({
                     {formatBDT(product.price)}
                   </span>
                   <span className="rounded-full bg-zup-orange px-2.5 py-1 text-[11px] font-bold text-white">
-                    −{product.salePercentage}% off
+                    Save {formatBDT(product.price - (product.salePrice ?? product.price))}
                   </span>
                 </>
               ) : null}
@@ -241,7 +241,7 @@ export default async function ProductPage({
                   ? `In stock · ${product.available} available`
                   : "In stock"}
             </p>
-            {product.minDp > 0 && (
+            {product.minDeposit > 0 && (
               <p className="mt-3 inline-flex items-center gap-2 rounded-xl bg-zup-blue/6 px-3.5 py-2.5 text-[13.5px] font-semibold text-zup-blue">
                 <span
                   className="flex h-4.5 w-4.5 flex-none items-center justify-center rounded-full bg-zup-blue text-[10px] font-bold text-white"
@@ -249,7 +249,7 @@ export default async function ProductPage({
                 >
                   ৳
                 </span>
-                Minimum down payment for this product {product.minDp}%.
+                Minimum down payment for this product {formatBDT(product.minDeposit)}.
               </p>
             )}
           </div>

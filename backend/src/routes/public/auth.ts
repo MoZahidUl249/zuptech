@@ -9,7 +9,7 @@ import {
 import { auth } from "../../lib/auth";
 import { prisma } from "../../lib/db";
 import { ApiError, badRequest, conflict } from "../../lib/http";
-import { allowHit, clientIp } from "../../lib/rate-limit";
+import { allowHitDurable, clientIp } from "../../lib/rate-limit";
 import { customerEmail, isValidPhone, normalizePhone } from "../../lib/rules";
 
 /**
@@ -26,7 +26,7 @@ export const customerAuth = new Elysia({ name: "routes/public/auth", detail: { t
       const email = body.email.trim().toLowerCase();
 
       const ip = clientIp(request, server);
-      if (!allowHit(`register-ip:${ip}`, 10, 5 * 60_000)) {
+      if (!(await allowHitDurable(`register-ip:${ip}`, 10, 5 * 60_000))) {
         throw new ApiError(429, "Too many attempts — try again in a few minutes");
       }
 
@@ -89,8 +89,8 @@ export const customerAuth = new Elysia({ name: "routes/public/auth", detail: { t
 
       const ip = clientIp(request, server);
       if (
-        !allowHit(`claim:${phone}`, 5, 5 * 60_000) ||
-        !allowHit(`claim-ip:${ip}`, 10, 5 * 60_000)
+        !(await allowHitDurable(`claim:${phone}`, 5, 5 * 60_000)) ||
+        !(await allowHitDurable(`claim-ip:${ip}`, 10, 5 * 60_000))
       ) {
         throw new ApiError(429, "Too many attempts — try again in a few minutes");
       }
@@ -153,8 +153,8 @@ export const customerAuth = new Elysia({ name: "routes/public/auth", detail: { t
 
       const ip = clientIp(request, server);
       if (
-        !allowHit(`login:${phone}`, 5, 5 * 60_000) ||
-        !allowHit(`login-ip:${ip}`, 20, 5 * 60_000)
+        !(await allowHitDurable(`login:${phone}`, 5, 5 * 60_000)) ||
+        !(await allowHitDurable(`login-ip:${ip}`, 20, 5 * 60_000))
       ) {
         throw new ApiError(429, "Too many login attempts — try again in a few minutes");
       }
@@ -181,8 +181,8 @@ export const customerAuth = new Elysia({ name: "routes/public/auth", detail: { t
 
       const ip = clientIp(request, server);
       if (
-        !allowHit(`forgot:${email}`, 3, 5 * 60_000) ||
-        !allowHit(`forgot-ip:${ip}`, 10, 5 * 60_000)
+        !(await allowHitDurable(`forgot:${email}`, 3, 5 * 60_000)) ||
+        !(await allowHitDurable(`forgot-ip:${ip}`, 10, 5 * 60_000))
       ) {
         throw new ApiError(429, "Too many attempts — try again in a few minutes");
       }
@@ -213,8 +213,8 @@ export const customerAuth = new Elysia({ name: "routes/public/auth", detail: { t
 
       const ip = clientIp(request, server);
       if (
-        !allowHit(`reset-ip:${ip}`, 10, 5 * 60_000) ||
-        !allowHit(`reset:${email}`, 5, 5 * 60_000)
+        !(await allowHitDurable(`reset-ip:${ip}`, 10, 5 * 60_000)) ||
+        !(await allowHitDurable(`reset:${email}`, 5, 5 * 60_000))
       ) {
         throw new ApiError(429, "Too many attempts — try again in a few minutes");
       }

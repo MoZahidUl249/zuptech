@@ -3,7 +3,7 @@
  *
  * INVARIANT (cal-bk.md): the client never computes a charged amount. Every
  * money figure rendered must come from POST /api/pricing/quote. These helpers
- * produce *labels* ("Buy 3+ · 10% off", "Add 2 more for free delivery") and
+ * produce *labels* ("Buy 3+ · ৳500 off", "Add 2 more for free delivery") and
  * read the discount that the server already applied — they never derive one.
  *
  * The quote returns only the net `unitPrice`; it doesn't say which discount
@@ -14,13 +14,14 @@
 
 import type { FreeDeliveryOffer, Product, QuantityOffer } from "@/lib/products";
 import type { QuoteLine } from "@/lib/quote";
+import { formatBDT } from "@/lib/site";
 
-/** Both offer kinds are `{minQty, percentage}` ladders resolved the same way
+/** Both offer kinds are `{minQty, amount}` ladders resolved the same way
  *  (highest satisfied tier wins, never stacked), so they share these two
  *  searches — mirroring `bestOfferTier` in the backend's lib/rules.ts. */
 interface OfferTier {
   minQty: number;
-  percentage: number;
+  amount: number;
 }
 
 /** The best tier the given quantity qualifies for, if any. */
@@ -60,14 +61,14 @@ export function discountReason(product: Product, line: QuoteLine): string | null
   if (line.unitPrice >= product.price) return null;
 
   const offer = bestQuantityOffer(product.quantityOffers, line.qty);
-  const salePct = product.onSale ? (product.salePercentage ?? 0) : 0;
+  const saleOff = saleAmount(product);
 
   // Sale and quantity offers never stack — whichever is cheaper wins. When an
   // offer tier applies and is at least as good, credit the tier.
-  if (offer && offer.percentage >= salePct) {
-    return `Buy ${offer.minQty}+ · ${offer.percentage}% off`;
+  if (offer && offer.amount >= saleOff) {
+    return `Buy ${offer.minQty}+ · ${formatBDT(offer.amount)} off`;
   }
-  if (salePct > 0) return `Sale · ${salePct}% off`;
+  if (saleOff > 0) return `Sale · ${formatBDT(saleOff)} off`;
   return "Discounted";
 }
 
@@ -79,12 +80,12 @@ export function lineSavings(product: Product, line: QuoteLine): number {
 export interface FreeDeliveryState {
   /** Delivery is free for this line. */
   free: boolean;
-  /** % off the delivery fee the current qty has earned (0–100). */
-  discountPercent: number;
+  /** BDT off the delivery fee the current qty has earned. */
+  discountAmount: number;
   /** Units still needed to reach the next tier, when there is one. */
   unitsAway: number | null;
   /** What that next tier is worth, so the nudge can name the reward. */
-  nextPercent: number | null;
+  nextAmount: number | null;
 }
 
 /**
@@ -100,14 +101,14 @@ export function freeDeliveryState(product: Product, line: QuoteLine): FreeDelive
   // The server zeroed the fee, so delivery is free regardless of what the
   // tiers say — nothing is left to unlock.
   if (line.deliveryFee === 0) {
-    return { free: true, discountPercent: 100, unitsAway: null, nextPercent: null };
+    return { free: true, discountAmount: earned?.amount ?? 0, unitsAway: null, nextAmount: null };
   }
 
   return {
     free: false,
-    discountPercent: earned?.percentage ?? 0,
+    discountAmount: earned?.amount ?? 0,
     unitsAway: next ? next.minQty - line.qty : null,
-    nextPercent: next?.percentage ?? null,
+    nextAmount: next?.amount ?? null,
   };
 }
 
@@ -122,31 +123,50 @@ export function cartSavings(
   }, 0);
 }
 
-/** "Buy 3+ save 10% · Buy 5+ save 15%" — available tiers, for product pages
+/** "Buy 3+ save ৳500 · Buy 5+ save ৳1,200" — available tiers, for product pages
  *  where no quantity is chosen yet. */
 export function offerTiersLabel(offers: QuantityOffer[] | undefined): string | null {
   if (!offers?.length) return null;
   return [...offers]
     .sort((a, b) => a.minQty - b.minQty)
-    .map((o) => `Buy ${o.minQty}+ save ${o.percentage}%`)
+    .map((o) => `Buy ${o.minQty}+ save ${formatBDT(o.amount)}`)
     .join(" · ");
 }
 
 /** "Buy 2+ half delivery · Buy 5+ free delivery" — the delivery ladder. */
-export function deliveryTierLabel(offers: FreeDeliveryOffer[] | undefined): string | null {
+export function deliveryTierLabel(
+  offers: FreeDeliveryOffer[] | undefined,
+  product: Product,
+): string | null {
   if (!offers?.length) return null;
   return [...offers]
     .sort((a, b) => a.minQty - b.minQty)
-    .map((o) => `Buy ${o.minQty}+ ${deliveryRewardLabel(o.percentage)}`)
+    .map((o) => `Buy ${o.minQty}+ ${deliveryRewardLabel(o.amount, product)}`)
     .join(" · ");
 }
 
-/** 100 reads as "free delivery", 50 as "half-price delivery", the rest as a
- *  plain percentage — a shopper parses those far faster than "100% off". */
-function deliveryRewardLabel(percentage: number): string {
-  if (percentage >= 100) return "free delivery";
-  if (percentage === 50) return "half-price delivery";
-  return `${percentage}% off delivery`;
+/**
+ * "free delivery" when the tier covers the fee, otherwise the amount off.
+ *
+ * Which fee it covers depends on the delivery zone, and this runs before a
+ * zone is known — so it reads free only when the amount clears BOTH zone fees.
+ * Claiming free delivery a customer outside Dhaka won't get is the one error
+ * worth being conservative about.
+ */
+function deliveryRewardLabel(amount: number, product: Product): string {
+  const dearest = Math.max(
+    product.deliveryFeeInsideDhaka ?? 0,
+    product.deliveryFeeOutsideDhaka ?? 0,
+  );
+  if (dearest > 0 && amount >= dearest) return "free delivery";
+  return `${formatBDT(amount)} off delivery`;
+}
+
+/** How much the sale takes off, in Taka. Both figures are admin-entered, so
+ *  this is a subtraction of two stored numbers, not a derived price. */
+export function saleAmount(product: Product): number {
+  if (!product.onSale || product.salePrice === undefined) return 0;
+  return Math.max(0, product.price - product.salePrice);
 }
 
 /* ===== The offer ladder =====
@@ -165,8 +185,9 @@ export interface OfferRung {
   kind: "sale" | "qty" | "delivery";
   /** Quantity that unlocks this rung; null for the flat sale, which always applies. */
   minQty: number | null;
-  /** What the rung is worth, 1–100. For delivery, 100 means it ships free. */
-  percentage: number;
+  /** What the rung is worth, in Taka. For delivery, an amount at or above the
+   *  zone fee means it ships free. */
+  amount: number;
   /** Short headline, e.g. "Buy 3+" or "Sale". */
   label: string;
   /** What it's worth, e.g. "Save 5% per unit" or "Free delivery". */
@@ -185,14 +206,14 @@ export interface OfferRung {
  */
 export function offerLadder(product: Product, qty?: number): OfferRung[] {
   const rungs: OfferRung[] = [];
-  const salePct = product.onSale ? (product.salePercentage ?? 0) : 0;
+  const saleOff = saleAmount(product);
 
-  if (salePct > 0) {
+  if (saleOff > 0) {
     rungs.push({
       kind: "sale",
       minQty: null,
-      percentage: salePct,
-      label: `${salePct}% sale`,
+      amount: saleOff,
+      label: `${formatBDT(saleOff)} off`,
       detail: "On every unit, no minimum",
       state: "active", // a flat sale needs no quantity to qualify
       unitsAway: null,
@@ -204,9 +225,9 @@ export function offerLadder(product: Product, qty?: number): OfferRung[] {
     rungs.push({
       kind: "qty",
       minQty: offer.minQty,
-      percentage: offer.percentage,
+      amount: offer.amount,
       label: `Buy ${offer.minQty}+`,
-      detail: `Save ${offer.percentage}% per unit`,
+      detail: `Save ${formatBDT(offer.amount)} per unit`,
       state: earned ? "active" : "locked",
       unitsAway: qty !== undefined && !earned ? offer.minQty - qty : null,
     });
@@ -217,9 +238,9 @@ export function offerLadder(product: Product, qty?: number): OfferRung[] {
     rungs.push({
       kind: "delivery",
       minQty: offer.minQty,
-      percentage: offer.percentage,
+      amount: offer.amount,
       label: `Buy ${offer.minQty}+`,
-      detail: deliveryRewardLabel(offer.percentage).replace(/^./, (c) => c.toUpperCase()),
+      detail: deliveryRewardLabel(offer.amount, product).replace(/^./, (c) => c.toUpperCase()),
       state: earned ? "active" : "locked",
       unitsAway: qty !== undefined && !earned ? offer.minQty - qty : null,
     });

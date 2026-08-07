@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { CalendarCheck, UserCog, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   INDUSTRIAL_SCOPES,
   INDUSTRIAL_SECTORS,
@@ -29,10 +30,27 @@ export interface IndustrialFormOption {
 
 export function IndustrialConsultationForm({
   options = [],
+  serviceId: controlledServiceId,
+  onServiceIdChange,
+  anchorId = "book",
+  compact,
 }: {
   options?: IndustrialFormOption[];
+  /** Supply both to drive the selection from outside — the capability cards
+   *  above the form set it when their booking button is pressed. Left out, the
+   *  form owns the selection as it always did. */
+  serviceId?: string;
+  onServiceIdChange?: (id: string) => void;
+  /** Scroll target. Overridable so this form and the consultancy one can share
+   *  a page without two `id="book"` in one document. */
+  anchorId?: string;
+  /** Single column, no pitch panel, no paired field rows — for a half-width
+   *  slot like the home page's form pair. */
+  compact?: boolean;
 }) {
-  const [serviceId, setServiceId] = useState(options[0]?.id ?? "");
+  const [ownServiceId, setOwnServiceId] = useState(options[0]?.id ?? "");
+  const serviceId = controlledServiceId ?? ownServiceId;
+  const setServiceId = onServiceIdChange ?? setOwnServiceId;
   const [company, setCompany] = useState("");
   const [contactName, setContactName] = useState("");
   const [designation, setDesignation] = useState("");
@@ -88,16 +106,34 @@ export function IndustrialConsultationForm({
 
   return (
     <div
-      id="consultation"
-      className="mx-auto grid max-w-[1120px] scroll-mt-24 grid-cols-1 gap-0 overflow-hidden rounded-3xl border border-zup-body/6 md:grid-cols-2"
+      id={anchorId}
+      className={cn(
+        "grid scroll-mt-24 grid-cols-1 gap-0 overflow-hidden rounded-3xl border border-zup-body/6",
+        // The outer max-width belongs to the wide layout only; in a half-width
+        // column the parent already sets the width.
+        compact ? "" : "mx-auto max-w-[1120px] md:grid-cols-2",
+      )}
     >
+      {compact ? (
+        <div className="bg-white px-6 pt-7 sm:px-8">
+          <span className="text-xs font-bold uppercase tracking-[0.14em] text-zup-orange">
+            Industrial clients
+          </span>
+          <h2 className="mt-2 text-[22px] font-bold tracking-[-0.02em]">
+            Book Residential and Industrial Consultation
+          </h2>
+          <p className="mt-2 text-[14px] leading-relaxed text-zup-gray">
+            Share your plant details and we will prepare a scoped technical proposal.
+          </p>
+        </div>
+      ) : (
       <div className="flex flex-col gap-5 px-6 py-8 sm:px-9 sm:py-10">
         <div>
           <span className="text-xs font-bold uppercase tracking-[0.14em] text-zup-orange">
             Industrial clients
           </span>
           <h2 className="mt-2 text-[26px] font-bold tracking-[-0.02em]">
-            Request an Industrial Consultation
+            Book Residential and Industrial Consultation
           </h2>
           <p className="mt-2 text-[14.5px] leading-relaxed text-zup-gray">
             Share your plant details and we will prepare a scoped technical proposal.
@@ -122,9 +158,13 @@ export function IndustrialConsultationForm({
           </a>
         </p>
       </div>
+      )}
 
       <form
-        className="flex flex-col gap-4 bg-[#FAFBFC] px-6 py-8 sm:px-9 sm:py-10"
+        className={cn(
+          "flex flex-col gap-4 px-6 py-8 sm:px-9 sm:py-10",
+          compact ? "bg-white sm:px-8" : "bg-[#FAFBFC]",
+        )}
         onSubmit={(e) => {
           e.preventDefault();
           if (!busy && !sent) void submit();
@@ -158,7 +198,7 @@ export function IndustrialConsultationForm({
               </Field>
             ) : null}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className={cn("grid grid-cols-1 gap-4", !compact && "sm:grid-cols-2")}>
               <Field label="Company">
                 <input
                   value={company}
@@ -180,7 +220,7 @@ export function IndustrialConsultationForm({
               </Field>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className={cn("grid grid-cols-1 gap-4", !compact && "sm:grid-cols-2")}>
               <Field label="Contact person">
                 <input
                   value={contactName}
@@ -199,7 +239,7 @@ export function IndustrialConsultationForm({
               </Field>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className={cn("grid grid-cols-1 gap-4", !compact && "sm:grid-cols-2")}>
               <Field label="Phone">
                 <input
                   value={phone}
@@ -221,7 +261,7 @@ export function IndustrialConsultationForm({
               </Field>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className={cn("grid grid-cols-1 gap-4", !compact && "sm:grid-cols-2")}>
               <Field label="Project scope">
                 <select
                   value={scope}

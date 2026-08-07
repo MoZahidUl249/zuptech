@@ -73,11 +73,18 @@ export interface ServiceCard {
   slug: string;
   name: string;
   dsc: string;
-  /** media-storage URL, "" when none uploaded. */
+  /** Cloudinary URL, "" when none uploaded. */
   image: string;
   features: string[];
   sort: number;
+  /** Which half of the 50/50 card the photo takes on the home page. */
+  imageSide: ServiceImageSide;
+  /** The marker in front of each feature line. */
+  bulletStyle: ServiceBulletStyle;
 }
+
+export type ServiceImageSide = "left" | "right";
+export type ServiceBulletStyle = "tick" | "dot" | "plain";
 
 /** Bookable service cards (/services). Falls back to the bundled list. */
 export async function getServices(): Promise<ServiceCard[]> {
@@ -85,6 +92,44 @@ export async function getServices(): Promise<ServiceCard[]> {
     return await unwrap(api.api.services.get(), "GET /api/services");
   } catch (err) {
     console.error("[api] services unavailable, using fallback list:", err);
+    return [];
+  }
+}
+
+/**
+ * The home page's showcase cards.
+ *
+ * A separate catalogue from `getServices()` on purpose: the front page is a
+ * shop window, and nothing on it is bookable. Editing a showcase card changes
+ * the home page and nothing else.
+ */
+export async function getShowcaseCards(): Promise<ServiceCard[]> {
+  try {
+    return await unwrap(api.api["showcase-cards"].get(), "GET /api/showcase-cards");
+  } catch (err) {
+    console.error("[api] showcase cards unavailable, using empty list:", err);
+    return [];
+  }
+}
+
+/** One person on the contact page. */
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  bio: string;
+  /** Cloudinary URL, "" when none uploaded. */
+  photo: string;
+  sort: number;
+}
+
+/** The people on the contact page. Empty until the client adds real ones —
+ *  the roster this replaced was invented and had to be deleted. */
+export async function getTeam(): Promise<TeamMember[]> {
+  try {
+    return await unwrap(api.api.team.get(), "GET /api/team");
+  } catch (err) {
+    console.error("[api] team unavailable, using empty list:", err);
     return [];
   }
 }
@@ -291,48 +336,6 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlacedOrder> {
   return unwrap(api.api.orders.post(input), "POST /api/orders");
 }
 
-/* ===== Page heroes (admin-editable hero art) ===== */
-
-export const PAGE_HERO_KEYS = ["home", "shop", "services", "industrial", "contact"] as const;
-export type PageHeroKey = (typeof PAGE_HERO_KEYS)[number];
-
-export interface HeroPoster {
-  id: string;
-  image: string;
-  /** "" = decorative; the renderer marks those aria-hidden. */
-  alt: string;
-  href: string;
-  sort: number;
-}
-
-export interface PageHero {
-  pageKey: string;
-  /** "plain" (built-in design) | "image" (one still) | "posters" (rotation). */
-  mode: string;
-  background: string;
-  /** 0–100 dark scrim, so light hero copy stays readable over any art. */
-  overlay: number;
-  posters: HeroPoster[];
-}
-
-/** Every page's hero in one call. Falls back to plain heroes, which render
- *  the frontend's built-in design — so the API being down costs art, not the
- *  page. */
-export async function getPageHeroes(): Promise<Record<string, PageHero>> {
-  try {
-    const list = await unwrap(api.api["page-heroes"].get(), "GET /api/page-heroes");
-    return Object.fromEntries(list.map((h) => [h.pageKey, h]));
-  } catch (err) {
-    console.error("[api] page heroes unavailable, using built-in designs:", err);
-    return {};
-  }
-}
-
-/* ===== Landing pages (unlisted ad campaign pages) ===== */
-
-/** GET /api/landing-pages/:slug. The product is embedded rather than fetched
- *  separately — a campaign may sell a product that is off the storefront, and
- *  GET /api/products/:slug 404s on those. */
 export interface PublicLandingPage {
   /** Already resolved server-side — falls back to the product name. */
   headline: string;
@@ -340,7 +343,6 @@ export interface PublicLandingPage {
   offerPrice: number;
   compareAtPrice: number;
   /** Derived server-side so the page and the ad creative can't disagree. */
-  discountPercentage: number;
   /** compareAtPrice − offerPrice. Rendered, never recomputed here. */
   youSave: number;
   ribbonText: string;
@@ -372,8 +374,11 @@ export async function getLandingPage(slug: string): Promise<PublicLandingPage | 
 export interface LeadInput {
   serviceId: string;
   customer: string;
-  city: string;
+  /** Optional, unlike the `city` it replaced — that was required, so the form
+   *  used to invent the string "Not given" to satisfy it. */
+  address?: string;
   phone?: string;
+  email?: string;
   notes?: string;
 }
 

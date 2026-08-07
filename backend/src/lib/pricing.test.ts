@@ -10,7 +10,7 @@ interface FakeProduct {
   name: string;
   price: number;
   onSale: boolean;
-  salePercentage: number;
+  salePrice: number;
   stock: number;
   reserved: number;
   reorderAt: number;
@@ -18,8 +18,8 @@ interface FakeProduct {
   deliveryFeeOutsideDhaka: number;
   installationFeeInsideDhaka: number;
   installationFeeOutsideDhaka: number;
-  quantityOffers: { minQty: number; percentage: number }[];
-  freeDeliveryOffers: { minQty: number; percentage: number }[];
+  quantityOffers: { minQty: number; amount: number }[];
+  freeDeliveryOffers: { minQty: number; amount: number }[];
 }
 
 const CATALOG: FakeProduct[] = [
@@ -28,7 +28,7 @@ const CATALOG: FakeProduct[] = [
     name: "1000VA IPS",
     price: 1000,
     onSale: false,
-    salePercentage: 0,
+    salePrice: 0,
     stock: 5,
     reserved: 0,
     reorderAt: 2,
@@ -36,8 +36,8 @@ const CATALOG: FakeProduct[] = [
     deliveryFeeOutsideDhaka: 200,
     installationFeeInsideDhaka: 50,
     installationFeeOutsideDhaka: 80,
-    // 10+ units take 20% off the unit price.
-    quantityOffers: [{ minQty: 10, percentage: 20 }],
+    // 10+ units take ৳200 off the unit price.
+    quantityOffers: [{ minQty: 10, amount: 200 }],
     freeDeliveryOffers: [],
   },
 ];
@@ -119,7 +119,7 @@ describe("priceCart", () => {
     );
     const whole = await priceCart([{ productId: "ips1000", qty: 10 }], undefined);
     expect(split.subtotal).toBe(whole.subtotal);
-    expect(split.subtotal).toBe(8000); // 10 × 800, the 20% tier
+    expect(split.subtotal).toBe(8000); // 10 × 800, the ৳200 tier
   });
 
   test("caps the merged quantity, so the per-line cap can't be split around", async () => {

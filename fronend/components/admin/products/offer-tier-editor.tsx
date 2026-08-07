@@ -11,12 +11,14 @@ import { } from "../confirm-dialog";
 
 /* ===== Offer ladders ===== */
 
-/** Both ladders are `{minQty, percentage}` lists with the same rules, so one
- *  editor serves both. Mirrors the backend contract in products.dto.ts:
- *  minQty 2–999, percentage 1–100, at most 10 tiers, minQty unique. */
+/** Both ladders are `{minQty, amount}` lists with the same rules, so one editor
+ *  serves both. Mirrors the backend contract in products.dto.ts: minQty 2–999,
+ *  amount ≥ ৳1, at most 10 tiers, minQty unique. There is no upper bound on the
+ *  amount — exceeding the delivery fee is exactly how free delivery is
+ *  expressed, and rules.ts floors the result at zero. */
 export interface OfferTier {
   minQty: number;
-  percentage: number;
+  amount: number;
 }
 
 export const MAX_OFFER_TIERS = 10;
@@ -37,13 +39,17 @@ export function OfferTierEditor({
   label,
   hint,
   unitLabel,
+  freeAt,
   tiers,
   onChange,
 }: {
   label: string;
   hint: string;
-  /** Text after the percentage input, e.g. "% off each unit". */
+  /** Text after the amount input, e.g. "৳ off each unit". */
   unitLabel: string;
+  /** Delivery ladders only: the dearest zone fee, so a tier that covers it can
+   *  be badged "Free". Omitted for quantity ladders, which have no such point. */
+  freeAt?: number;
   tiers: OfferTier[];
   onChange: (next: OfferTier[]) => void;
 }) {
@@ -51,8 +57,8 @@ export function OfferTierEditor({
 
   const patch = (i: number, field: keyof OfferTier, raw: string) => {
     const n = Math.round(Number(raw) || 0);
-    // Clamped on every keystroke, same as the sale-percentage input above.
-    const value = field === "minQty" ? Math.min(999, Math.max(2, n)) : Math.min(100, Math.max(1, n));
+    // Clamped on every keystroke. Only minQty has a ceiling; the amount is money.
+    const value = field === "minQty" ? Math.min(999, Math.max(2, n)) : Math.max(1, n);
     onChange(tiers.map((t, j) => (j === i ? { ...t, [field]: value } : t)));
   };
 
@@ -71,7 +77,7 @@ export function OfferTierEditor({
           onClick={() =>
             onChange([
               ...tiers,
-              { minQty: Math.min(999, Math.max(2, ...tiers.map((t) => t.minQty + 1))), percentage: 5 },
+              { minQty: Math.min(999, Math.max(2, ...tiers.map((t) => t.minQty + 1))), amount: 100 },
             ])
           }
         >
@@ -105,13 +111,13 @@ export function OfferTierEditor({
                 inputMode="numeric"
                 min={1}
                 max={100}
-                aria-label={`${label} tier ${i + 1} — percentage`}
-                value={tier.percentage}
-                onChange={(e) => patch(i, "percentage", e.target.value)}
+                aria-label={`${label} tier ${i + 1} — amount in Taka`}
+                value={tier.amount}
+                onChange={(e) => patch(i, "amount", e.target.value)}
                 className={`${inputCls} w-20`}
               />
               <span className="text-ui-sm text-zup-gray">{unitLabel}</span>
-              {tier.percentage === 100 ? (
+              {freeAt !== undefined && tier.amount >= freeAt ? (
                 <Pill tone="green">Free</Pill>
               ) : null}
               <BtnDanger

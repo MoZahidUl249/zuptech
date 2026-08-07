@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
+  isUnsaved,
   useAdmin,
   taka,
   bd,
@@ -140,22 +141,29 @@ export function InventorySection() {
   const suggestedQty = (p: AdminProduct) =>
     Math.max(p.reorderAt * 2 - p.stock, p.reorderAt, 1);
 
+  /**
+   * Mark a PO received.
+   *
+   * Only the PO status is staged. The stock increment is deliberately NOT
+   * applied locally: the server does it inside `POST /purchase-orders/:id/receive`
+   * (`inventory.ts`, `stock: { increment: qty }`) and logs the movement itself.
+   * Staging the delta too meant syncKeys ran its `products` branch first and
+   * sent an *absolute* adjustStock(old + qty), then the receive incremented
+   * again — landing at old + 2×qty, with two movement rows. It only looked
+   * right because the refetch immediately overwrote the wrong number.
+   */
   const receivePo = (po: PurchaseOrder) => {
     const p = state.products.find((x) => x.id === po.productId);
     update({
       purchaseOrders: state.purchaseOrders.map((x) =>
         x.id === po.id ? { ...x, status: "Received" } : x,
       ),
-      products: p
-        ? state.products.map((x) =>
-            x.id === p.id ? { ...x, stock: x.stock + po.qty } : x,
-          )
-        : state.products,
-      movements: p
-        ? [logMovement(p.sku, po.qty, `${po.id} received`), ...state.movements]
-        : state.movements,
     });
-    toast(p ? `${po.id} received — ${p.sku} +${po.qty}` : `${po.id} received`);
+    toast(
+      p
+        ? `${po.id} marked received — save to add ${po.qty} to ${p.sku}`
+        : `${po.id} marked received — press Save to apply it`,
+    );
   };
 
   return (
@@ -377,7 +385,7 @@ export function InventorySection() {
       {reorderFor ? (
         <ReorderDialog
           product={reorderFor}
-          suppliers={state.suppliers}
+          suppliers={state.suppliers.filter((s) => !isUnsaved(s))}
           suggestedQty={suggestedQty(reorderFor)}
           onCancel={() => setReorderFor(null)}
           onConfirm={(supplierId, qty) => placeReorder(reorderFor, supplierId, qty)}

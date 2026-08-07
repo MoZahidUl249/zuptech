@@ -5,6 +5,7 @@ import {
   updateInvoiceDto,
 } from "../../dtos/invoices.dto";
 import { prisma } from "../../lib/db";
+import { LIST_CAP } from "../../lib/rules";
 import { conflict, notFound } from "../../lib/http";
 import { logOrderEvent } from "../../lib/order-events";
 import { nextId } from "../../lib/ids";
@@ -36,6 +37,7 @@ export const adminInvoices = new Elysia({
 
       const q = query.q?.trim();
       const invoices = await prisma.invoice.findMany({
+        take: LIST_CAP,
         where: {
           ...(query.status ? { status: query.status } : {}),
           ...(q

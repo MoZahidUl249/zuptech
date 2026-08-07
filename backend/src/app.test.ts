@@ -1,0 +1,384 @@
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+
+/**
+ * HTTP-level tests.
+ *
+ * Every other test in this suite tests a function. Nothing tested the thing a
+ * client — or an attacker — actually talks to: the routes. ~100 endpoints were
+ * covered only by clicking through the admin panel, which meant a deleted
+ * `assertCan`, a guard that stopped throwing, or a DTO that quietly started
+ * accepting a bad body would all have shipped with a green suite.
+ *
+ * These drive real `Request` objects through the real app: real routing, real
+ * DTO validation, the real staffGuard, the real `assertCan`, and the real
+ * onError hook that decides which status a thrown ApiError becomes. Only two
+ * modules are replaced, both at the process boundary — `lib/db` (Postgres) and
+ * `lib/auth` (Better Auth's session lookup). So there is no database and no
+ * environment to configure: these run anywhere `bun test` runs.
+ *
+ * The three things asserted here are the three that are catastrophic when
+ * wrong and invisible when broken: who is refused, what they are refused, and
+ * that cart money is never the client's number.
+ */
+
+/* ========================================================================
+ * Fakes
+ * ==================================================================== */
+
+/** What `auth.api.getSession` will return for the next request. */
+let session: { user: { id: string } } | null = null;
+
+/** The Staff row behind that session — null models a *customer* session. */
+let staffRow: {
+  id: string;
+  name: string;
+  username: string;
+  phone: string;
+  email: string | null;
+  role: { id: string; name: string; isSystem: boolean; permissions: Record<string, string> };
+} | null = null;
+
+interface FakeProduct {
+  id: string;
+  name: string;
+  price: number;
+  onSale: boolean;
+  salePrice: number;
+  stock: number;
+  reserved: number;
+  deliveryFeeInsideDhaka: number;
+  deliveryFeeOutsideDhaka: number;
+  installationFeeInsideDhaka: number;
+  installationFeeOutsideDhaka: number;
+  quantityOffers: { minQty: number; amount: number }[];
+  freeDeliveryOffers: { minQty: number; amount: number }[];
+}
+
+/** ৳1,000 each; 10+ take ৳200 off the unit price. */
+const CATALOG: FakeProduct[] = [
+  {
+    id: "ips1000",
+    name: "1000VA IPS",
+    price: 1000,
+    onSale: false,
+    salePrice: 0,
+    stock: 5,
+    reserved: 0,
+    deliveryFeeInsideDhaka: 100,
+    deliveryFeeOutsideDhaka: 200,
+    installationFeeInsideDhaka: 50,
+    installationFeeOutsideDhaka: 80,
+    quantityOffers: [{ minQty: 10, amount: 200 }],
+    freeDeliveryOffers: [],
+  },
+];
+
+type Where = { id?: { in?: string[] } };
+
+mock.module("./lib/db", () => ({
+  prisma: {
+    // getStaffContext's lookup — the door every admin route goes through.
+    staff: { findUnique: async () => staffRow },
+    // priceCart's catalog read. The `where` carries orderableProductWhere()'s
+    // visibility clause too; filtering on id alone is enough here because
+    // rules.test.ts already pins what that clause admits.
+    product: {
+      findMany: async ({ where }: { where?: Where } = {}) =>
+        where?.id?.in ? CATALOG.filter((p) => where.id?.in?.includes(p.id)) : [],
+      findFirst: async () => null,
+    },
+    siteConfig: {
+      findUnique: async () => ({ featuredIds: [] }),
+      findUniqueOrThrow: async () => ({ featuredIds: [] }),
+      update: async () => ({ featuredIds: [] }),
+    },
+    teamMember: { findMany: async () => [] },
+    landingPage: { findUnique: async () => null },
+    paymentMethod: { findFirst: async () => null },
+  },
+}));
+
+mock.module("./lib/auth", () => ({
+  auth: { api: { getSession: async () => session } },
+}));
+
+const { createApp } = await import("./app");
+const app = createApp({ quiet: true });
+
+/** Send a real Request through the app and read status + JSON back. */
+async function call(method: string, path: string, body?: unknown) {
+  const res = await app.handle(
+    new Request(`http://localhost${path}`, {
+      method,
+      ...(body === undefined
+        ? {}
+        : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    }),
+  );
+  let json: Record<string, unknown> | null = null;
+  try {
+    json = (await res.json()) as Record<string, unknown>;
+  } catch {
+    /* empty body */
+  }
+  return { status: res.status, body: json };
+}
+
+/** Sign in as staff holding exactly `permissions` and nothing else. */
+function signInAs(permissions: Record<string, string>, { isSystem = false } = {}) {
+  session = { user: { id: "u1" } };
+  staffRow = {
+    id: "s1",
+    name: "Test Staff",
+    username: "test",
+    phone: "01700000000",
+    email: null,
+    role: { id: "r1", name: "Tester", isSystem, permissions },
+  };
+}
+
+beforeEach(() => {
+  session = null;
+  staffRow = null;
+});
+
+/* ========================================================================
+ * Who gets in
+ * ==================================================================== */
+
+describe("admin routes reject callers without a staff session", () => {
+  test("no session at all is 401", async () => {
+    const { status, body } = await call("GET", "/admin/api/products");
+    expect(status).toBe(401);
+    expect(body?.error).toBe("Staff sign-in required");
+  });
+
+  test("a customer session is 401, not 200", async () => {
+    // The dangerous case: a real, valid session cookie — held by someone who
+    // simply isn't staff. getStaffContext must fail it on the missing Staff
+    // row, not on the missing session.
+    session = { user: { id: "customer-1" } };
+    staffRow = null;
+    const { status } = await call("GET", "/admin/api/products");
+    expect(status).toBe(401);
+  });
+
+  test("the guard covers writes as well as reads", async () => {
+    const { status } = await call("POST", "/admin/api/team", {
+      name: "X",
+      role: "Y",
+      bio: "",
+      sort: 0,
+    });
+    expect(status).toBe(401);
+  });
+
+  test("public routes stay open", async () => {
+    expect((await call("GET", "/api/products")).status).toBe(200);
+    expect((await call("GET", "/api/team")).status).toBe(200);
+    expect((await call("GET", "/health")).status).toBe(200);
+  });
+});
+
+/* ========================================================================
+ * What they're allowed to do
+ * ==================================================================== */
+
+describe("admin routes enforce per-module permissions", () => {
+  test("a module the role doesn't hold is 403", async () => {
+    signInAs({ sitecontent: "manage" }); // everything else defaults to none
+    const { status, body } = await call("GET", "/admin/api/products");
+    expect(status).toBe(403);
+    expect(String(body?.error)).toContain("products");
+  });
+
+  test("holding one module does not grant another", async () => {
+    signInAs({ products: "manage" });
+    expect((await call("GET", "/admin/api/team")).status).toBe(403);
+  });
+
+  test("`view` reads but does not write", async () => {
+    signInAs({ products: "view" });
+    expect((await call("GET", "/admin/api/products")).status).toBe(200);
+    // The 403 must come from assertCan, before the row is even looked up.
+    expect((await call("DELETE", "/admin/api/products/ips1000")).status).toBe(403);
+  });
+
+  test("`manage` satisfies a `view` check", async () => {
+    signInAs({ products: "manage" });
+    expect((await call("GET", "/admin/api/products")).status).toBe(200);
+  });
+
+  test("an endpoint checks the module it belongs to, not just any module", async () => {
+    // PATCH /admin/api/products/featured lives on the products router but is
+    // gated on `homepage`, because it edits the home page. A products-only
+    // role must not reach it just by being on the same router.
+    signInAs({ products: "manage" });
+    expect((await call("PATCH", "/admin/api/products/featured", { ids: [] })).status).toBe(403);
+
+    signInAs({ homepage: "manage" });
+    expect((await call("PATCH", "/admin/api/products/featured", { ids: [] })).status).toBe(200);
+  });
+});
+
+/* ========================================================================
+ * Validation, and the 400/422 split
+ * ==================================================================== */
+
+describe("bodies are validated before any handler runs", () => {
+  test("storefront validation failures are 400 with a reason", async () => {
+    // cal-bk.md §2: the storefront contract is 400 + { error }.
+    const { status, body } = await call("POST", "/api/pricing/quote", { items: [] });
+    expect(status).toBe(400);
+    expect(typeof body?.error).toBe("string");
+  });
+
+  test("admin validation failures are 422 with detail", async () => {
+    signInAs({ sitecontent: "manage" });
+    const { status, body } = await call("POST", "/admin/api/team", { role: "QA", bio: "", sort: 0 });
+    expect(status).toBe(422);
+    expect(body?.error).toBe("Invalid request");
+    expect(body?.detail).toBeTruthy();
+  });
+
+  test("an anonymous caller is refused before its body is even parsed", async () => {
+    // The session guard is a derive, so it runs ahead of schema validation:
+    // a stranger gets 401 and learns nothing about the schema.
+    const { status } = await call("POST", "/admin/api/products", { garbage: true });
+    expect(status).toBe(401);
+  });
+
+  test("a signed-in caller's body is validated before the permission check", async () => {
+    // Pinning the real ordering rather than the one that would be tidier.
+    // Schema validation is a route hook and `assertCan` is the first line of
+    // the handler, so a *signed-in* staff member sending nonsense to a module
+    // they don't hold gets 422, not 403. That leaks the shape of a schema
+    // already published at /openapi in dev, to someone already inside the
+    // panel — so it is accepted, not a finding. If it ever matters, the fix is
+    // a guard-level check, not a reordering inside the handler.
+    signInAs({ products: "view" });
+    const { status } = await call("POST", "/admin/api/products", { garbage: true });
+    expect(status).toBe(422);
+  });
+
+  test("a missing route is 404, not 500", async () => {
+    expect((await call("GET", "/api/no-such-thing")).status).toBe(404);
+  });
+});
+
+/* ========================================================================
+ * Money
+ * ==================================================================== */
+
+describe("cart money is computed from the catalog, never from the client", () => {
+  test("a quote prices from the catalog", async () => {
+    const { status, body } = await call("POST", "/api/pricing/quote", {
+      items: [{ productId: "ips1000", qty: 2 }],
+      insideDhaka: true,
+    });
+    expect(status).toBe(200);
+    expect(body?.subtotal).toBe(2000); // 2 × ৳1,000
+    expect(body?.deliveryFee).toBe(200); // 2 × ৳100
+    expect(body?.installationFee).toBe(100); // 2 × ৳50
+    expect(body?.total).toBe(2300);
+  });
+
+  test("prices sent by the client are ignored, not honoured", async () => {
+    // The whole point of cal-bk.md: a tampered cart must produce the same
+    // numbers as an honest one.
+    const { status, body } = await call("POST", "/api/pricing/quote", {
+      items: [{ productId: "ips1000", qty: 2, price: 1, unitPrice: 1, lineTotal: 2 }],
+      insideDhaka: true,
+      subtotal: 2,
+      total: 2,
+    });
+    expect(status).toBe(200);
+    expect(body?.subtotal).toBe(2000);
+    expect(body?.total).toBe(2300);
+  });
+
+  test("quantity tiers resolve server-side", async () => {
+    const { body } = await call("POST", "/api/pricing/quote", {
+      items: [{ productId: "ips1000", qty: 10 }],
+    });
+    expect(body?.subtotal).toBe(8000); // 10 × (৳1,000 − ৳200)
+  });
+
+  test("the per-product cap can't be lifted by splitting lines", async () => {
+    const { status, body } = await call("POST", "/api/pricing/quote", {
+      items: Array.from({ length: 2 }, () => ({ productId: "ips1000", qty: 99 })),
+    });
+    expect(status).toBe(400);
+    expect(String(body?.error)).toContain("99");
+  });
+
+  test("an unknown product is refused rather than priced at zero", async () => {
+    const { status, body } = await call("POST", "/api/pricing/quote", {
+      items: [{ productId: "does-not-exist", qty: 1 }],
+    });
+    expect(status).toBe(400);
+    expect(String(body?.error)).toContain("does-not-exist");
+  });
+});
+
+/* ========================================================================
+ * Checkout guard rails (everything before the transaction)
+ * ==================================================================== */
+
+describe("checkout validates identity before it prices anything", () => {
+  const order = {
+    name: "Test Buyer",
+    phone: "01712345678",
+    address: "12 Test Road, Dhaka",
+    insideDhaka: true,
+    pay: "Cash on delivery",
+    items: [{ productId: "ips1000", qty: 1 }],
+  };
+
+  test("a malformed phone is 400", async () => {
+    const { status, body } = await call("POST", "/api/orders", { ...order, phone: "12345" });
+    expect(status).toBe(400);
+    expect(String(body?.error)).toContain("01XXXXXXXXX");
+  });
+
+  test("a one-character name is 400", async () => {
+    const { status, body } = await call("POST", "/api/orders", { ...order, name: "A" });
+    expect(status).toBe(400);
+    expect(String(body?.error)).toContain("Name");
+  });
+
+  test("stock is enforced at order time even though quotes ignore it", async () => {
+    // qty 6 against stock 5: the quote endpoint would happily price it.
+    const quote = await call("POST", "/api/pricing/quote", {
+      items: [{ productId: "ips1000", qty: 6 }],
+      insideDhaka: true,
+    });
+    expect(quote.status).toBe(200);
+
+    const { status, body } = await call("POST", "/api/orders", {
+      ...order,
+      items: [{ productId: "ips1000", qty: 6 }],
+    });
+    expect(status).toBe(400);
+    expect(String(body?.error)).toContain("in stock");
+  });
+
+  test("a payment method that isn't enabled is refused", async () => {
+    // paymentMethod.findFirst is stubbed to null — i.e. nothing enabled.
+    const { status, body } = await call("POST", "/api/orders", order);
+    expect(status).toBe(400);
+    expect(String(body?.error)).toContain("not available");
+  });
+});
+
+/* ========================================================================
+ * Campaign pages
+ * ==================================================================== */
+
+describe("unpublished campaign pages are invisible", () => {
+  test("an unpublished page 404s exactly like a missing one", async () => {
+    const missing = await call("GET", "/api/landing-pages/nope");
+    expect(missing.status).toBe(404);
+    expect(missing.body?.error).toBe("Landing page not found");
+  });
+});

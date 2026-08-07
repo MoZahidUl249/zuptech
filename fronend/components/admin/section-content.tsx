@@ -53,7 +53,7 @@ const FIT_OPTIONS = [
   { value: "contain" as const, label: "Contain" },
 ];
 
-export function HomePageSection() {
+export function BannerSlidesCard() {
   const { state, update, can } = useAdmin();
   const readOnly = can("homepage") !== "manage";
 
@@ -93,9 +93,6 @@ export function HomePageSection() {
   const activeCount = state.slides.filter((s) => s.active && s.image).length;
 
   return (
-    <div className="flex flex-col gap-5">
-      <FeaturedRowEditor />
-
     <Card className="px-5 py-5 sm:px-6">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -237,7 +234,6 @@ export function HomePageSection() {
         ))}
       </div>
     </Card>
-    </div>
   );
 }
 
@@ -250,7 +246,7 @@ export function HomePageSection() {
  * row's order was whatever sequence someone happened to click in and could
  * never be changed afterwards.
  */
-function FeaturedRowEditor() {
+export function FeaturedRowEditor() {
   const { state, update, can } = useAdmin();
   const readOnly = can("homepage") !== "manage";
 
@@ -424,7 +420,7 @@ function SlideHrefField({
 }
 
 /**
- * Banner image upload. Unlike the old picker this posts to the media-storage
+ * Banner image upload. Unlike the old picker this posts to the media
  * service via POST /admin/api/slides/image and stores the returned URL —
  * base64 data-URLs used to be inlined into the slide row, which meant every
  * public /api/site-config response carried the image bytes.
@@ -542,75 +538,113 @@ function BannerImagePicker({
 
 /* ===== Site content (copywriting) ===== */
 
-interface CopyField {
+export interface CopyField {
   key: keyof SiteCopy;
   label: string;
   multiline?: boolean;
 }
 
-/** Grouped by the page each field appears on. Leaving a field blank falls back
- *  to the site's built-in default (DEFAULT_COPY in lib/admin-bridge.ts), which
- *  is what the placeholder shows. */
-const COPY_GROUPS: { group: string; fields: CopyField[] }[] = [
-  {
-    group: "Home page",
-    // The homepage is now the banner carousel, the product row and the
-    // services strip. Its hero text, capabilities band, stats and closing CTA
-    // were all removed from the layout, so the fields that fed them are gone
-    // from here too rather than left editing text nothing renders. The
-    // headline stays: it is the page's visually-hidden <h1>.
-    fields: [{ key: "homeHeroHeadline", label: "Hero headline (screen readers & search)" }],
-  },
-  {
-    group: "Industrial page",
-    fields: [
-      // The eyebrow and subhead went with the page's text hero — it is the
-      // banner carousel now, same as the homepage. The headline stays as the
-      // page's visually-hidden <h1>.
-      { key: "industrialHeroHeadline", label: "Hero headline (screen readers & search)" },
-      { key: "industrialGridHeading", label: "Grid solutions heading" },
-      { key: "industrialGridBody", label: "Grid solutions body", multiline: true },
-      { key: "industrialServicesHeading", label: "Services heading" },
-      { key: "industrialServicesSubtitle", label: "Services subtitle", multiline: true },
-      { key: "industrialStandardsHeading", label: "Standards heading" },
-      { key: "industrialStandardsBody", label: "Standards body", multiline: true },
-    ],
-  },
-  {
-    group: "Contact page",
-    fields: [
-      { key: "contactHeading", label: "Page heading" },
-      { key: "contactFormHeading", label: "Form heading" },
-      { key: "contactOfficeHeading", label: "Office card heading" },
-      // No "Team section heading" field: the team section itself is not
-      // rendered (see app/(site)/contact/page.tsx), and offering an editor for
-      // a heading nobody can see is how this admin ends up full of controls
-      // that do nothing. The column stays in SiteConfig for when it returns.
-      { key: "contactServiceLine", label: "Service line number" },
-      { key: "contactTendersEmail", label: "Tenders email" },
-    ],
-  },
-  {
-    group: "Footer",
-    fields: [
-      { key: "footerDescription", label: "Footer description", multiline: true },
-    ],
-  },
+/* One list per page, because the admin is now organised that way: each screen
+ * imports the wording that belongs to the page it edits. Leaving a field blank
+ * falls back to the site's built-in default (DEFAULT_COPY in
+ * lib/admin-bridge.ts), which is what the placeholder shows. */
+
+/** The homepage is the banner carousel, the product row and the service cards.
+ *  Its hero text, capabilities band, stats and closing CTA were all removed
+ *  from the layout, so the fields that fed them are gone from here too rather
+ *  than left editing text nothing renders. The headline stays: it is the
+ *  page's visually-hidden <h1>. */
+export const HOME_COPY: CopyField[] = [
+  { key: "homeHeroHeadline", label: "Hero headline (screen readers & search)" },
+];
+
+/** Both pages are the banner carousel plus their cards and a form, so the
+ *  headline is all the wording they have. The six grid/standards fields that
+ *  used to sit here went with the sections they fed. */
+export const SERVICES_COPY: CopyField[] = [
+  { key: "servicesHeroHeadline", label: "Hero headline (screen readers & search)" },
+];
+
+export const INDUSTRIAL_COPY: CopyField[] = [
+  { key: "industrialHeroHeadline", label: "Hero headline (screen readers & search)" },
+];
+
+export const CONTACT_COPY: CopyField[] = [
+  { key: "contactHeading", label: "Page heading" },
+  { key: "contactFormHeading", label: "Form heading" },
+  { key: "contactOfficeHeading", label: "Office card heading" },
+  { key: "contactServiceLine", label: "Service line number" },
+  { key: "contactTendersEmail", label: "Tenders email" },
+];
+
+export const FOOTER_COPY: CopyField[] = [
+  { key: "footerDescription", label: "Footer description", multiline: true },
 ];
 
 const CONTACT_FIELDS: { key: keyof SiteContact; label: string; hint?: string }[] = [
   { key: "phone", label: "Phone (dialable)", hint: "+8801XXXXXXXXX" },
   { key: "phoneDisplay", label: "Phone (as shown)" },
-  { key: "hotline", label: "Support hotline" },
+  // Named for where it actually appears. It is not on the site anywhere — the
+  // only thing that prints it is the invoice document.
+  { key: "hotline", label: "Hotline (printed on invoices)" },
   { key: "email", label: "Email" },
   { key: "whatsapp", label: "WhatsApp number (digits)", hint: "8801XXXXXXXXX" },
   { key: "street", label: "Street address" },
   { key: "city", label: "City" },
   { key: "postalCode", label: "Postal code" },
-  { key: "hours", label: "Opening hours" },
+  { key: "hours", label: "Opening hours (short form)", hint: "9am–8pm" },
+  { key: "officeName", label: "Office name", hint: "ZUP TECH Ltd." },
+  { key: "hoursWeekday", label: "Hours — weekdays", hint: "Sat – Thu · 9am – 8pm" },
+  { key: "hoursWeekend", label: "Hours — weekend", hint: "Friday · Closed" },
+  { key: "hoursEmergency", label: "Hours — emergency", hint: "Emergency service · 24/7" },
+  { key: "warehouseName", label: "Warehouse name" },
+  { key: "warehouseAddress", label: "Warehouse address" },
 ];
 
-export function SiteContentSection() {
+/** Phone, email and address. Lives on the Contact page screen, though the
+ *  footer and the WhatsApp button read the same values. */
+export function ContactDetailsCard() {
+  const { state, update, can } = useAdmin();
+  const readOnly = can("sitecontent") !== "manage";
+
+  return (
+    <Card className="px-5 py-5 sm:px-6">
+      <h2 className="text-ui-base font-bold">Contact information</h2>
+      <p className="mt-0.5 text-ui-sm text-zup-gray">
+        Shown in the site footer, the contact page and the floating WhatsApp button.
+      </p>
+      <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        {CONTACT_FIELDS.map((f) => (
+          <Field key={f.key} label={f.label}>
+            <input
+              value={state.contact[f.key]}
+              disabled={readOnly}
+              placeholder={f.hint}
+              inputMode={
+                f.key === "phone" || f.key === "whatsapp" || f.key === "hotline"
+                  ? "tel"
+                  : undefined
+              }
+              onChange={(e) =>
+                update({ contact: { ...state.contact, [f.key]: e.target.value } })
+              }
+              className={inputCls}
+            />
+          </Field>
+        ))}
+      </div>
+      {!readOnly ? (
+        <p className="mt-5 text-ui-sm text-zup-soft">
+          Nothing is sent until you press Save at the bottom of the screen.
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
+/** The GTM container. Site-wide rather than per-page, so it sits on the
+ *  "Footer & tracking" screen with the other things every page carries. */
+export function TrackingCard() {
   const { state, update, can } = useAdmin();
   const readOnly = can("sitecontent") !== "manage";
   const gtm = state.integrations;
@@ -618,133 +652,102 @@ export function SiteContentSection() {
   const gtmLive = gtm.gtmEnabled && gtmIdOk;
 
   return (
-    <div className="flex flex-col gap-5">
-      <Card className="px-5 py-5 sm:px-6">
-        <h2 className="text-ui-base font-bold">Contact information</h2>
-        <p className="mt-0.5 text-ui-sm text-zup-gray">
-          Shown in the site footer, the contact page and the floating WhatsApp button.
-        </p>
-        <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-          {CONTACT_FIELDS.map((f) => (
-            <Field key={f.key} label={f.label}>
-              <input
-                value={state.contact[f.key]}
+    <Card className="px-5 py-5 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-ui-base font-bold">Google Tag Manager</h2>
+          <p className="mt-0.5 text-ui-sm text-zup-gray">
+            Paste your container id to load GTM on the storefront. Nothing loads
+            while this is off or the id is invalid.
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <Pill tone={gtmLive ? "green" : "gray"}>{gtmLive ? "Live" : "Off"}</Pill>
+          <Toggle
+            on={gtm.gtmEnabled}
+            disabled={readOnly}
+            label="Enable Google Tag Manager"
+            onChange={(on) => {
+              update({ integrations: { ...gtm, gtmEnabled: on } });
+              toast(on ? "GTM enabled" : "GTM disabled");
+            }}
+          />
+        </div>
+      </div>
+      <div className="mt-4 max-w-[340px]">
+        <Field label="Container ID">
+          <input
+            value={gtm.gtmId}
+            disabled={readOnly}
+            placeholder="GTM-XXXXXXX"
+            autoCapitalize="characters"
+            spellCheck={false}
+            onChange={(e) =>
+              update({
+                integrations: { ...gtm, gtmId: e.target.value.toUpperCase().trim() },
+              })
+            }
+            className={`${inputCls} font-mono`}
+          />
+        </Field>
+        {gtm.gtmId && !gtmIdOk ? (
+          <p className="mt-1.5 text-ui-sm font-medium text-destructive" role="alert">
+            That doesn&apos;t look like a GTM container id — expected GTM-XXXXXXX.
+          </p>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+/** The wording for one page. Which fields it shows is the caller's decision —
+ *  each page screen passes its own list, so no screen offers copy that belongs
+ *  somewhere else. */
+export function CopyCard({
+  title = "Wording",
+  blurb = "Leave a field blank to use the site's built-in wording (shown as the placeholder).",
+  fields,
+}: {
+  title?: string;
+  blurb?: string;
+  fields: CopyField[];
+}) {
+  const { state, update, can } = useAdmin();
+  const readOnly = can("sitecontent") !== "manage";
+
+  return (
+    <Card className="px-5 py-5 sm:px-6">
+      <h2 className="text-ui-base font-bold">{title}</h2>
+      <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">{blurb}</p>
+      <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        {fields.map((f) => (
+          <Field key={f.key} label={f.label}>
+            {f.multiline ? (
+              <textarea
+                value={state.copy[f.key] ?? ""}
+                rows={3}
                 disabled={readOnly}
-                placeholder={f.hint}
-                inputMode={
-                  f.key === "phone" || f.key === "whatsapp" || f.key === "hotline"
-                    ? "tel"
-                    : undefined
-                }
-                onChange={(e) =>
-                  update({ contact: { ...state.contact, [f.key]: e.target.value } })
-                }
+                placeholder={DEFAULT_COPY[f.key]}
+                onChange={(e) => update({ copy: { ...state.copy, [f.key]: e.target.value } })}
+                className={cn(inputCls, "min-h-20 resize-y")}
+              />
+            ) : (
+              <input
+                value={state.copy[f.key] ?? ""}
+                disabled={readOnly}
+                placeholder={DEFAULT_COPY[f.key]}
+                onChange={(e) => update({ copy: { ...state.copy, [f.key]: e.target.value } })}
                 className={inputCls}
               />
-            </Field>
-          ))}
-        </div>
-        {!readOnly ? (
-          <p className="mt-5 text-ui-sm text-zup-soft">
-            Changes save on their own — watch the top of the screen.
-          </p>
-        ) : null}
-      </Card>
-
-      <Card className="px-5 py-5 sm:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-ui-base font-bold">Google Tag Manager</h2>
-            <p className="mt-0.5 text-ui-sm text-zup-gray">
-              Paste your container id to load GTM on the storefront. Nothing loads
-              while this is off or the id is invalid.
-            </p>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <Pill tone={gtmLive ? "green" : "gray"}>{gtmLive ? "Live" : "Off"}</Pill>
-            <Toggle
-              on={gtm.gtmEnabled}
-              disabled={readOnly}
-              label="Enable Google Tag Manager"
-              onChange={(on) => {
-                update({ integrations: { ...gtm, gtmEnabled: on } });
-                toast(on ? "GTM enabled" : "GTM disabled");
-              }}
-            />
-          </div>
-        </div>
-        <div className="mt-4 max-w-[340px]">
-          <Field label="Container ID">
-            <input
-              value={gtm.gtmId}
-              disabled={readOnly}
-              placeholder="GTM-XXXXXXX"
-              autoCapitalize="characters"
-              spellCheck={false}
-              onChange={(e) =>
-                update({
-                  integrations: { ...gtm, gtmId: e.target.value.toUpperCase().trim() },
-                })
-              }
-              className={`${inputCls} font-mono`}
-            />
+            )}
           </Field>
-          {gtm.gtmId && !gtmIdOk ? (
-            <p className="mt-1.5 text-ui-sm font-medium text-destructive" role="alert">
-              That doesn&apos;t look like a GTM container id — expected GTM-XXXXXXX.
-            </p>
-          ) : null}
-        </div>
-      </Card>
-
-      <Card className="px-5 py-5 sm:px-6">
-        <h2 className="text-ui-base font-bold">Copywriting</h2>
-        <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">
-          Every headline and text block on the store, editable in one place.
-          Leave a field blank to use the site&apos;s built-in wording (shown as
-          the placeholder).
-        </p>
-        {COPY_GROUPS.map((g) => (
-          <div key={g.group} className="mt-5">
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.1em] text-zup-soft">
-              {g.group}
-            </h3>
-            <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-              {g.fields.map((f) => (
-                <Field key={f.key} label={f.label}>
-                  {f.multiline ? (
-                    <textarea
-                      value={state.copy[f.key] ?? ""}
-                      rows={3}
-                      disabled={readOnly}
-                      placeholder={DEFAULT_COPY[f.key]}
-                      onChange={(e) =>
-                        update({ copy: { ...state.copy, [f.key]: e.target.value } })
-                      }
-                      className={cn(inputCls, "min-h-20 resize-y")}
-                    />
-                  ) : (
-                    <input
-                      value={state.copy[f.key] ?? ""}
-                      disabled={readOnly}
-                      placeholder={DEFAULT_COPY[f.key]}
-                      onChange={(e) =>
-                        update({ copy: { ...state.copy, [f.key]: e.target.value } })
-                      }
-                      className={inputCls}
-                    />
-                  )}
-                </Field>
-              ))}
-            </div>
-          </div>
         ))}
-        {!readOnly ? (
-          <p className="mt-5 text-ui-sm text-zup-soft">
-            Changes save on their own — watch the top of the screen.
-          </p>
-        ) : null}
-      </Card>
-    </div>
+      </div>
+      {!readOnly ? (
+        <p className="mt-5 text-ui-sm text-zup-soft">
+          Nothing is sent until you press Save at the bottom of the screen.
+        </p>
+      ) : null}
+    </Card>
   );
 }

@@ -24,6 +24,14 @@ Use `bun` (not npm/node) everywhere; run Prisma CLI as `bunx --bun prisma …`.
 
 ## Architecture notes
 
+- The app is *assembled* in `src/app.ts` and *started* in `src/index.ts`.
+  Nothing in app.ts has an import side effect, which is what lets
+  `src/app.test.ts` hold a fully-wired app — every route, every DTO, the
+  staffGuard and the onError hook — and drive real Requests through
+  `app.handle()` with no port and no database. Those route tests replace only
+  `lib/db` and `lib/auth`, so a new endpoint is covered by the RBAC and
+  400/422 assertions the moment it is mounted. Keep new composition (hooks,
+  headers, plugins) in app.ts; index.ts should stay four lines.
 - Prisma 7: connection URL lives in `prisma.config.ts` (from `DATABASE_URL`),
   client is generated to `src/generated/` (gitignored — regenerate after
   schema changes) and instantiated with the `@prisma/adapter-pg` driver
@@ -46,13 +54,22 @@ Use `bun` (not npm/node) everywhere; run Prisma CLI as `bunx --bun prisma …`.
   flow is exercised in dev — a log line, never a response field. Reset
   endpoints always answer `{ok: true}` regardless of whether the account
   exists, so nothing in the API can be used to enumerate accounts.
-- A product carries two offer ladders, both `{minQty, percentage}` relations
-  with `@@unique([productId, minQty])`: `QuantityOffer` (off the unit price)
-  and `FreeDeliveryOffer` (off the zone delivery fee; 100 = ships free).
-  Both resolve the same way — highest satisfied `minQty` wins, tiers never
-  stack — through `bestOfferTier` in `lib/rules.ts`. Admin writes are
-  replace-all per ladder. When adding a third ladder, reuse `bestOfferTier`
-  rather than writing another search.
+- A product carries two offer ladders, both `{minQty, amount}` relations with
+  `@@unique([productId, minQty])`: `QuantityOffer` (BDT off the unit price) and
+  `FreeDeliveryOffer` (BDT off the zone delivery fee). Both resolve the same
+  way — highest satisfied `minQty` wins, tiers never stack — through
+  `bestOfferTier` in `lib/rules.ts`. Admin writes are replace-all per ladder.
+  When adding a third ladder, reuse `bestOfferTier` rather than writing another
+  search.
+- **Every discount is a flat BDT amount; there are no percentages in the money
+  path.** They were removed because the same percentage got rounded three
+  different ways — the server floored it, the admin preview rounded it, the
+  product card rounded again off a different base — so a ৳999 product at 33%
+  off showed ৳669 in the admin and charged ৳670. `Product.salePrice` is what
+  the customer pays (admin-entered, not derived); `minDeposit` is the deposit
+  itself. Subtraction has nothing to round. A tier may exceed the price or the
+  fee: `effectiveUnitPrice` and `discountedDeliveryFee` clamp at zero, and an
+  amount at or above the zone fee is how "free delivery" is expressed.
 - Admin routes `.use(staffGuard)` (session → `staffCtx`) and call
   `assertCan(staffCtx, module, "view"|"manage")` at the top of every handler.
 - Request/response contracts are DTOs: every route body/query schema lives in
@@ -93,10 +110,15 @@ Use `bun` (not npm/node) everywhere; run Prisma CLI as `bunx --bun prisma …`.
   server acts on: checkout always reprices through `priceCart()`. The admin
   surfaces `productSellingPrice` beside the offer so a campaign advertising a
   price the cart won't honour is visible before it ships.
-- `PageHero`/`HeroPoster` back the per-page hero art and are created lazily —
-  a page with no row renders the frontend's built-in design (`mode: "plain"`).
-  Distinct from `HeroSlide`, which is the homepage promo carousel.
-- `Category.svgLogo` holds SVG **markup**, not a URL — the media-storage
+- `HeroSlide` is the only hero model: the homepage promo carousel, which
+  `/services` and `/industrial` render too. A per-page `PageHero`/`HeroPoster`
+  pair used to exist alongside it and was dropped in the site-content cleanup —
+  no page had rendered that art since the storefront was rebuilt, so the whole
+  cluster (7 admin routes, a public route, an editor) was write-only.
+- A `SiteConfig` copy column earns its place by having a renderer. Twenty-one
+  were dropped for failing that test; `serialize.test.ts` pins the surviving
+  set so the next deleted section takes its column with it.
+- `Category.svgLogo` holds SVG **markup**, not a URL — the media
   service only accepts raster formats and rasterizes what it stores. The
   storefront renders it inline (`dangerouslySetInnerHTML`), so it goes through
   `sanitizeSvgLogo` (`src/lib/rules.ts`). That function **parses** the markup

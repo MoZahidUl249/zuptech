@@ -1,3 +1,17 @@
+# ---------- shared TLS + security headers ----------
+#
+# HSTS was missing entirely, which left the very first request over http
+# hijackable even though every http server block redirects: the redirect only
+# helps once the browser has already talked to us. With this, a browser that
+# has seen the site once refuses plain http for a year without asking.
+#
+# `always` matters on every one of these — without it nginx omits the header on
+# error responses, which are exactly the ones an attacker can often provoke.
+#
+# The app also sets its own headers (fronend/next.config.ts, and the backend's
+# .onAfterHandle); these are the edge's copy, so a misconfigured or bypassed
+# origin still can't serve the site unprotected.
+
 # RENDERED AT CONTAINER START — this is a template, not a live config.
 #
 # The nginx image runs envsubst over /etc/nginx/templates/*.template and writes
@@ -44,6 +58,13 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${APP_DOMAIN}/privkey.pem;
 
+    # See the note at the top of this file.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options    "nosniff" always;
+    add_header X-Frame-Options           "DENY" always;
+    add_header Referrer-Policy           "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy        "camera=(), microphone=(), geolocation=()" always;
+
     return 301 https://${APP_DOMAIN}$request_uri;
 }
 
@@ -55,6 +76,13 @@ server {
 
     ssl_certificate     /etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${APP_DOMAIN}/privkey.pem;
+
+    # See the note at the top of this file.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options    "nosniff" always;
+    add_header X-Frame-Options           "DENY" always;
+    add_header Referrer-Policy           "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy        "camera=(), microphone=(), geolocation=()" always;
 
     location / {
         proxy_pass http://storefront;
@@ -76,6 +104,13 @@ server {
 
     ssl_certificate     /etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${APP_DOMAIN}/privkey.pem;
+
+    # See the note at the top of this file.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options    "nosniff" always;
+    add_header X-Frame-Options           "DENY" always;
+    add_header Referrer-Policy           "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy        "camera=(), microphone=(), geolocation=()" always;
 
     # Admin photo/video uploads proxy through the API to Cloudinary.
     client_max_body_size 320m;

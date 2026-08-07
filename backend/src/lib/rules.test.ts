@@ -4,7 +4,7 @@ import {
   bestQuantityOffer,
   LEAD_STATUSES,
   MAX_SVG_LOGO_BYTES,
-  deliveryDiscountPercent,
+  deliveryDiscountAmount,
   discountedDeliveryFee,
   effectiveUnitPrice,
   GTM_ID_RE,
@@ -13,12 +13,11 @@ import {
   isOneOf,
   isValidPhone,
   maskSecret,
-  minDownPayment,
   normalizePhone,
   ORDER_STATUSES,
   parseOrderStatus,
   reorderQty,
-  salePrice,
+  sellingPrice,
   sanitizeSvgLogo,
 } from "./rules";
 
@@ -58,74 +57,72 @@ describe("misc", () => {
     expect(GTM_ID_RE.test("GTM-ABC1234")).toBe(true);
     expect(GTM_ID_RE.test("GTM-ab")).toBe(false);
   });
-  test("min down payment rounds up", () => {
-    expect(minDownPayment(42500, 20)).toBe(8500);
-    expect(minDownPayment(1650, 10)).toBe(165);
-    expect(minDownPayment(999, 33)).toBe(330); // 329.67 → 330
-  });
-  test("sale price discounts only when onSale is true", () => {
-    expect(salePrice({ price: 1000, onSale: false, salePercentage: 50 })).toBe(1000);
-    expect(salePrice({ price: 1000, onSale: true, salePercentage: 0 })).toBe(1000);
-    expect(salePrice({ price: 1000, onSale: true, salePercentage: 20 })).toBe(800);
-    expect(salePrice({ price: 999, onSale: true, salePercentage: 33 })).toBe(670); // 329.67 → floor 329
-    expect(salePrice({ price: 1000, onSale: true, salePercentage: 100 })).toBe(0);
+  test("sellingPrice uses the sale price only when it is a real discount", () => {
+    expect(sellingPrice({ price: 1000, onSale: false, salePrice: 800 })).toBe(1000);
+    // 0 means "not set", not "free" — otherwise a blank field gives it away.
+    expect(sellingPrice({ price: 1000, onSale: true, salePrice: 0 })).toBe(1000);
+    expect(sellingPrice({ price: 1000, onSale: true, salePrice: 800 })).toBe(800);
+    // A sale price above list is a typo, not a markup — ignore it.
+    expect(sellingPrice({ price: 1000, onSale: true, salePrice: 1200 })).toBe(1000);
+    expect(sellingPrice({ price: 1000, onSale: true, salePrice: 1 })).toBe(1);
   });
   test("bestQuantityOffer picks the highest threshold the qty satisfies", () => {
     const offers = [
-      { minQty: 3, percentage: 5 },
-      { minQty: 5, percentage: 10 },
-      { minQty: 10, percentage: 15 },
+      { minQty: 3, amount: 50 },
+      { minQty: 5, amount: 100 },
+      { minQty: 10, amount: 150 },
     ];
     expect(bestQuantityOffer(offers, 1)).toBeNull();
     expect(bestQuantityOffer(offers, 2)).toBeNull();
-    expect(bestQuantityOffer(offers, 3)).toEqual({ minQty: 3, percentage: 5 });
-    expect(bestQuantityOffer(offers, 4)).toEqual({ minQty: 3, percentage: 5 });
-    expect(bestQuantityOffer(offers, 5)).toEqual({ minQty: 5, percentage: 10 });
-    expect(bestQuantityOffer(offers, 12)).toEqual({ minQty: 10, percentage: 15 });
+    expect(bestQuantityOffer(offers, 3)).toEqual({ minQty: 3, amount: 50 });
+    expect(bestQuantityOffer(offers, 4)).toEqual({ minQty: 3, amount: 50 });
+    expect(bestQuantityOffer(offers, 5)).toEqual({ minQty: 5, amount: 100 });
+    expect(bestQuantityOffer(offers, 12)).toEqual({ minQty: 10, amount: 150 });
     expect(bestQuantityOffer([], 10)).toBeNull();
   });
   test("effectiveUnitPrice charges whichever discount is cheaper, never both", () => {
-    const offers = [{ minQty: 3, percentage: 5 }];
-    // No offers apply below the threshold — falls back to the flat sale price.
-    expect(
-      effectiveUnitPrice({ price: 1000, onSale: false, salePercentage: 0 }, 2, offers),
-    ).toBe(1000);
+    const offers = [{ minQty: 3, amount: 50 }];
+    // No offers apply below the threshold — falls back to the sale price.
+    expect(effectiveUnitPrice({ price: 1000, onSale: false, salePrice: 0 }, 2, offers)).toBe(1000);
     // Qty tier applies and there's no sale — qty price wins.
-    expect(
-      effectiveUnitPrice({ price: 1000, onSale: false, salePercentage: 0 }, 3, offers),
-    ).toBe(950);
-    // Sale (20%) beats the qty tier (5%) — cheaper price wins.
-    expect(
-      effectiveUnitPrice({ price: 1000, onSale: true, salePercentage: 20 }, 3, offers),
-    ).toBe(800);
-    // Qty tier (5%) beats a smaller sale (2%) — cheaper price wins.
-    expect(
-      effectiveUnitPrice({ price: 1000, onSale: true, salePercentage: 2 }, 3, offers),
-    ).toBe(950);
+    expect(effectiveUnitPrice({ price: 1000, onSale: false, salePrice: 0 }, 3, offers)).toBe(950);
+    // Sale (৳800) beats the qty tier (৳950) — cheaper price wins.
+    expect(effectiveUnitPrice({ price: 1000, onSale: true, salePrice: 800 }, 3, offers)).toBe(800);
+    // Qty tier (৳950) beats a shallower sale (৳980) — cheaper price wins.
+    expect(effectiveUnitPrice({ price: 1000, onSale: true, salePrice: 980 }, 3, offers)).toBe(950);
   });
-  test("deliveryDiscountPercent picks the highest tier the qty satisfies", () => {
+  test("effectiveUnitPrice floors at zero when a tier exceeds the price", () => {
+    // An over-generous tier gives the unit away; it must never invert the line.
+    expect(
+      effectiveUnitPrice({ price: 500, onSale: false, salePrice: 0 }, 5, [
+        { minQty: 2, amount: 900 },
+      ]),
+    ).toBe(0);
+  });
+  test("deliveryDiscountAmount picks the highest tier the qty satisfies", () => {
     const tiers = [
-      { minQty: 2, percentage: 50 },
-      { minQty: 5, percentage: 100 },
+      { minQty: 2, amount: 150 },
+      { minQty: 5, amount: 300 },
     ];
-    expect(deliveryDiscountPercent([], 10)).toBe(0); // no ladder = full fee
-    expect(deliveryDiscountPercent(tiers, 1)).toBe(0);
-    expect(deliveryDiscountPercent(tiers, 2)).toBe(50);
-    expect(deliveryDiscountPercent(tiers, 4)).toBe(50); // between tiers, lower wins
-    expect(deliveryDiscountPercent(tiers, 5)).toBe(100);
-    expect(deliveryDiscountPercent(tiers, 50)).toBe(100); // above the top tier
+    expect(deliveryDiscountAmount([], 10)).toBe(0); // no ladder = full fee
+    expect(deliveryDiscountAmount(tiers, 1)).toBe(0);
+    expect(deliveryDiscountAmount(tiers, 2)).toBe(150);
+    expect(deliveryDiscountAmount(tiers, 4)).toBe(150); // between tiers, lower wins
+    expect(deliveryDiscountAmount(tiers, 5)).toBe(300);
+    expect(deliveryDiscountAmount(tiers, 50)).toBe(300); // above the top tier
   });
-  test("discountedDeliveryFee applies the best tier, floor-rounded", () => {
+  test("discountedDeliveryFee subtracts the best tier and clamps at zero", () => {
     const tiers = [
-      { minQty: 2, percentage: 50 },
-      { minQty: 5, percentage: 100 },
+      { minQty: 2, amount: 150 },
+      { minQty: 5, amount: 300 },
     ];
     expect(discountedDeliveryFee(300, tiers, 1)).toBe(300);
     expect(discountedDeliveryFee(300, tiers, 2)).toBe(150);
-    expect(discountedDeliveryFee(300, tiers, 5)).toBe(0); // 100% = free
+    expect(discountedDeliveryFee(300, tiers, 5)).toBe(0); // amount == fee: free
     expect(discountedDeliveryFee(300, [], 99)).toBe(300);
-    // 33% of 175 is 57.75 → floor 57 off, so the customer keeps the remainder.
-    expect(discountedDeliveryFee(175, [{ minQty: 2, percentage: 33 }], 3)).toBe(118);
+    // An amount above the fee is how "free delivery" is expressed for the
+    // cheaper zone — it must not hand money back.
+    expect(discountedDeliveryFee(150, tiers, 5)).toBe(0);
     // A zero zone fee stays zero rather than going negative.
     expect(discountedDeliveryFee(0, tiers, 10)).toBe(0);
   });

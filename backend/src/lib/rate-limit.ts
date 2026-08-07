@@ -1,8 +1,18 @@
 /**
- * Minimal in-memory sliding-window rate limiter for the auth endpoints
- * (login, register, password reset). Good enough for a single process; swap for a Redis-backed
- * limiter when the API runs on more than one instance.
+ * Sliding-window rate limiting, in two flavours.
+ *
+ * `allowHit` is in-memory: cheap, per-process, and wiped by a restart. Right
+ * for high-volume, low-stakes paths — pricing quotes, the public lead forms,
+ * campaign view counts — where a database write per request would cost more
+ * than the abuse it prevents.
+ *
+ * `allowHitDurable` records attempts in Postgres. Right for auth, where the
+ * in-memory version was actively weak: every deploy reset the counters, so a
+ * brute-force attempt only had to outlast a restart, and the counts would have
+ * been per-instance the moment this ran on two containers.
  */
+
+import { prisma } from "./db";
 
 const hits = new Map<string, number[]>();
 
@@ -63,6 +73,46 @@ export function clientIp(request: Request, server: IpSource | null | undefined):
   return server?.requestIP(request)?.address ?? "unknown";
 }
 
+/**
+ * Same contract as `allowHit`, but the window is stored in Postgres so it
+ * survives a restart and is shared across instances.
+ *
+ * Fails OPEN. If the database is unreachable the caller is allowed through:
+ * a limiter that cannot read its own state must not become the reason nobody
+ * can sign in. That is the right trade here because every endpoint using this
+ * has its own authentication behind it — the limiter slows guessing, it is not
+ * the thing keeping anyone out.
+ */
+export async function allowHitDurable(
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<boolean> {
+  const since = new Date(Date.now() - windowMs);
+  try {
+    await prisma.rateLimitHit.create({ data: { key } });
+    const used = await prisma.rateLimitHit.count({ where: { key, at: { gte: since } } });
+    return used <= limit;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Drop attempt rows nobody can still be inside the window for.
+ *
+ * An hour is comfortably longer than the widest window in use (5 minutes), so
+ * this can never delete a row that still counts.
+ */
+export async function pruneRateLimitHits(): Promise<void> {
+  const cutoff = new Date(Date.now() - 60 * 60_000);
+  try {
+    await prisma.rateLimitHit.deleteMany({ where: { at: { lt: cutoff } } });
+  } catch {
+    // A failed prune is a disk-space problem, not a correctness one.
+  }
+}
+
 // Cheap periodic cleanup so long-forgotten keys don't accumulate.
 setInterval(() => {
   const now = Date.now();
@@ -72,3 +122,7 @@ setInterval(() => {
     else hits.set(key, recent);
   }
 }, 5 * 60_000).unref?.();
+
+// The durable table needs the same treatment, less often — it only holds auth
+// attempts, so it grows slowly.
+setInterval(() => void pruneRateLimitHits(), 30 * 60_000).unref?.();

@@ -138,7 +138,7 @@ export function ProductRow({
 export function OfferSummary({ product: p }: { product: AdminProduct }) {
   const qty = [...p.quantityOffers].sort((a, b) => a.minQty - b.minQty);
   const delivery = [...p.freeDeliveryOffers].sort((a, b) => a.minQty - b.minQty);
-  const onSale = p.onSale && p.salePercentage > 0;
+  const onSale = p.onSale && p.salePrice > 0 && p.salePrice < p.price;
 
   if (!onSale && qty.length === 0 && delivery.length === 0) {
     return <span className="text-zup-faint">—</span>;
@@ -148,17 +148,20 @@ export function OfferSummary({ product: p }: { product: AdminProduct }) {
     <span className="flex flex-wrap gap-1">
       {onSale ? (
         <Pill tone="amber" className="px-2 py-0.5 text-ui-micro">
-          −{p.salePercentage}% sale
+          −{taka(p.price - p.salePrice)} sale
         </Pill>
       ) : null}
       {qty.map((o) => (
         <Pill key={`q${o.minQty}`} tone="blue" className="px-2 py-0.5 text-ui-micro">
-          {o.minQty}+ · {o.percentage}%
+          {o.minQty}+ · −{taka(o.amount)}
         </Pill>
       ))}
       {delivery.map((o) => (
         <Pill key={`d${o.minQty}`} tone="green" className="px-2 py-0.5 text-ui-micro">
-          {o.minQty}+ · {o.percentage === 100 ? "free del." : `del. ${o.percentage}%`}
+          {o.minQty}+ ·{" "}
+          {o.amount >= Math.max(p.deliveryFeeInsideDhaka, p.deliveryFeeOutsideDhaka)
+            ? "free del."
+            : `del. −${taka(o.amount)}`}
         </Pill>
       ))}
     </span>

@@ -7,6 +7,7 @@ import {
   uploadProductVideoDto,
 } from "../../dtos/products.dto";
 import { prisma } from "../../lib/db";
+import { LIST_CAP } from "../../lib/rules";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { productInclude, toAdminProduct } from "../../lib/serialize";
@@ -52,7 +53,7 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
   .get("/admin/api/products", async ({ staffCtx }) => {
     assertCan(staffCtx, "products", "view");
     const [products, featured] = await Promise.all([
-      prisma.product.findMany({ orderBy: { createdAt: "asc" }, include: productInclude }),
+      prisma.product.findMany({ take: LIST_CAP, orderBy: { createdAt: "asc" }, include: productInclude }),
       featuredIds(),
     ]);
     return products.map((p) => toAdminProduct(p, featured));
@@ -180,7 +181,7 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
     return { ok: true };
   })
 
-  /* ===== Photos & video (media-storage service) ===== */
+  /* ===== Photos & video (Cloudinary, via lib/storage.ts) ===== */
 
   /** Append one photo to the gallery (first photo is the cover). */
   .post(

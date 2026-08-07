@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import {
+  isUnsaved,
   useAdmin,
   taka,
   type PurchaseOrder,
@@ -33,11 +34,15 @@ export function PurchaseOrdersTab({
 }) {
   const { state, update } = useAdmin();
   const [creating, setCreating] = useState(false);
-  const [productId, setProductId] = useState(state.products[0]?.id ?? "");
-  const [supplierId, setSupplierId] = useState(state.suppliers[0]?.id ?? "");
+  // Staged rows aren't on the server yet, so a PO naming one would 400 on an
+  // unknown id. They come back into the list the moment their Save lands.
+  const products = state.products.filter((p) => !isUnsaved(p));
+  const suppliers = state.suppliers.filter((s) => !isUnsaved(s));
+  const [productId, setProductId] = useState(products[0]?.id ?? "");
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
   const [qty, setQty] = useState(10);
 
-  const product = state.products.find((p) => p.id === productId);
+  const product = products.find((p) => p.id === productId);
 
   const create = () => {
     if (!product || !supplierId || qty < 1) {
@@ -78,7 +83,7 @@ export function PurchaseOrdersTab({
                 onChange={(e) => setProductId(e.target.value)}
                 className={selectCls}
               >
-                {state.products.map((p) => (
+                {products.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -91,7 +96,7 @@ export function PurchaseOrdersTab({
                 onChange={(e) => setSupplierId(e.target.value)}
                 className={selectCls}
               >
-                {state.suppliers.map((s) => (
+                {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>

@@ -1,5 +1,6 @@
 import { Value } from "@sinclair/typebox/value";
 import { describe, expect, test } from "bun:test";
+import { createLeadDto } from "./leads.dto";
 import { createOrderDto, updateOrderDto } from "./orders.dto";
 import { updatePaymentMethodDto } from "./payments.dto";
 import { quoteDto } from "./pricing.dto";
@@ -65,9 +66,9 @@ const validProduct = {
   slug: "voltage-protector-220v",
   categoryId: "cat_protection",
   price: 1650,
-  minDp: 10,
+  minDeposit: 4250,
   onSale: false,
-  salePercentage: 0,
+  salePrice: 0,
   deliveryFeeInsideDhaka: 60,
   deliveryFeeOutsideDhaka: 150,
   installationFeeInsideDhaka: 0,
@@ -114,37 +115,43 @@ describe("product DTOs", () => {
   });
   test("quantityOffers accepts valid tiers and rejects out-of-range values", () => {
     const offers = [
-      { minQty: 3, percentage: 5 },
-      { minQty: 5, percentage: 10 },
+      { minQty: 3, amount: 500 },
+      { minQty: 5, amount: 1200 },
     ];
     expect(Value.Check(createProductDto, { ...validProduct, quantityOffers: offers })).toBe(true);
     expect(Value.Check(updateProductDto, { quantityOffers: offers })).toBe(true);
-    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 1, percentage: 5 }] })).toBe(false);
-    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 3, percentage: 0 }] })).toBe(false);
-    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 3, percentage: 101 }] })).toBe(false);
-    expect(Value.Check(updateProductDto, { quantityOffers: Array(11).fill({ minQty: 3, percentage: 5 }) })).toBe(
+    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 1, amount: 500 }] })).toBe(false);
+    // A zero-Taka tier is not an offer.
+    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 3, amount: 0 }] })).toBe(false);
+    // No upper bound: a tier may exceed the price, and rules.ts floors the
+    // resulting unit price at zero rather than the DTO guessing a ceiling it
+    // cannot see the price for.
+    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 3, amount: 99999 }] })).toBe(true);
+    expect(Value.Check(updateProductDto, { quantityOffers: Array(11).fill({ minQty: 3, amount: 500 }) })).toBe(
       false,
     );
   });
   test("freeDeliveryOffers accepts valid tiers and rejects out-of-range values", () => {
     const tiers = [
-      { minQty: 2, percentage: 50 },
-      { minQty: 5, percentage: 100 }, // 100% = free delivery
+      { minQty: 2, amount: 75 },
+      { minQty: 5, amount: 350 }, // at or above the zone fee = free delivery
     ];
     expect(Value.Check(createProductDto, { ...validProduct, freeDeliveryOffers: tiers })).toBe(true);
     expect(Value.Check(updateProductDto, { freeDeliveryOffers: tiers })).toBe(true);
     expect(Value.Check(updateProductDto, { freeDeliveryOffers: [] })).toBe(true); // clears the ladder
     // A 1-unit "tier" is the base fee, not an offer.
-    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 1, percentage: 50 }] })).toBe(false);
-    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 2, percentage: 0 }] })).toBe(false);
-    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 2, percentage: 101 }] })).toBe(false);
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 1, amount: 75 }] })).toBe(false);
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 2, amount: 0 }] })).toBe(false);
+    // Deliberately unbounded above: exceeding the fee is exactly how free
+    // delivery is expressed, and the DTO can't know which zone fee applies.
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 2, amount: 99999 }] })).toBe(true);
     expect(
-      Value.Check(updateProductDto, { freeDeliveryOffers: Array(11).fill({ minQty: 2, percentage: 50 }) }),
+      Value.Check(updateProductDto, { freeDeliveryOffers: Array(11).fill({ minQty: 2, amount: 75 }) }),
     ).toBe(false);
   });
   test("the two ladders are independent — sending one leaves the other alone", () => {
-    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 3, percentage: 5 }] })).toBe(true);
-    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 3, percentage: 100 }] })).toBe(true);
+    expect(Value.Check(updateProductDto, { quantityOffers: [{ minQty: 3, amount: 500 }] })).toBe(true);
+    expect(Value.Check(updateProductDto, { freeDeliveryOffers: [{ minQty: 3, amount: 350 }] })).toBe(true);
   });
 });
 
@@ -189,5 +196,31 @@ describe("updatePaymentMethodDto", () => {
   test("partial updates pass, unknown enum values fail", () => {
     expect(Value.Check(updatePaymentMethodDto, { enabled: false })).toBe(true);
     expect(Value.Check(updatePaymentMethodDto, { environment: "Staging" })).toBe(false);
+  });
+});
+
+describe("createLeadDto", () => {
+  const base = { serviceId: "svc_1", customer: "Karim Uddin" };
+
+  test("accepts a booking with no address — it is optional now", () => {
+    // The predecessor field (`city`) was required with a two-character
+    // minimum, which is why the form used to post the string "Not given".
+    expect(Value.Check(createLeadDto, base)).toBe(true);
+  });
+
+  test("accepts the full body the booking form sends", () => {
+    expect(
+      Value.Check(createLeadDto, {
+        ...base,
+        address: "House 12, Road 7, Dhanmondi",
+        phone: "01711111111",
+        email: "karim@example.com",
+        notes: "Needs it before Eid.",
+      }),
+    ).toBe(true);
+  });
+
+  test("rejects a body with no customer", () => {
+    expect(Value.Check(createLeadDto, { serviceId: "svc_1" })).toBe(false);
   });
 });

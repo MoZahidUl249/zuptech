@@ -5,7 +5,7 @@ import { heroMediaTypeDto } from "./common";
 export const updateSlidesDto = t.Object({
   slides: t.Array(
     t.Object({
-      // A media-storage URL. The old admin panel inlined base64 data-URLs here
+      // A Cloudinary delivery URL. The old admin panel inlined base64 data-URLs here
       // (hence the former 2,000,000 cap) — uploads now go through
       // POST /admin/api/slides/image, so this only ever holds a URL.
       image: t.Optional(t.Nullable(t.String({ maxLength: 2000 }))),
@@ -28,45 +28,26 @@ export const updateSlidesDto = t.Object({
  * working. Blank strings are meaningful: they mean "fall back to the
  * frontend's built-in default" (see resolveCopy in lib/admin-bridge.ts).
  */
-const eyebrow = t.String({ maxLength: 60 });
 const heading = t.String({ maxLength: 120 });
 const body = t.String({ maxLength: 400 });
 
 export const updateCopyDto = t.Partial(
   t.Object({
-    featuredHeading: heading,
-    servicesHeading: heading,
-    servicesSubtitle: body,
     footerDescription: body,
 
-    // Home page
-    homeHeroEyebrow: eyebrow,
+    // One headline per page — each is that page's visually-hidden <h1>, except
+    // contactHeading which is visible. The eyebrows, subheads, capability
+    // bands and CTA strips that used to live here went when their sections
+    // were deleted from the pages; a field with no renderer is a field that
+    // lies to whoever fills it in.
     homeHeroHeadline: heading,
-    homeHeroSubhead: body,
-    homeIndustrialEyebrow: eyebrow,
-    homeIndustrialHeading: heading,
-    homeCapabilitiesEyebrow: eyebrow,
-    homeCapabilitiesHeading: heading,
-    homeCtaHeading: heading,
-    homeCtaSubtext: body,
-    homeCtaButton: t.String({ maxLength: 40 }),
-
-    // Industrial page
-    industrialHeroEyebrow: eyebrow,
+    servicesHeroHeadline: heading,
     industrialHeroHeadline: heading,
-    industrialHeroSubhead: body,
-    industrialGridHeading: heading,
-    industrialGridBody: body,
-    industrialServicesHeading: heading,
-    industrialServicesSubtitle: body,
-    industrialStandardsHeading: heading,
-    industrialStandardsBody: body,
 
     // Contact page
     contactHeading: heading,
     contactFormHeading: heading,
     contactOfficeHeading: heading,
-    contactTeamHeading: heading,
     contactServiceLine: t.String({ maxLength: 40 }),
     contactTendersEmail: t.String({ maxLength: 120 }),
   }),
@@ -82,6 +63,13 @@ export const updateContactDto = t.Object({
   city: t.String({ maxLength: 80 }),
   postalCode: t.String({ maxLength: 20 }),
   hours: t.String({ maxLength: 80 }),
+  // Office & warehouse block on the contact page.
+  officeName: t.String({ maxLength: 120 }),
+  warehouseName: t.String({ maxLength: 120 }),
+  warehouseAddress: t.String({ maxLength: 200 }),
+  hoursWeekday: t.String({ maxLength: 80 }),
+  hoursWeekend: t.String({ maxLength: 80 }),
+  hoursEmergency: t.String({ maxLength: 80 }),
 });
 
 export const updateIntegrationsDto = t.Object({

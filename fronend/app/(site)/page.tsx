@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { HeroBanner } from "@/components/marketing/hero-banner";
 import { FeaturedEquipment } from "@/components/marketing/featured-equipment";
 import { site, jsonLd } from "@/lib/site";
-import { getServices, getSiteConfig } from "@/lib/api";
+import { getIndustrialServices, getServices, getShowcaseCards, getSiteConfig } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
-import { ServicesStrip } from "@/components/marketing/services-strip";
+import { ShowcaseStrip } from "@/components/marketing/showcase-strip";
+import { HomeBooking } from "@/components/marketing/home-booking";
 
 export const metadata: Metadata = {
   title: { absolute: "ZUP TECH — Power Solutions & Services in Bangladesh" },
@@ -23,11 +24,19 @@ const orgJsonLd = {
 
 export default async function HomePage() {
   // Server component: copy read here lands in the SSR HTML (SEO-visible, no
-  // post-hydration swap).
-  // No getPageHeroes() here any more: the homepage hero is the banner
-  // carousel alone, so Admin → Page pictures has nothing left to place on
-  // this page. The other pages still use it.
-  const [services, config] = await Promise.all([getServices(), getSiteConfig()]);
+  // post-hydration swap). Both catalogues are fetched because the booking
+  // forms below need real Service.id / IndustrialService.id values — the lead
+  // endpoints 404 on anything else.
+  // Three lists, three jobs. `showcase` is the front page's own cards and is
+  // coupled to nothing. The two catalogues are here only to populate the
+  // booking forms' dropdowns — those need real Service / IndustrialService ids
+  // or the lead endpoints 404.
+  const [showcase, services, industrialServices, config] = await Promise.all([
+    getShowcaseCards(),
+    getServices(),
+    getIndustrialServices(),
+    getSiteConfig(),
+  ]);
   const copy = resolveCopy(config?.copy);
 
   return (
@@ -47,7 +56,9 @@ export default async function HomePage() {
 
       <FeaturedEquipment />
 
-      <ServicesStrip services={services} />
+      <ShowcaseStrip cards={showcase} />
+
+      <HomeBooking services={services} industrialServices={industrialServices} />
     </main>
   );
 }

@@ -37,14 +37,6 @@ export const cartItemsDto = t.Array(
 
 /** Same shape as cartItemsDto, but an empty array is valid — a saved cart
  *  can be cleared out, unlike a checkout submission. */
-export const savedCartItemsDto = t.Array(
-  t.Object({
-    productId: t.String({ minLength: 1 }),
-    qty: t.Integer({ minimum: 1, maximum: 99 }),
-  }),
-  { maxItems: 50 },
-);
-
 /**
  * Builds a literal union from one of lib/rules.ts's `as const` vocabularies.
  *

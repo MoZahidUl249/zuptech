@@ -4,7 +4,7 @@
  * The old helpers threw away almost everything useful: they collapsed the
  * response to a single string, so a failed request told you "Invalid request"
  * and nothing about WHICH field the server rejected. Elysia sends that
- * information — see the onError hook in backend/src/index.ts — but it arrives
+ * information — see the onError hook in backend/src/app.ts — but it arrives
  * as a JSON string nested inside `detail`, so nobody ever read it.
  *
  * The backend's error bodies, in the shapes it actually emits:

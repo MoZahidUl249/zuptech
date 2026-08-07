@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAdmin } from "@/lib/admin";
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS, navItemFor } from "../nav";
+import { NAV_GROUPS, navItemFor, navItemModules } from "../nav";
 
 /**
  * The navigation rail.
@@ -26,7 +26,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
   const groups = NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((i) => can(i.module) !== "none"),
+    items: g.items.filter((i) => navItemModules(i).some((m) => can(m) !== "none")),
   })).filter((g) => g.items.length > 0);
 
   return (

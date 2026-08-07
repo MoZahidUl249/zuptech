@@ -45,7 +45,8 @@ Demo staff logins (password `zup123`): `arif` (Super Admin), `nusrat`
 
 ```
 src/
-  index.ts              app composition: CORS, security headers, error → JSON
+  index.ts              entry point: starts the app (the only place that listens)
+  app.ts                app composition: CORS, security headers, error → JSON
   lib/
     db.ts               shared PrismaClient (pg driver adapter)
     auth.ts             Better Auth: staff username+password, customer phone+password
@@ -111,9 +112,7 @@ OpenAPI 3 spec at **`/openapi/json`** — generated from the DTO schemas in
 |---|---|
 | `GET /api/products` | Visible products only; `?section=` and `?category=` filter by name |
 | `GET /api/products/:slug` | 404 for hidden/unknown |
-| `GET /api/sections` | Catalog taxonomy: sections with their categories nested (each with `svgLogo` markup) — the storefront's filter tree |
-| `GET /api/categories` | Flat category list, each carrying its section name |
-| `GET /api/services` | Service cards for /solutions; the `id` is what `POST /api/leads` expects |
+| `GET /api/services` | Service cards for /services and /industrial; the `id` is what `POST /api/leads` expects |
 | `GET /api/industrial-services` | Industrial/EPC cards; the `id` is what `POST /api/industrial-leads` optionally links against |
 | `GET /api/site-config` | Featured ids, slides, copy, contact, `gtm`, payment options — never secrets |
 | `POST /api/pricing/quote` | Price a cart for display (`items` + optional `insideDhaka`) — `deliveryFee`/`installationFee`/`total` are `null` until the zone is sent; each line's fee comes straight off the product's inside/outside-Dhaka fields; contract in `../fronend/cal-bk.md` §2.1 |
@@ -121,7 +120,6 @@ OpenAPI 3 spec at **`/openapi/json`** — generated from the DTO schemas in
 | `GET /api/my/orders` | Requires customer session |
 | `GET /api/me` | Session's customer profile incl. saved `address`/`insideDhaka` (or `{customer: null}`) — what checkout renders instead of a form |
 | `PATCH /api/me` | Edit the saved profile (`name`/`address`/`insideDhaka`) directly; requires customer session |
-| `GET /api/cart` / `PUT /api/cart` | Signed-in customer's server-synced cart (`items: [{productId, qty}]`) — survives across devices, not just localStorage |
 | `POST /api/auth/register` | Create a customer account (`name`, `phone`, `email`, `password`), signs in. `email` is required and unique — it's the reset destination, not a login identity |
 | `POST /api/auth/login` | Phone + password login (rate-limited) |
 | `POST /api/auth/claim` | Set a password on a number that has ordered as a guest but has no account yet, and sign in (`phone`, `password`, optional `email`). Offered on the order success screen. Answers the same 400 for "never ordered" as for "already registered", so it can't be used to probe which numbers are customers; rate-limited |
@@ -131,7 +129,6 @@ OpenAPI 3 spec at **`/openapi/json`** — generated from the DTO schemas in
 | `POST /api/leads` | Home-service booking form on /services — takes a `serviceId` (404 if unknown), not free text |
 | `POST /api/industrial-leads` | Industrial enquiry form on /industrial — B2B fact set (company, sector, scope, timeline, connected load). `industrialServiceId` is optional and best-effort: an id with no row behind it stores an unlinked lead rather than 404ing, because the page can render a static fallback list. `sector`/`scope`/`timeline` are closed vocabularies (`INDUSTRIAL_SECTORS`/`_SCOPES`/`_TIMELINES` in `lib/rules.ts`) |
 | `GET /api/landing-pages/:slug` | Public campaign page (`/lp/:slug`). 404s for unknown **and** unpublished slugs, so a draft stays genuinely unlisted. Embeds the full product, which is how a campaign renders a product that is off the storefront. Increments `viewCount` |
-| `GET /api/page-heroes` | Hero art for every page, keyed by `pageKey`. Pages never edited come back `mode: "plain"` (the frontend's built-in design) |
 | `POST /api/contact` | Contact form |
 | `POST /pay/:provider` | Gateway webhook **stubs** (bkash/nagad/card) — signature verification TODO before go-live |
 
@@ -144,14 +141,13 @@ OpenAPI 3 spec at **`/openapi/json`** — generated from the DTO schemas in
 | Orders | `GET /orders?q=&status=&preparedById=` (`preparedById=none` lists unclaimed), `GET /orders/:id` (lines + audit trail + invoice + warranties), `PATCH /orders/:id {status?, preparedById?}` — every change is written to the order's `OrderEvent` trail; reaching `Delivered` also generates the warranty records, `DELETE /orders/:id` — permanently removes an order for cleanup. Releases whatever stock it held first (a live order's `reserved`, a delivered one's physical stock and `sold`, with a StockMovement to account for it), then cascades to its OrderItems, OrderEvents, Invoice and Warranty rows. Deleting a delivered order removes its revenue from the reports |
 | Invoices | `GET /invoices?q=&status=`, `GET /invoices/:id`, `POST /invoices {orderId, notes?}` (one per order, 409 otherwise), `PATCH /invoices/:id {status?, notes?}`. No DELETE — a raised invoice is `Void`ed. Amounts are derived from the order, never stored twice |
 | Warranty | `GET /warranties?q=&status=`, `POST /warranties {orderId}` (idempotent backfill for orders delivered before the registry existed; 400 unless delivered), `PATCH /warranties/:id {serialNo?, status?, claimNote?, months?}` |
-| Products | `GET/POST /products`, `PATCH/DELETE /products/:id`, `PATCH /products/featured {ids}` — delivery/installation fees (`deliveryFeeInsideDhaka`/`deliveryFeeOutsideDhaka`/`installationFeeInsideDhaka`/`installationFeeOutsideDhaka`) are edited per-product, no separate pricing area. `quantityOffers` and `freeDeliveryOffers` are `{minQty, percentage}[]` relations, not columns: sending one **replaces that whole ladder**, omitting it leaves it untouched, and a repeated `minQty` in either is a 400 |
+| Products | `GET/POST /products`, `PATCH/DELETE /products/:id`, `PATCH /products/featured {ids}` — delivery/installation fees (`deliveryFeeInsideDhaka`/`deliveryFeeOutsideDhaka`/`installationFeeInsideDhaka`/`installationFeeOutsideDhaka`) are edited per-product, no separate pricing area. `quantityOffers` and `freeDeliveryOffers` are `{minQty, amount}[]` relations (amount in BDT), not columns: sending one **replaces that whole ladder**, omitting it leaves it untouched, and a repeated `minQty` in either is a 400 |
 | Inventory | `PATCH /stock/:productId {onHand, reason}`, `GET/POST /purchase-orders`, `POST /purchase-orders/:id/receive\|cancel`, suppliers CRUD, `GET /movements` |
 | Taxonomy | `GET/POST /sections`, `PATCH/DELETE /sections/:id`, `GET/POST /categories`, `PATCH/DELETE /categories/:id`, `PUT /categories/:id/logo {svg}` — per-item CRUD (`products` module). Deletes 409 while categories/products still reference the row |
 | Leads/customers | `GET /leads`, `PATCH /leads/:id {status}`, `DELETE /leads/:id`, `GET /customers?q=`, `GET /messages`, `PATCH/DELETE /messages/:id` |
 | Industrial leads | `GET /industrial-leads?status=&sector=`, `PATCH /industrial-leads/:id {status}`, `DELETE /industrial-leads/:id` — same `leads` module permission as above, but a separate pipeline: statuses are `INDUSTRIAL_LEAD_STATUSES` (New/Qualifying/Site survey/Proposal sent/Negotiation/Won/Lost), not `LEAD_STATUSES` |
 | Content | `GET/PUT /slides`, `POST /slides/image`, `PUT /copy`, `PUT /contact`, `PUT /integrations` |
 | Landing pages | `GET /landing-pages?published=`, `GET/PATCH/DELETE /landing-pages/:id`, `POST /landing-pages`, `POST /landing-pages/:id/publish\|unpublish\|duplicate` (`landingpages` module). `title` is the internal admin name and never reaches the public payload; `headline` is the public <h1> and falls back to the product name when blank. Publishing an off-catalogue product's page is what makes that product orderable — see `orderableProductWhere()` in `lib/rules.ts`. `offerPrice` is ad copy; checkout still reprices from the catalog |
-| Page heroes | `GET /page-heroes`, `PUT /page-heroes/:pageKey {mode, overlay, background?}`, `POST /page-heroes/:pageKey/background\|posters` (multipart), `PATCH/DELETE /hero-posters/:id`, `PUT /page-heroes/:pageKey/posters/order {ids}` (`sitecontent` module). `pageKey` must be one of `PAGE_HERO_KEYS`; rows are created lazily on first edit |
 | Services | `GET/POST /services`, `PATCH/DELETE /services/:id`, `POST /services/:id/image`, and the same set under `/industrial-services` (`sitecontent` module). Deleting a service with leads attached 409s; deleting an industrial service instead nulls the link on its `IndustrialLead` rows (the enquiry keeps its `serviceName` snapshot) |
 | Payments | `GET /payment-methods`, `PUT /payment-methods/:id` (secrets write-only, responses masked) |
 | Staff | staff CRUD, roles CRUD with permission matrix |

@@ -22,14 +22,17 @@ const securityHeaders = [
 /**
  * Content-Security-Policy.
  *
- * Deliberately REPORT-ONLY for now. It is a real policy, not a placeholder —
- * but shipping an enforcing CSP blind breaks pages in ways that only show up
- * in a browser, and this one has two known-awkward tenants: Next's inline
- * bootstrap/hydration scripts and the GTM loader snippet, both of which need
- * 'unsafe-inline' until the app is switched to nonces.
+ * ENFORCING. It ran report-only first, and was switched over after loading the
+ * storefront and the admin in a browser and confirming neither reported a
+ * violation — which is the only way to know, since a CSP breaks pages in ways
+ * that show up nowhere else.
  *
- * To enforce: load the storefront AND the admin, confirm the console reports
- * no violations, then rename the header to `Content-Security-Policy`.
+ * Two known-awkward tenants keep 'unsafe-inline' in script-src: Next's inline
+ * bootstrap/hydration scripts and the GTM loader snippet. Both are fixable with
+ * nonces; until that work happens this policy is weaker against injected inline
+ * script than it looks, and is worth more for the other directives —
+ * frame-ancestors, object-src, base-uri, form-action and the img/media/connect
+ * allow-lists.
  *
  * The category-logo XSS sink this was added for is now closed at the source
  * (sanitizeSvgLogo parses and allowlists rather than pattern-matching), so
@@ -100,7 +103,7 @@ const nextConfig: NextConfig = {
         headers: [
           ...securityHeaders,
           {
-            key: "Content-Security-Policy-Report-Only",
+            key: "Content-Security-Policy",
             value: contentSecurityPolicy(),
           },
         ],

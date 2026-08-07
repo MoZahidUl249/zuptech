@@ -132,32 +132,6 @@ async function run(): Promise<void> {
     (id, video) => prisma.product.update({ where: { id }, data: { video } }),
   );
 
-  const heroes = await prisma.pageHero.findMany({ select: { id: true, pageKey: true, background: true } });
-  await migrateScalar(
-    "PageHero",
-    "background",
-    heroes.map((h) => ({
-      id: String(h.id),
-      value: h.background,
-      entityType: "pagehero",
-      entityId: h.pageKey,
-    })),
-    (id, background) => prisma.pageHero.update({ where: { id }, data: { background } }),
-  );
-
-  const posters = await prisma.heroPoster.findMany({ select: { id: true, image: true } });
-  await migrateScalar(
-    "HeroPoster",
-    "image",
-    posters.map((p) => ({
-      id: p.id,
-      value: p.image,
-      entityType: "heroposter",
-      entityId: crypto.randomUUID(),
-    })),
-    (id, image) => prisma.heroPoster.update({ where: { id }, data: { image } }),
-  );
-
   const slides = await prisma.heroSlide.findMany({ select: { id: true, image: true } });
   await migrateScalar(
     "HeroSlide",

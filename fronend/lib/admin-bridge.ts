@@ -149,6 +149,15 @@ export const DEFAULT_CONTACT: SiteContact = {
   city: site.address.city,
   postalCode: site.address.postalCode,
   hours: site.hours,
+  // Office-card fields: blank rather than invented. The contact page hides a
+  // row it has no value for, which is the honest failure mode when the backend
+  // is unreachable — a fabricated warehouse address is not.
+  officeName: site.name,
+  warehouseName: "",
+  warehouseAddress: "",
+  hoursWeekday: "",
+  hoursWeekend: "",
+  hoursEmergency: "",
 };
 
 function getContactSnapshot(): SiteContact {

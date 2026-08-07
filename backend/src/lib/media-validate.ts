@@ -1,7 +1,8 @@
 import { ApiError } from "./http";
 
 /**
- * Upload validation that used to live entirely in the media-storage service.
+ * Upload validation. It used to live in a separate media service; it runs
+ * here now, before anything reaches Cloudinary.
  * Cloudinary will happily store whatever bytes it's given, so this is now
  * the only thing standing between an upload and whatever Content-Type it
  * declared — a served asset replays that type, so an unchecked declaration

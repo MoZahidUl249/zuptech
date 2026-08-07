@@ -43,8 +43,9 @@ export const publicLeads = new Elysia({ name: "routes/public/leads", detail: { t
         data: {
           serviceId: service.id,
           customer: body.customer.trim(),
-          city: body.city.trim(),
+          address: body.address?.trim() ?? "",
           phone: body.phone?.trim() ?? "",
+          email: body.email?.trim() ?? "",
           notes: body.notes?.trim() ?? "",
           status: "New",
         },

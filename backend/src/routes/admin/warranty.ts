@@ -8,7 +8,7 @@ import { prisma } from "../../lib/db";
 import { badRequest, notFound } from "../../lib/http";
 import { logOrderEvent } from "../../lib/order-events";
 import { assertCan } from "../../lib/rbac";
-import { warrantyEndsAt } from "../../lib/rules";
+import { warrantyEndsAt, LIST_CAP } from "../../lib/rules";
 import { toWarranty } from "../../lib/serialize";
 import { ensureWarranties } from "../../lib/warranty";
 import { staffGuard } from "./guard";
@@ -32,6 +32,7 @@ export const adminWarranty = new Elysia({
 
       const q = query.q?.trim();
       const warranties = await prisma.warranty.findMany({
+        take: LIST_CAP,
         where: {
           ...(query.status ? { status: query.status } : {}),
           ...(q

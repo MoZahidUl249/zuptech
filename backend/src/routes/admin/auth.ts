@@ -3,7 +3,7 @@ import { forgotPasswordDto, resetPasswordDto, staffLoginDto } from "../../dtos/a
 import { auth } from "../../lib/auth";
 import { prisma } from "../../lib/db";
 import { ApiError, badRequest } from "../../lib/http";
-import { allowHit, clientIp } from "../../lib/rate-limit";
+import { allowHitDurable, clientIp } from "../../lib/rate-limit";
 import { getStaffContext } from "../../lib/rbac";
 import { staffEmail } from "../../lib/rules";
 
@@ -24,8 +24,8 @@ export const adminAuth = new Elysia({ name: "routes/admin/auth", detail: { tags:
     async ({ body, request, server }) => {
       const ip = clientIp(request, server);
       if (
-        !allowHit(`login:${body.username}`, 5, 5 * 60_000) ||
-        !allowHit(`login-ip:${ip}`, 20, 5 * 60_000)
+        !(await allowHitDurable(`login:${body.username}`, 5, 5 * 60_000)) ||
+        !(await allowHitDurable(`login-ip:${ip}`, 20, 5 * 60_000))
       ) {
         throw new ApiError(429, "Too many login attempts — try again in a few minutes");
       }
@@ -53,8 +53,8 @@ export const adminAuth = new Elysia({ name: "routes/admin/auth", detail: { tags:
 
       const ip = clientIp(request, server);
       if (
-        !allowHit(`staff-forgot:${email}`, 3, 5 * 60_000) ||
-        !allowHit(`staff-forgot-ip:${ip}`, 10, 5 * 60_000)
+        !(await allowHitDurable(`staff-forgot:${email}`, 3, 5 * 60_000)) ||
+        !(await allowHitDurable(`staff-forgot-ip:${ip}`, 10, 5 * 60_000))
       ) {
         throw new ApiError(429, "Too many attempts — try again in a few minutes");
       }
@@ -81,8 +81,8 @@ export const adminAuth = new Elysia({ name: "routes/admin/auth", detail: { tags:
 
       const ip = clientIp(request, server);
       if (
-        !allowHit(`staff-reset:${email}`, 5, 5 * 60_000) ||
-        !allowHit(`staff-reset-ip:${ip}`, 10, 5 * 60_000)
+        !(await allowHitDurable(`staff-reset:${email}`, 5, 5 * 60_000)) ||
+        !(await allowHitDurable(`staff-reset-ip:${ip}`, 10, 5 * 60_000))
       ) {
         throw new ApiError(429, "Too many attempts — try again in a few minutes");
       }

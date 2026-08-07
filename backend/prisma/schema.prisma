@@ -33,7 +33,7 @@ model Section {
 model Category {
   id        String  @id @default(cuid())
   name      String  @unique
-  svgLogo   String  @default("") // media-storage URL, "" = none
+  svgLogo   String  @default("") // SVG markup, "" = none
   sectionId String
   section   Section @relation(fields: [sectionId], references: [id])
   sort      Int     @default(0)
@@ -53,9 +53,15 @@ model Product {
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id])
   price       Int // BDT
-  minDp       Int     @default(0) // minimum down payment, % of price (0–100)
-  onSale         Boolean @default(false)
-  salePercentage Int     @default(0) // 0–100, only meaningful when onSale
+  /// The deposit itself, in BDT — not a percentage of price. Display-only
+  /// today; checkout does not take deposits yet.
+  minDeposit  Int     @default(0)
+  onSale      Boolean @default(false)
+  /// What the customer pays while `onSale`, in BDT. The admin types this
+  /// directly, so there is no discount arithmetic and nothing to round — the
+  /// old percentage column produced three different roundings across the
+  /// server, the admin preview and the product card.
+  salePrice   Int     @default(0)
   rating      Float   @default(0)
   sold        Int     @default(0)
   imgHint     String   @default("")
@@ -94,34 +100,35 @@ model Product {
   @@index([categoryId])
 }
 
-/// A "buy N+, save X%" tier on a product. A product may have several tiers;
-/// the highest minQty a cart line's qty satisfies wins — see rules.ts
-/// `bestQuantityOffer`. Discount is computed off the base price and compared
-/// against the flat sale price; the customer always gets whichever is lower
-/// (never stacked — see rules.ts `effectiveUnitPrice`).
+/// A "buy N+, take ৳X off each unit" tier on a product. A product may have
+/// several tiers; the highest minQty a cart line's qty satisfies wins — see
+/// rules.ts `bestQuantityOffer`. The tier price is compared against the flat
+/// sale price and the customer always gets whichever is lower (never stacked —
+/// see rules.ts `effectiveUnitPrice`).
 model QuantityOffer {
-  id         Int     @id @default(autoincrement())
-  productId  String
-  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  minQty     Int // qty threshold, e.g. 3 = "buy 3 or more"
-  percentage Int // 1–100, % off product.price per unit at this tier
+  id        Int     @id @default(autoincrement())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQty    Int // qty threshold, e.g. 3 = "buy 3 or more"
+  amount    Int // BDT off product.price per unit at this tier
 
   @@unique([productId, minQty])
   @@index([productId])
 }
 
-/// A "buy N+, delivery X% off" tier on a product. Same shape and same
+/// A "buy N+, take ৳X off delivery" tier on a product. Same shape and same
 /// resolution rule as QuantityOffer: the highest minQty a cart line's qty
-/// satisfies wins, tiers never stack — see rules.ts `deliveryDiscountPercent`.
+/// satisfies wins, tiers never stack — see rules.ts `deliveryDiscountAmount`.
 /// The discount applies to whichever zone fee the order resolves to
-/// (deliveryFeeInsideDhaka / deliveryFeeOutsideDhaka), so `percentage: 100`
-/// is "free delivery" and anything less is a partial break.
+/// (deliveryFeeInsideDhaka / deliveryFeeOutsideDhaka) and is clamped at that
+/// fee, so an amount at or above it means the line ships free and the fee can
+/// never go negative.
 model FreeDeliveryOffer {
-  id         Int     @id @default(autoincrement())
-  productId  String
-  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  minQty     Int // qty threshold, e.g. 3 = "buy 3 or more"
-  percentage Int // 1–100, % off the per-unit zone delivery fee at this tier
+  id        Int     @id @default(autoincrement())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQty    Int // qty threshold, e.g. 3 = "buy 3 or more"
+  amount    Int // BDT off the per-unit zone delivery fee at this tier
 
   @@unique([productId, minQty])
   @@index([productId])
@@ -143,18 +150,6 @@ model Customer {
   joinedAt DateTime @default(now())
 
   orders Order[]
-  cart   Cart?
-}
-
-/// One saved cart per customer, synced across devices so a signed-in
-/// customer's cart survives beyond browser localStorage. Items are raw
-/// id+qty pairs (same shape as the checkout payload) — never priced here;
-/// money is always recomputed live via /api/pricing/quote.
-model Cart {
-  customerId String   @id
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  items      Json     @default("[]")
-  updatedAt  DateTime @updatedAt
 }
 
 model Order {
@@ -278,6 +273,25 @@ model Counter {
   value Int
 }
 
+/// One recorded attempt against a rate-limited action.
+///
+/// The limiter for auth was purely in-process, which meant every deploy wiped
+/// the lockouts — restart the container and a brute-force attempt starts from
+/// zero — and it would have counted separately per instance the moment this
+/// runs on more than one. Auth attempts are low-volume, so a row per attempt
+/// is affordable and gives both durability and a shared count.
+///
+/// Cheap paths (pricing quotes, lead forms, campaign view counts) deliberately
+/// stay on the in-memory limiter: they are high-volume and low-stakes, and a
+/// database write per request would cost more than the abuse it prevents.
+model RateLimitHit {
+  id  BigInt   @id @default(autoincrement())
+  key String
+  at  DateTime @default(now())
+
+  @@index([key, at])
+}
+
 /// ===== Leads & contact =====
 
 model ServiceLead {
@@ -285,61 +299,18 @@ model ServiceLead {
   serviceId String
   service   Service  @relation(fields: [serviceId], references: [id])
   customer  String
-  city      String
+  /// Where the work is. This was `city` and required, which is why the booking
+  /// form used to post the literal string "Not given" when it was left blank.
+  address   String   @default("")
   phone     String   @default("")
+  /// Its own column rather than a line inside `notes` — staff need to be able
+  /// to reply to the person, not read an address out of a paragraph.
+  email     String   @default("")
   notes     String   @default("")
   status    String   @default("New") // New|Contacted|Survey booked|Quoted|Won|Lost
   createdAt DateTime @default(now())
 
   @@index([serviceId])
-}
-
-/// Per-page hero art. One row per page, keyed by `pageKey` — the homepage
-/// carousel keeps its own `HeroSlide` model (it is a different thing: a
-/// promo slider with per-slide CTAs), whereas this is the *backing* of a
-/// page's headline block.
-///
-/// Kept separate from SiteConfig's copy columns because the art is per-page
-/// and repeating (a poster list), which flat copy columns can't express.
-model PageHero {
-  id String @id @default(cuid())
-  /// "home" | "services" | "industrial" | "contact" | "shop" — see
-  /// PAGE_HERO_KEYS in src/lib/rules.ts, which is the list of record.
-  pageKey String @unique
-
-  /// "plain"   — no art, the existing flat/gradient background
-  /// "image"   — one still background
-  /// "posters" — the `posters` list below, rotated by the frontend
-  mode String @default("plain")
-
-  /// media-storage URL used when mode = "image". "" = none.
-  background String @default("")
-
-  /// 0–100 dark scrim over the art. Hero copy is light-on-dark, so without a
-  /// scrim a bright photo makes the headline unreadable — this is the knob
-  /// that keeps contrast usable per image rather than per design system.
-  overlay Int @default(55)
-
-  posters HeroPoster[]
-
-  updatedAt DateTime @updatedAt
-}
-
-/// One poster in a PageHero's rotation (mode = "posters").
-model HeroPoster {
-  id     String   @id @default(cuid())
-  heroId String
-  hero   PageHero @relation(fields: [heroId], references: [id], onDelete: Cascade)
-
-  /// media-storage URL — required; a poster with no art is not a poster.
-  image String
-  /// Alt text. Empty means decorative, and the frontend marks it aria-hidden.
-  alt   String @default("")
-  /// Optional click-through for the poster.
-  href  String @default("")
-  sort  Int    @default(0)
-
-  @@index([heroId])
 }
 
 /// Unlisted single-product campaign page for ad traffic (`/lp/:slug`), used
@@ -540,18 +511,60 @@ model HeroSlide {
   sort      Int     @default(0)
 }
 
-/// The /solutions page's engineering-service cards (Lighting Automation,
-/// Sub-Station, BMS, etc.). `image` is a media-storage URL uploaded through
+/// A person on the contact page. No slug: two colleagues can share a name, and
+/// nothing links to an individual.
+///
+/// Seeded empty on purpose. A roster of six invented people used to be
+/// hardcoded in the frontend and was deleted for that reason — publishing
+/// fabricated staff for a real business is worse than publishing none. The
+/// client fills this in with real, consented details.
+model TeamMember {
+  id    String @id @default(cuid())
+  name  String
+  role  String
+  bio   String @default("")
+  photo String @default("") // Cloudinary URL, "" = none
+  sort  Int    @default(0)
+}
+
+/// The home page's showcase cards. Same card shape as Service, and a separate
+/// model for the reason that matters: the front page is a shop window, not the
+/// catalogue. Nothing books a ShowcaseCard — it has no lead relation — so an
+/// admin can rewrite, reorder or delete what the home page shows without
+/// touching a single thing the business actually sells.
+///
+/// The home page used to render the `Service` rows directly, which meant
+/// editing the front page edited /services and vice versa.
+model ShowcaseCard {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  dsc       String
+  image     String   @default("") // Cloudinary URL, "" = none
+  features  String[] @default([])
+  sort      Int      @default(0)
+  /// "left" | "right" — which half of the 50/50 storefront card the photo takes.
+  imageSide String   @default("left")
+  /// "tick" | "dot" | "plain" — the marker in front of each feature line.
+  bulletStyle String @default("tick")
+}
+
+/// The /services page's engineering-service cards (Lighting Automation,
+/// Sub-Station, BMS, etc.). `image` is a Cloudinary URL uploaded through
 /// POST /admin/api/services/:id/image — replaced the fixed Lucide icon key
 /// the frontend's SolutionIcon component used to require.
 model Service {
-  id       String   @id @default(cuid())
-  slug     String   @unique
-  name     String
-  dsc      String
-  image    String   @default("") // media-storage URL, "" = none
-  features String[] @default([])
-  sort     Int      @default(0)
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  dsc       String
+  image     String   @default("") // Cloudinary URL, "" = none
+  features  String[] @default([])
+  sort      Int      @default(0)
+  /// "left" | "right" — which half of the 50/50 storefront card the photo takes.
+  imageSide String   @default("left")
+  /// "tick" | "dot" | "plain" — the marker in front of each feature line.
+  bulletStyle String @default("tick")
 
   leads ServiceLead[]
 }
@@ -561,13 +574,17 @@ model Service {
 /// rendered separately. Service is booked via ServiceLead; this one via
 /// IndustrialLead, which captures a different (B2B) fact set.
 model IndustrialService {
-  id       String   @id @default(cuid())
-  slug     String   @unique
-  name     String
-  dsc      String
-  image    String   @default("") // media-storage URL, "" = none
-  features String[] @default([])
-  sort     Int      @default(0)
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  dsc       String
+  image     String   @default("") // Cloudinary URL, "" = none
+  features  String[] @default([])
+  sort      Int      @default(0)
+  /// "left" | "right" — which half of the 50/50 storefront card the photo takes.
+  imageSide String   @default("left")
+  /// "tick" | "dot" | "plain" — the marker in front of each feature line.
+  bulletStyle String @default("tick")
 
   leads IndustrialLead[]
 }
@@ -590,52 +607,51 @@ model SiteConfig {
   //
   // Blank ("") means "use the frontend's built-in default" — resolveCopy() in
   // lib/admin-bridge.ts coalesces empty strings back to DEFAULT_COPY.
-  featuredHeading   String @default("Featured products")
-  servicesHeading   String @default("Our services")
-  servicesSubtitle  String @default("")
+  // A column earns its place by having a renderer. Twenty-one columns were
+  // dropped in the site-content cleanup because the sections they fed had
+  // been deleted from the pages — an admin could type into them forever and
+  // no visitor would see a character. If a section comes back, add its column
+  // back with it, not before.
   footerDescription String @default("")
 
-  // Home page
-  homeHeroEyebrow         String @default("")
-  homeHeroHeadline        String @default("")
-  homeHeroSubhead         String @default("")
-  homeIndustrialEyebrow   String @default("")
-  homeIndustrialHeading   String @default("")
-  homeCapabilitiesEyebrow String @default("")
-  homeCapabilitiesHeading String @default("")
-  homeCtaHeading          String @default("")
-  homeCtaSubtext          String @default("")
-  homeCtaButton           String @default("")
+  // Home page — the page is the banner carousel, the featured row, the
+  // service cards and the two booking forms. Only the visually-hidden <h1>
+  // is copy.
+  homeHeroHeadline String @default("")
+
+  // Services page
+  servicesHeroHeadline String @default("")
 
   // Industrial page
-  industrialHeroEyebrow      String @default("")
-  industrialHeroHeadline     String @default("")
-  industrialHeroSubhead      String @default("")
-  industrialGridHeading      String @default("")
-  industrialGridBody         String @default("")
-  industrialServicesHeading  String @default("")
-  industrialServicesSubtitle String @default("")
-  industrialStandardsHeading String @default("")
-  industrialStandardsBody    String @default("")
+  industrialHeroHeadline String @default("")
 
   // Contact page
   contactHeading      String @default("")
   contactFormHeading  String @default("")
   contactOfficeHeading String @default("")
-  contactTeamHeading  String @default("")
   contactServiceLine  String @default("")
   contactTendersEmail String @default("")
 
   // Contact
   phone        String @default("")
   phoneDisplay String @default("")
-  hotline      String @default("")
+  hotline      String @default("") // printed on invoices, not shown on the site
   email        String @default("")
   whatsapp     String @default("") // digits only
   street       String @default("")
   city         String @default("")
   postalCode   String @default("")
   hours        String @default("")
+
+  // Office & warehouse block on the contact page. These were hardcoded in the
+  // frontend (lib/contact-content.ts) with placeholder values marked as a
+  // launch blocker; they are the client's to set now.
+  officeName       String @default("")
+  warehouseName    String @default("")
+  warehouseAddress String @default("")
+  hoursWeekday     String @default("")
+  hoursWeekend     String @default("")
+  hoursEmergency   String @default("")
 
   // Integrations
   gtmId      String  @default("") // validated ^GTM-[A-Z0-9]{4,10}$

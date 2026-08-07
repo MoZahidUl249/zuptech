@@ -6,6 +6,7 @@ import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useAdmin } from "@/lib/admin";
 import { LoadErrorBanner, SaveStatus } from "../save-status";
+import { PendingChangesBar } from "../pending-changes-bar";
 import { navItemFor } from "../nav";
 import { SidebarAccount, SidebarBrand, SidebarNav } from "./sidebar";
 
@@ -100,6 +101,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <LoadErrorBanner />
             {children}
           </div>
+          {/* Mounted once, outside the page container, so every screen shares
+              one Save button — staged changes span screens. */}
+          <PendingChangesBar />
         </main>
       </div>
     </div>

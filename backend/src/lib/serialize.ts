@@ -2,7 +2,6 @@ import type {
   AdminOrderDto,
   AdminOrderItemDto,
   AdminProductDto,
-  CartDto,
   CategoryDto,
   CheckoutOrderDto,
   ContactMessageDto,
@@ -14,7 +13,6 @@ import type {
   LandingPageDto,
   LeadDto,
   OrderDetailDto,
-  PageHeroDto,
   OrderDto,
   OrderEventDto,
   PaymentMethodDto,
@@ -24,13 +22,14 @@ import type {
   QuoteDto,
   SectionDto,
   ServiceDto,
+  ShowcaseCardDto,
   SlideDto,
   StockMovementDto,
   SupplierDto,
+  TeamMemberDto,
   WarrantyDto,
 } from "../dtos/responses";
 import type {
-  Cart,
   Category,
   ContactMessage,
   Customer,
@@ -44,8 +43,6 @@ import type {
   OrderEvent,
 
   OrderItem,
-  HeroPoster as HeroPosterRow,
-  PageHero,
   PaymentMethod,
   Product,
   PurchaseOrder,
@@ -53,9 +50,11 @@ import type {
   Section,
   Service,
   ServiceLead,
+  ShowcaseCard,
   Staff,
   StockMovement,
   Supplier,
+  TeamMember,
   Warranty,
 } from "../generated/client";
 import type { PricedCart } from "./pricing";
@@ -69,12 +68,13 @@ import {
   LEAD_STATUSES,
   maskSecret,
   ORDER_EVENT_KINDS,
-  PAGE_HERO_MODES,
   parseOrderStatus,
   PAYMENT_ENVIRONMENTS,
   PAYMENT_KINDS,
   PO_STATUSES,
-  salePrice,
+  sellingPrice,
+  SERVICE_BULLET_STYLES,
+  SERVICE_IMAGE_SIDES,
   WARRANTY_STATUSES,
 } from "./rules";
 
@@ -113,18 +113,17 @@ export function toPublicProduct(p: ProductWithRelations): PublicProductDto {
     categoryLogo: p.category.svgLogo,
     section: p.category.section.name,
     price: p.price,
-    minDp: p.minDp,
+    minDeposit: p.minDeposit,
     onSale: p.onSale,
-    salePercentage: p.salePercentage,
-    salePrice: salePrice(p),
-    quantityOffers: p.quantityOffers.map((o) => ({ minQty: o.minQty, percentage: o.percentage })),
+    salePrice: sellingPrice(p),
+    quantityOffers: p.quantityOffers.map((o) => ({ minQty: o.minQty, amount: o.amount })),
     deliveryFeeInsideDhaka: p.deliveryFeeInsideDhaka,
     deliveryFeeOutsideDhaka: p.deliveryFeeOutsideDhaka,
     installationFeeInsideDhaka: p.installationFeeInsideDhaka,
     installationFeeOutsideDhaka: p.installationFeeOutsideDhaka,
     freeDeliveryOffers: p.freeDeliveryOffers.map((o) => ({
       minQty: o.minQty,
-      percentage: o.percentage,
+      amount: o.amount,
     })),
     rating: p.rating,
     sold: p.sold,
@@ -347,12 +346,6 @@ export function toCustomerProfile(c: Customer): CustomerProfileDto {
   };
 }
 
-/** A saved cart's raw id+qty lines (Json column, cast to the known shape —
- *  writes always go through updateCartDto so this is safe). */
-export function toCart(cart: Cart | null): CartDto {
-  return { items: (cart?.items as CartDto["items"]) ?? [] };
-}
-
 /** Leads always carry their service — `service` is the resolved name, so the
  *  admin table keeps rendering a plain string as it always did. */
 export function toLead(l: ServiceLead & { service: Service }): LeadDto {
@@ -361,8 +354,9 @@ export function toLead(l: ServiceLead & { service: Service }): LeadDto {
     serviceId: l.serviceId,
     service: l.service.name,
     customer: l.customer,
-    city: l.city,
+    address: l.address,
     phone: l.phone,
+    email: l.email,
     notes: l.notes,
     status: coerceTo(LEAD_STATUSES, l.status, "New"),
     createdAt: l.createdAt.toISOString(),
@@ -412,7 +406,7 @@ export function toLandingPage(lp: LandingPageRow): LandingPageDto {
     // Surfaced so the admin can mark pages whose product is off-catalogue —
     // for those, unpublishing this page also removes the only way to buy it.
     productVisible: lp.product.visible,
-    productSellingPrice: salePrice(lp.product),
+    productSellingPrice: sellingPrice(lp.product),
     offerPrice: lp.offerPrice,
     compareAtPrice: lp.compareAtPrice,
     ribbonText: lp.ribbonText,
@@ -432,12 +426,6 @@ export function toLandingPage(lp: LandingPageRow): LandingPageDto {
 /** Public campaign payload. Carries the whole product so /lp/:slug renders
  *  from one call — including products GET /api/products/:slug would 404. */
 export function toPublicLandingPage(lp: LandingPageRow): PublicLandingPageDto {
-  // Guard the division: a campaign with no compare-at price shows no badge
-  // rather than NaN%.
-  const discountPercentage =
-    lp.compareAtPrice > 0 && lp.offerPrice < lp.compareAtPrice
-      ? Math.round(((lp.compareAtPrice - lp.offerPrice) / lp.compareAtPrice) * 100)
-      : 0;
   return {
     // Resolved here, not in the page: the internal admin name must never
     // be serialized into a public payload at all.
@@ -445,7 +433,6 @@ export function toPublicLandingPage(lp: LandingPageRow): PublicLandingPageDto {
     slug: lp.slug,
     offerPrice: lp.offerPrice,
     compareAtPrice: lp.compareAtPrice,
-    discountPercentage,
     youSave: Math.max(0, lp.compareAtPrice - lp.offerPrice),
     ribbonText: lp.ribbonText,
     buttonLabel: lp.buttonLabel,
@@ -454,23 +441,6 @@ export function toPublicLandingPage(lp: LandingPageRow): PublicLandingPageDto {
     imageHint: lp.imageHint,
     gtmId: lp.gtmId,
     product: toPublicProduct(lp.product),
-  };
-}
-
-/** Posters are ordered by `sort` at the query, so the mapper just projects. */
-export function toPageHero(h: PageHero & { posters: HeroPosterRow[] }): PageHeroDto {
-  return {
-    pageKey: h.pageKey,
-    mode: coerceTo(PAGE_HERO_MODES, h.mode, "plain"),
-    background: h.background,
-    overlay: h.overlay,
-    posters: h.posters.map((p) => ({
-      id: p.id,
-      image: p.image,
-      alt: p.alt,
-      href: p.href,
-      sort: p.sort,
-    })),
   };
 }
 
@@ -511,6 +481,37 @@ export function toService(s: Service): ServiceDto {
     image: s.image,
     features: s.features,
     sort: s.sort,
+    imageSide: coerceTo(SERVICE_IMAGE_SIDES, s.imageSide, "left"),
+    bulletStyle: coerceTo(SERVICE_BULLET_STYLES, s.bulletStyle, "tick"),
+  };
+}
+
+/** A person on the contact page. */
+export function toTeamMember(m: TeamMember): TeamMemberDto {
+  return {
+    id: m.id,
+    name: m.name,
+    role: m.role,
+    bio: m.bio,
+    photo: m.photo,
+    sort: m.sort,
+  };
+}
+
+/** The home page's showcase cards. Same projection as a service card — the
+ *  storefront renders them through the same component — but a different table,
+ *  which is the entire point of the model. */
+export function toShowcaseCard(c: ShowcaseCard): ShowcaseCardDto {
+  return {
+    id: c.id,
+    slug: c.slug,
+    name: c.name,
+    dsc: c.dsc,
+    image: c.image,
+    features: c.features,
+    sort: c.sort,
+    imageSide: coerceTo(SERVICE_IMAGE_SIDES, c.imageSide, "left"),
+    bulletStyle: coerceTo(SERVICE_BULLET_STYLES, c.bulletStyle, "tick"),
   };
 }
 
@@ -525,6 +526,8 @@ export function toIndustrialService(s: IndustrialService): IndustrialServiceDto 
     image: s.image,
     features: s.features,
     sort: s.sort,
+    imageSide: coerceTo(SERVICE_IMAGE_SIDES, s.imageSide, "left"),
+    bulletStyle: coerceTo(SERVICE_BULLET_STYLES, s.bulletStyle, "tick"),
   };
 }
 

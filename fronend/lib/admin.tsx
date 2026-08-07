@@ -81,17 +81,19 @@ export interface AdminSection {
   categories: AdminCategory[];
 }
 
-/** One "buy N+, save X%" tier. A relation on the backend, not a column. */
+/** One "buy N+, take ৳X off each unit" tier. A relation on the backend, not a
+ *  column. */
 export interface QuantityOffer {
   minQty: number;
-  percentage: number;
+  amount: number;
 }
 
-/** One "buy N+, X% off delivery" tier — same shape and same replace-all write
- *  semantics as QuantityOffer; 100 means the line ships free. */
+/** One "buy N+, take ৳X off delivery" tier — same shape and same replace-all
+ *  write semantics as QuantityOffer. An amount at or above the zone fee means
+ *  the line ships free. */
 export interface FreeDeliveryOffer {
   minQty: number;
-  percentage: number;
+  amount: number;
 }
 
 /**
@@ -117,11 +119,12 @@ export interface AdminProduct {
   category: string;
   section: string;
   price: number;
-  /** Minimum down payment (% of price) shown on the product page. */
-  minDp: number;
+  /** Minimum down payment in BDT, shown on the product page. */
+  minDeposit: number;
   onSale: boolean;
-  /** 0–100, only meaningful when onSale is true. */
-  salePercentage: number;
+  /** What the customer pays while on sale, in BDT — the admin types this, so
+   *  there is no discount to round. Only meaningful when onSale is true. */
+  salePrice: number;
   deliveryFeeInsideDhaka: number;
   deliveryFeeOutsideDhaka: number;
   installationFeeInsideDhaka: number;
@@ -146,8 +149,7 @@ export interface AdminProduct {
   visible: boolean;
   photos: string[]; // ordered gallery URLs, first is the cover photo
   featured?: boolean;
-  /** Server-computed price after salePercentage; read-only. */
-  salePrice?: number;
+
   available?: number;
   inStock?: boolean;
   lowStock?: boolean;
@@ -310,10 +312,17 @@ export interface ServiceLead {
   id: string;
   service: string;
   customer: string;
-  city: string;
+  /** Where the work is. Was `city`, and was required — see the note on the
+   *  column in schema.prisma. */
+  address: string;
   status: LeadStatus;
-  phone?: string;
-  notes?: string;
+  /* Not optional: the backend always sends these. They were typed optional and
+   * rendered nowhere, so a customer's phone number was unreachable from the
+   * admin — the detail sheet exists to fix that. */
+  phone: string;
+  email: string;
+  notes: string;
+  createdAt: string;
 }
 
 /**
@@ -404,23 +413,18 @@ export interface HeroSlide {
 export interface SiteCopy {
   footerDescription: string;
 
-  /* Home page — only the visually-hidden <h1> is still rendered. */
+  /* One headline per page. The home and industrial ones are that page's
+   * visually-hidden <h1>; the contact one is visible. Everything else that
+   * used to live here — eyebrows, subheads, capability bands, CTA strips —
+   * went when its section was deleted from the page. */
   homeHeroHeadline: string;
-
-  /* Industrial page */
+  servicesHeroHeadline: string;
   industrialHeroHeadline: string;
-  industrialGridHeading: string;
-  industrialGridBody: string;
-  industrialServicesHeading: string;
-  industrialServicesSubtitle: string;
-  industrialStandardsHeading: string;
-  industrialStandardsBody: string;
 
   /* Contact page */
   contactHeading: string;
   contactFormHeading: string;
   contactOfficeHeading: string;
-  contactTeamHeading: string;
   contactServiceLine: string;
   contactTendersEmail: string;
 }
@@ -431,7 +435,7 @@ export interface SiteContact {
   phone: string;
   /** Human-readable form, e.g. +880 17 0000 0000 */
   phoneDisplay: string;
-  /** Support hotline (shortcode), shown alongside the phone */
+  /** Support hotline. Printed on invoices only — it is not shown on the site. */
   hotline: string;
   email: string;
   /** WhatsApp number as digits only, e.g. 8801700000000 */
@@ -440,6 +444,14 @@ export interface SiteContact {
   city: string;
   postalCode: string;
   hours: string;
+  /* The contact page's office card. These were hardcoded placeholders in the
+   * frontend until the site-content cleanup wired them through. */
+  officeName: string;
+  warehouseName: string;
+  warehouseAddress: string;
+  hoursWeekday: string;
+  hoursWeekend: string;
+  hoursEmergency: string;
 }
 
 export interface Integrations {
@@ -540,6 +552,16 @@ export interface AdminState {
 let tempSeq = 0;
 export const tempId = (prefix: string) => `${prefix}-new-${++tempSeq}`;
 
+/**
+ * True while a row exists only locally.
+ *
+ * Saves are explicit, so a staged row can sit on screen indefinitely. Anything
+ * that posts an id to the server — the purchase-order form, the reorder dialog,
+ * the campaign page's product picker — has to leave these out, or the request
+ * carries an id the server has never seen.
+ */
+export const isUnsaved = (row: { id: string }) => row.id.includes("-new-");
+
 export function emptyState(): AdminState {
   return {
     roles: [],
@@ -557,17 +579,11 @@ export function emptyState(): AdminState {
     copy: {
       footerDescription: "",
       homeHeroHeadline: "",
+      servicesHeroHeadline: "",
       industrialHeroHeadline: "",
-      industrialGridHeading: "",
-      industrialGridBody: "",
-      industrialServicesHeading: "",
-      industrialServicesSubtitle: "",
-      industrialStandardsHeading: "",
-      industrialStandardsBody: "",
       contactHeading: "",
       contactFormHeading: "",
       contactOfficeHeading: "",
-      contactTeamHeading: "",
       contactServiceLine: "",
       contactTendersEmail: "",
     },
@@ -581,6 +597,12 @@ export function emptyState(): AdminState {
       city: "",
       postalCode: "",
       hours: "",
+      officeName: "",
+      warehouseName: "",
+      warehouseAddress: "",
+      hoursWeekday: "",
+      hoursWeekend: "",
+      hoursEmergency: "",
     },
     integrations: { gtmId: "", gtmEnabled: false },
     payments: [],
@@ -639,18 +661,38 @@ function diffById<T extends { id: string }>(prev: T[], next: T[]) {
 }
 
 /**
- * Push the difference between the last known server state and the local
- * state for the given keys. Returns the collections that must be re-fetched
- * to pick up server-computed fields and server-generated ids.
+ * Push the difference between the last known server state and the local state
+ * for the given keys.
+ *
+ * Each key's writes run in isolation. That matters because this is not one
+ * transaction: if `suppliers` succeeds and `purchaseOrders` then fails, the
+ * supplier is already created, and re-dirtying everything (which is what this
+ * used to do) meant the next Save created a second one. Only the keys that
+ * actually failed go back in the dirty set.
+ *
+ * Returns the collections that must be re-fetched to pick up server-computed
+ * fields and server-generated ids, plus whatever failed.
  */
 async function syncKeys(
   keys: Set<keyof AdminState>,
   prev: AdminState,
   next: AdminState,
-): Promise<Set<ReloadKey>> {
+): Promise<{ reload: Set<ReloadKey>; failed: Set<keyof AdminState>; error: unknown }> {
   const reload = new Set<ReloadKey>();
+  const failed = new Set<keyof AdminState>();
+  let error: unknown = null;
 
-  if (keys.has("orders")) {
+  const run = async (key: keyof AdminState, fn: () => Promise<void>) => {
+    if (!keys.has(key)) return;
+    try {
+      await fn();
+    } catch (e) {
+      failed.add(key);
+      error ??= e;
+    }
+  };
+
+  await run("orders", async () => {
     const { changed, removed } = diffById(prev.orders, next.orders);
     // Status and ownership are separate endpoints, so push only what moved —
     // sending both on every edit would put a spurious entry in the order's
@@ -667,47 +709,49 @@ async function syncKeys(
     // Deleting an order hands its reserved (or delivered) units back, so the
     // product rows are stale as soon as one goes.
     if (removed.length > 0) reload.add("products");
-  }
+  });
 
-  if (keys.has("leads")) {
+  await run("leads", async () => {
     const { changed } = diffById(prev.leads, next.leads);
     for (const l of changed) await api.setLeadStatus(l.id, l.status);
-  }
+  });
 
-  if (keys.has("messages")) {
+  await run("messages", async () => {
     const { changed } = diffById(prev.messages, next.messages);
     for (const m of changed) await api.setMessageRead(m.id, m.read);
-  }
+  });
 
-  if (keys.has("industrialLeads")) {
+  await run("industrialLeads", async () => {
     const { changed, removed } = diffById(prev.industrialLeads, next.industrialLeads);
     for (const l of changed) await api.setIndustrialLeadStatus(l.id, l.status);
     for (const l of removed) await api.deleteIndustrialLead(l.id);
-  }
+  });
 
-  if (keys.has("featuredIds") && prev.featuredIds.join() !== next.featuredIds.join()) {
+  await run("featuredIds", async () => {
+    if (prev.featuredIds.join() === next.featuredIds.join()) return;
     await api.setFeatured(next.featuredIds);
-  }
+  });
 
-  if (keys.has("slides") && JSON.stringify(prev.slides) !== JSON.stringify(next.slides)) {
+  await run("slides", async () => {
+    if (JSON.stringify(prev.slides) === JSON.stringify(next.slides)) return;
     await api.putSlides(next.slides);
     reload.add("slides"); // server assigns slide ids
-  }
+  });
 
-  if (keys.has("copy") && JSON.stringify(prev.copy) !== JSON.stringify(next.copy)) {
+  await run("copy", async () => {
+    if (JSON.stringify(prev.copy) === JSON.stringify(next.copy)) return;
     await api.putCopy(next.copy);
-  }
-  if (keys.has("contact") && JSON.stringify(prev.contact) !== JSON.stringify(next.contact)) {
+  });
+  await run("contact", async () => {
+    if (JSON.stringify(prev.contact) === JSON.stringify(next.contact)) return;
     await api.putContact(next.contact);
-  }
-  if (
-    keys.has("integrations") &&
-    JSON.stringify(prev.integrations) !== JSON.stringify(next.integrations)
-  ) {
+  });
+  await run("integrations", async () => {
+    if (JSON.stringify(prev.integrations) === JSON.stringify(next.integrations)) return;
     await api.putIntegrations(next.integrations);
-  }
+  });
 
-  if (keys.has("payments")) {
+  await run("payments", async () => {
     const { changed, before } = diffById(prev.payments, next.payments);
     for (const m of changed) {
       const old = before(m.id);
@@ -723,33 +767,33 @@ async function syncKeys(
         ...(old && old.apiSecret !== m.apiSecret ? { apiSecret: m.apiSecret } : {}),
       });
     }
-  }
+  });
 
-  if (keys.has("suppliers")) {
+  await run("suppliers", async () => {
     const { added, removed, changed } = diffById(prev.suppliers, next.suppliers);
     for (const s of added) await api.createSupplier(s);
     for (const s of removed) await api.deleteSupplier(s.id);
     for (const s of changed) await api.patchSupplier(s);
     if (added.length > 0) reload.add("suppliers"); // server-generated ids
-  }
+  });
 
-  if (keys.has("staff")) {
+  await run("staff", async () => {
     const { added, removed, changed } = diffById(prev.staff, next.staff);
     for (const s of added) await api.createStaff(s);
     for (const s of removed) await api.deleteStaff(s.id);
     for (const s of changed) await api.patchStaff(s);
     if (added.length > 0) reload.add("staff");
-  }
+  });
 
-  if (keys.has("roles")) {
+  await run("roles", async () => {
     const { added, removed, changed } = diffById(prev.roles, next.roles);
     for (const r of added) await api.createRole(r);
     for (const r of removed) await api.deleteRole(r.id);
     for (const r of changed) await api.patchRole(r);
     if (added.length > 0) reload.add("roles");
-  }
+  });
 
-  if (keys.has("products")) {
+  await run("products", async () => {
     const { added, removed, changed, before } = diffById(prev.products, next.products);
     for (const p of added) await api.createProduct(p);
     for (const p of removed) await api.deleteProduct(p.id);
@@ -779,9 +823,9 @@ async function syncKeys(
     // and re-renders the whole table on every pause while someone is still
     // filling in the form.
     if (added.length > 0 || removed.length > 0 || stockChanged) reload.add("products");
-  }
+  });
 
-  if (keys.has("purchaseOrders")) {
+  await run("purchaseOrders", async () => {
     const { added, changed } = diffById(prev.purchaseOrders, next.purchaseOrders);
     for (const po of added) {
       await api.createPurchaseOrder({
@@ -799,28 +843,38 @@ async function syncKeys(
       }
     }
     reload.add("purchaseOrders");
-  }
+  });
 
-  return reload;
+  return { reload, failed, error };
 }
 
 /* ===== Store (context, backed by /admin/api) =====
  *
- * There are exactly two ways to write to the backend from the admin, and
- * picking the wrong one is how this codebase ended up with three:
+ * There are three ways to write to the backend from the admin. Picking the
+ * wrong one is how this codebase once ended up with nine:
  *
  *   Rule A — `update(patch)`. Plain rows with no file uploads, no
  *     server-stamped fields, and no writes the server can legitimately refuse:
  *     orders (status/owner), leads, industrialLeads, featuredIds, slides,
  *     copy, contact, integrations, payments, suppliers, staff, roles,
- *     products, purchaseOrders. Debounced and diffed by `syncKeys` below.
+ *     product *edits*, purchaseOrders. Staged locally and diffed by `syncKeys`
+ *     when the Save button calls `commit()`.
  *
  *   Rule B — a resource hook (useInvoices, useWarranties, useServices,
- *     useLandingPages). Anything with multipart uploads, server-stamped fields
- *     (issuedAt, endsAt), or writes that can 409. These deliberately sit
- *     outside the diff engine, which has no story for any of that.
+ *     useTeam, useLandingPages). Anything with multipart uploads,
+ *     server-stamped fields (issuedAt, endsAt), or writes that can 409. These
+ *     deliberately sit outside the diff engine, which has no story for any of
+ *     that. The button that triggers one IS the confirmation.
  *
- *   There is no Rule C. No raw `fetch` in a component.
+ *   Rule C — create server-first, then `adopt(patch)`. For a row that must
+ *     exist on the server before the rest of the interaction can continue:
+ *     product creation, which needs an id before a photo can be attached to
+ *     it. `adopt` writes the returned row into both the local state and the
+ *     server copy, so the next diff sees nothing to send. Never call `update`
+ *     with a row the server already has — that is how you get it created
+ *     twice.
+ *
+ * No raw `fetch` in a component in any of the three.
  */
 
 /** What the debounced save engine is doing, surfaced by <SaveStatus>. The
@@ -851,13 +905,35 @@ interface AdminContextValue {
   sync: SyncState;
   /** Re-run a failed save, keeping whatever is on screen. */
   retrySync: () => void;
+  /** How many collections have staged changes. 0 means everything is saved. */
+  pending: number;
+  /** Send every staged change. Wired to the Save button. */
+  commit: () => Promise<void>;
+  /**
+   * Take a row the server has already created and treat it as truth.
+   *
+   * The counterpart to `update()`: it writes to both the local state and the
+   * last-known-server copy, and leaves the dirty set alone. Without it, a row
+   * created outside this engine (see Rule C) looks like an unsent addition to
+   * the next diff, and the next Save creates it a second time.
+   */
+  adopt: (patch: Partial<AdminState>) => void;
   /** Collections that failed to load, shown as a dismissible banner. */
   loadErrors: api.LoadError[];
 }
 
 const AdminContext = createContext<AdminContextValue | null>(null);
 
-const SYNC_DEBOUNCE_MS = 700;
+/** How long a save may hang before it is abandoned and made retryable. */
+const SAVE_TIMEOUT_MS = 20_000;
+
+/** Thrown by the deadline in `commit()` so the message can name the cause. */
+class SaveTimeout extends Error {
+  constructor() {
+    super("save timed out");
+    this.name = "SaveTimeout";
+  }
+}
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AdminState>(emptyState);
@@ -874,14 +950,16 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   }, [state]);
   const serverRef = useRef<AdminState>(emptyState());
   const dirtyRef = useRef<Set<keyof AdminState>>(new Set());
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushingRef = useRef(false);
   const flushRef = useRef<() => Promise<void>>(async () => {});
 
   // Which collections couldn't be loaded, for the shell's retry banner.
   const [loadErrors, setLoadErrors] = useState<api.LoadError[]>([]);
-  // What the debounced save engine is currently doing, so the UI can say so.
+  // What the save engine is currently doing, so the UI can say so.
   const [sync, setSync] = useState<SyncState>({ state: "idle", at: null, error: null });
+  // How many collections have staged, unsaved changes. Mirrors dirtyRef, which
+  // is a ref and so can't drive a render on its own.
+  const [pending, setPending] = useState(0);
 
   // Loading needs the permission map: most /admin/api endpoints 403 a role
   // without `view` on their module, and asking anyway used to blank the whole
@@ -915,7 +993,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     };
   }, [loadAll]);
 
-  const flush = useCallback(async () => {
+  /**
+   * Push every pending change. Only ever called from the Save button — this
+   * used to run on a 700 ms debounce after each keystroke, which meant a
+   * half-typed API secret was PUT to the server and a role rename fired a
+   * request per character.
+   */
+  const commit = useCallback(async () => {
     if (flushingRef.current || dirtyRef.current.size === 0) return;
     flushingRef.current = true;
     setSync({ state: "saving", at: null, error: null });
@@ -923,12 +1007,34 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     dirtyRef.current = new Set();
     const prev = serverRef.current;
     const next = stateRef.current;
-    let failed = false;
     try {
-      const reload = await syncKeys(keys, prev, next);
-      // Assume what we pushed is now server truth, then refresh the
-      // collections with server-generated ids/computed fields.
-      serverRef.current = { ...next };
+      /*
+       * Race the sync against a deadline.
+       *
+       * Without this, a request that never settles wedges the admin for good:
+       * `flushingRef` only clears in the `finally` below, and Next's dev proxy
+       * has no timeout against a dead upstream — so a save attempted while the
+       * backend was down left every later Save a silent no-op, with the button
+       * still enabled and nothing reported. A reload was the only way out, and
+       * it discarded the staged work.
+       */
+      const { reload, failed, error } = await Promise.race([
+        syncKeys(keys, prev, next),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new SaveTimeout()), SAVE_TIMEOUT_MS),
+        ),
+      ]);
+
+      // Whatever succeeded is server truth now. Anything that failed goes back
+      // in the dirty set — and *only* that, so retrying can't replay a write
+      // that already landed.
+      const landed = { ...next };
+      for (const key of failed) {
+        dirtyRef.current.add(key);
+        (landed as Record<string, unknown>)[key] = (prev as unknown as Record<string, unknown>)[key];
+      }
+      serverRef.current = landed;
+
       if (reload.size > 0) {
         const fresh: Partial<AdminState> = {};
         await Promise.all(
@@ -937,54 +1043,67 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           }),
         );
         serverRef.current = { ...serverRef.current, ...fresh };
-        // Don't clobber keys the admin dirtied again while we were syncing.
+        // Don't clobber keys the admin dirtied again while we were saving.
         const safe = Object.fromEntries(
           Object.entries(fresh).filter(([k]) => !dirtyRef.current.has(k as keyof AdminState)),
         ) as Partial<AdminState>;
         setState((s) => ({ ...s, ...safe }));
       }
-      setSync({ state: "saved", at: Date.now(), error: null });
+
+      if (failed.size > 0) {
+        // Local state is deliberately kept: replacing what someone just typed
+        // with the server's copy loses their work at the exact moment they
+        // most need it kept.
+        const message = error instanceof Error ? error.message : "Couldn't save";
+        setSync({ state: "error", at: null, error: message });
+      } else {
+        setSync({ state: "saved", at: Date.now(), error: null });
+      }
     } catch (err) {
-      // Deliberately NOT reloading from the server here. That's what this used
-      // to do, and it silently replaced whatever the admin had just typed with
-      // the last-known-good server copy — losing their work at the exact
-      // moment they most needed it kept. Keep local state, put the keys back
-      // in the dirty set, and let them retry.
-      failed = true;
+      // Either the deadline passed or the post-save reload failed. Put every
+      // key back so the retry is a complete one; the writes are PUT/PATCH
+      // shaped and idempotent, and the one create path that isn't — products —
+      // no longer goes through this engine at all.
       for (const key of keys) dirtyRef.current.add(key);
-      const message = err instanceof Error ? err.message : "Couldn't save";
+      const message =
+        err instanceof SaveTimeout
+          ? "The server didn't respond — nothing was saved. Check the connection and try again."
+          : err instanceof Error
+            ? err.message
+            : "Couldn't save";
       setSync({ state: "error", at: null, error: message });
     } finally {
       flushingRef.current = false;
-      // Only auto-continue after a success. Rescheduling after a failure would
-      // hammer a down backend forever, since the failed keys go straight back
-      // into the dirty set — retrying is the user's call, via retrySync().
-      if (!failed && dirtyRef.current.size > 0) {
-        // Self-reference goes through the ref so the callback stays memoizable.
-        timerRef.current = setTimeout(() => void flushRef.current(), SYNC_DEBOUNCE_MS);
-      }
+      setPending(dirtyRef.current.size);
     }
-    // No dependencies: everything this touches is a ref or a setter. It used
-    // to depend on loadAll, back when a failed save reloaded from the server.
+    // No dependencies: everything this touches is a ref or a setter.
   }, []);
   useEffect(() => {
-    flushRef.current = flush;
-  }, [flush]);
+    flushRef.current = commit;
+  }, [commit]);
 
-  const update = useCallback(
-    (patch: Partial<AdminState>) => {
-      setState((s) => ({ ...s, ...patch }));
-      for (const key of Object.keys(patch)) dirtyRef.current.add(key as keyof AdminState);
-      setSync({ state: "pending", at: null, error: null });
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => void flush(), SYNC_DEBOUNCE_MS);
-    },
-    [flush],
-  );
+  /**
+   * Stage a change. Nothing is sent — `commit()` does that, from the Save
+   * button in the pending-changes bar.
+   */
+  const update = useCallback((patch: Partial<AdminState>) => {
+    setState((s) => ({ ...s, ...patch }));
+    for (const key of Object.keys(patch)) dirtyRef.current.add(key as keyof AdminState);
+    setPending(dirtyRef.current.size);
+    setSync({ state: "pending", at: null, error: null });
+  }, []);
+
+  const adopt = useCallback((patch: Partial<AdminState>) => {
+    setState((s) => ({ ...s, ...patch }));
+    serverRef.current = { ...serverRef.current, ...patch };
+    // Deliberately no dirtyRef write: this is already on the server.
+  }, []);
 
   /** Discard local edits and take the server's copy. */
   const reset = useCallback(() => {
     if (!me) return;
+    dirtyRef.current = new Set();
+    setPending(0);
     setSync({ state: "idle", at: null, error: null });
     void loadAll(me.permissions).catch(() =>
       toast.error("Couldn't reload from the server"),
@@ -997,17 +1116,18 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setSync({ state: "idle", at: null, error: null });
       return;
     }
-    void flush();
-  }, [flush]);
+    void commit();
+  }, [commit]);
 
-  // Nothing in this app auto-saves on unload, so warn while edits are in
-  // flight or queued — a debounced save you navigated away from is a lost one.
+  // Saves are explicit now, so leaving with staged changes loses them outright.
+  // Keyed on the pending count rather than sync.state: with autosave gone the
+  // state sits at "pending" forever and "idle" never means "nothing staged".
   useEffect(() => {
-    if (sync.state !== "pending" && sync.state !== "saving" && sync.state !== "error") return;
+    if (pending === 0 && sync.state !== "saving" && sync.state !== "error") return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [sync.state]);
+  }, [pending, sync.state]);
 
   const login = useCallback(
     async (username: string, password: string) => {
@@ -1080,6 +1200,9 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       ready,
       sync,
       retrySync,
+      pending,
+      commit,
+      adopt,
       loadErrors,
     };
   }, [
@@ -1093,6 +1216,9 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     ready,
     sync,
     retrySync,
+    pending,
+    commit,
+    adopt,
     loadErrors,
   ]);
 

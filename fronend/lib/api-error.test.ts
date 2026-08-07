@@ -3,7 +3,7 @@ import { ApiRequestError } from "./api-error";
 
 /*
  * The bodies below are copied verbatim from the running backend, not invented
- * — see the onError hook in backend/src/index.ts for the shapes it emits.
+ * — see the onError hook in backend/src/app.ts for the shapes it emits.
  */
 
 /** A real 422 from POST /admin/api/sections with `sort` omitted. */

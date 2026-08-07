@@ -5,6 +5,7 @@ import {
   updateLandingPageDto,
 } from "../../dtos/landing-pages.dto";
 import { prisma } from "../../lib/db";
+import { LIST_CAP } from "../../lib/rules";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { landingPageInclude, toLandingPage } from "../../lib/serialize";
@@ -40,6 +41,7 @@ export const adminLandingPages = new Elysia({
     async ({ query, staffCtx }) => {
       assertCan(staffCtx, "landingpages", "view");
       const pages = await prisma.landingPage.findMany({
+        take: LIST_CAP,
         where: query.published === undefined ? undefined : { published: query.published },
         orderBy: { createdAt: "desc" },
         include: landingPageInclude,

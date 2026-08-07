@@ -67,7 +67,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
               {formatBDT(pub.compareAtPrice)}
             </span>
             <span className="rounded-full bg-zup-orange px-3 py-1 text-xs font-bold text-white">
-              {pub.discountPercentage}% OFF
+              SAVE {formatBDT(pub.youSave)}
             </span>
           </>
         ) : null}

@@ -4,11 +4,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { slugify } from "@/lib/utils";
-import {
-  useAdmin,
-  type AdminProduct,
-  tempId,
-} from "@/lib/admin";
+import { useAdmin, type AdminProduct } from "@/lib/admin";
+import { createProduct, uploadProductPhoto } from "@/lib/admin-api";
 import {
   Card,
   Table,
@@ -28,7 +25,7 @@ import { emptyDraftProduct } from "./empty-product";
 const NO_CATEGORY_FILTER = "All categories";
 
 export function ProductsSection() {
-  const { state, update, can } = useAdmin();
+  const { state, update, adopt, can } = useAdmin();
   const readOnly = can("products") !== "manage";
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("All");
@@ -40,6 +37,10 @@ export function ProductsSection() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<AdminProduct>(emptyDraftProduct);
+  // Photos chosen before the product exists; uploaded by submitDraft().
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   // Taken from the loaded taxonomy rather than derived from the products, so
   // a category with no products yet is still selectable.
@@ -114,26 +115,72 @@ export function ProductsSection() {
     );
   };
 
-  const submitDraft = () => {
+  /**
+   * Add a product in one action.
+   *
+   * Server-first (Rule C in lib/admin.tsx), not staged: the photo endpoints
+   * attach to a product that already exists, so the id has to be real before
+   * they can run. Adding used to be four actions across two visits — open the
+   * form, submit a draft, press the global Save, then reopen the row to attach
+   * pictures — because the gallery was dead for the whole life of the form.
+   */
+  const submitDraft = async () => {
     if (!draft.name.trim()) {
-      toast("Product name is required");
+      setDraftError("Product name is required");
       return;
     }
     if (!draft.categoryId) {
-      toast("Pick a category — the catalog requires one");
+      setDraftError("Pick a category — the catalog requires one");
       return;
     }
-    const id = tempId("product");
-    const fresh: AdminProduct = {
+    setDraftError(null);
+    setCreating(true);
+
+    const body: AdminProduct = {
       ...draft,
-      id,
       name: draft.name.trim(),
       slug: draft.slug.trim() || slugify(draft.name, "product"),
     };
-    update({ products: [fresh, ...state.products] });
+
+    let created: AdminProduct;
+    try {
+      created = await createProduct(body);
+    } catch (err) {
+      // Keep the draft: a slug or SKU clash is the likely failure and retyping
+      // the whole form to fix one field would be its own small cruelty.
+      setDraftError(
+        err instanceof Error ? err.message : "Couldn't create that product",
+      );
+      setCreating(false);
+      return;
+    }
+
+    let finished = created;
+    let photoFailure: string | null = null;
+    for (const file of pendingPhotos) {
+      try {
+        finished = await uploadProductPhoto(created.id, file);
+      } catch (err) {
+        photoFailure = err instanceof Error ? err.message : "a photo failed to upload";
+        break;
+      }
+    }
+
+    // adopt(), not update(): the server already has this row, and staging it
+    // would make the next Save create it a second time.
+    adopt({ products: [finished, ...state.products] });
     setAdding(false);
     setDraft(emptyDraftProduct());
-    toast("Product created — syncing…");
+    setPendingPhotos([]);
+    setCreating(false);
+
+    // The product exists either way — say which half went wrong rather than
+    // implying the whole thing failed.
+    toast(
+      photoFailure
+        ? `${finished.name} was created, but ${photoFailure}. Open it to add the photos.`
+        : `${finished.name} added`,
+    );
   };
 
   const removeProduct = (p: AdminProduct) => {
@@ -168,11 +215,23 @@ export function ProductsSection() {
           <p className="mb-3 text-ui-sm font-bold uppercase tracking-[0.06em] text-zup-soft">
             New product
           </p>
+          {draftError ? (
+            <p
+              role="alert"
+              className="mb-3 rounded-xl bg-destructive/8 px-3.5 py-2.5 text-ui-sm font-semibold text-destructive"
+            >
+              {draftError}
+            </p>
+          ) : null}
           <ProductEditor
             product={draft}
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
-            onDone={submitDraft}
+            onDone={() => void submitDraft()}
             submitLabel="Add product"
+            pendingPhotos={pendingPhotos}
+            onPickPhoto={(file) => setPendingPhotos((prev) => [...prev, file])}
+            onDropPendingPhoto={(i) => setPendingPhotos((prev) => prev.filter((_, j) => j !== i))}
+            busy={creating}
           />
         </Card>
       ) : null}

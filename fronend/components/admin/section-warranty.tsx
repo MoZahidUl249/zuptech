@@ -16,6 +16,7 @@ import {
   selectCls,
   warrantyStatusTone,
 } from "./ui";
+import { ConfirmSelect } from "./confirm-select";
 
 /*
  * Warranty registry. Rows are generated automatically when an order is
@@ -220,17 +221,13 @@ function WarrantyRow({
           {readOnly ? (
             <Pill tone={warrantyStatusTone(w.status)}>{w.status}</Pill>
           ) : (
-            <select
+            <ConfirmSelect
               value={w.status}
+              options={WARRANTY_STATUSES}
               disabled={busy}
-              aria-label={`Status of ${w.id}`}
-              onChange={(e) => onPatch({ status: e.target.value as WarrantyStatus })}
-              className={selectCls}
-            >
-              {WARRANTY_STATUSES.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
+              label={`Status of ${w.id}`}
+              onConfirm={(status) => onPatch({ status })}
+            />
           )}
         </Td>
         <Td>

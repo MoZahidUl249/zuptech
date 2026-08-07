@@ -2,7 +2,7 @@ import { t } from "elysia";
 
 /** Shared field set for create/update. `photos` here just carries whatever
  *  URLs are already on the product (set via the dedicated upload endpoints
- *  below, which talk to the media-storage service) — this body never
+ *  below, which upload to Cloudinary) — this body never
  *  receives raw file data. */
 const productFields = {
   name: t.String({ minLength: 2, maxLength: 200 }),
@@ -10,9 +10,12 @@ const productFields = {
   // Category row id — the section is reached through it, never set directly.
   categoryId: t.String({ minLength: 1, maxLength: 50 }),
   price: t.Integer({ minimum: 0 }),
-  minDp: t.Integer({ minimum: 0, maximum: 100 }),
+  // Both are flat BDT now. `salePrice` is what the customer pays, not a
+  // discount to apply, so there is no ceiling to validate against price here —
+  // sellingPrice() ignores a sale price that isn't below the list price.
+  minDeposit: t.Integer({ minimum: 0 }),
   onSale: t.Boolean(),
-  salePercentage: t.Integer({ minimum: 0, maximum: 100 }),
+  salePrice: t.Integer({ minimum: 0 }),
   deliveryFeeInsideDhaka: t.Integer({ minimum: 0 }),
   deliveryFeeOutsideDhaka: t.Integer({ minimum: 0 }),
   installationFeeInsideDhaka: t.Integer({ minimum: 0 }),
@@ -53,19 +56,21 @@ export const productsQueryDto = t.Object({
   category: t.Optional(t.String({ maxLength: 80 })),
 });
 
-/** One "buy N+, save X%" tier. Kept out of `productFields`, since it's a
- *  relation (nested Prisma write), not a plain column. */
+/** One "buy N+, take ৳X off each unit" tier. Kept out of `productFields`,
+ *  since it's a relation (nested Prisma write), not a plain column. */
 const quantityOfferDto = t.Object({
   minQty: t.Integer({ minimum: 2, maximum: 999 }),
-  percentage: t.Integer({ minimum: 1, maximum: 100 }),
+  amount: t.Integer({ minimum: 1 }),
 });
 const quantityOffersField = t.Optional(t.Array(quantityOfferDto, { maxItems: 10 }));
 
-/** One "buy N+, X% off delivery" tier — same shape and same relation handling
- *  as `quantityOfferDto`; 100 means the line ships free. */
+/** One "buy N+, take ৳X off delivery" tier — same shape and same relation
+ *  handling as `quantityOfferDto`. An amount at or above the zone fee ships the
+ *  line free; the clamp lives in rules.ts, not here, because the fee is
+ *  per-zone and this DTO can't see it. */
 const freeDeliveryOfferDto = t.Object({
   minQty: t.Integer({ minimum: 2, maximum: 999 }),
-  percentage: t.Integer({ minimum: 1, maximum: 100 }),
+  amount: t.Integer({ minimum: 1 }),
 });
 const freeDeliveryOffersField = t.Optional(t.Array(freeDeliveryOfferDto, { maxItems: 10 }));
 

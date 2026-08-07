@@ -7,21 +7,34 @@ import { toast } from "sonner";
 import { ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseProductVideo } from "@/lib/video";
+import { checkImageFile, IMAGE_ACCEPT } from "@/lib/image-upload";
 import { } from "../confirm-dialog";
 
 const MAX_PHOTO_BYTES = 8_000_000;
 
+/**
+ * One photo tile.
+ *
+ * Two modes. Given `onUpload` it posts the file immediately, which is what an
+ * existing product wants. Given `onPick` it hands the `File` up instead and
+ * shows a local preview — that is what lets the Add-product form collect
+ * photos *before* the product exists, so creating one is a single action
+ * rather than "save it, reopen it, now attach the pictures".
+ */
 export function PhotoSlot({
   label,
   value,
   onUpload,
+  onPick,
   onRemove,
   disabled,
   small,
 }: {
   label: string;
   value: string | null;
-  onUpload: (file: File) => Promise<void>;
+  onUpload?: (file: File) => Promise<void>;
+  /** Deferred mode: take the file, don't send it. */
+  onPick?: (file: File) => void;
   onRemove: () => Promise<void>;
   disabled?: boolean;
   small?: boolean;
@@ -82,17 +95,25 @@ export function PhotoSlot({
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept={IMAGE_ACCEPT}
         className="hidden"
         aria-label={`Upload ${label}`}
         onChange={async (e) => {
           const f = e.target.files?.[0];
           e.target.value = "";
           if (!f) return;
-          if (f.size > MAX_PHOTO_BYTES) {
-            toast("Image too large — keep uploads under 8 MB");
+          // Checked at pick time in both modes, so a file that the server would
+          // reject never gets as far as creating half a product.
+          const problem = checkImageFile(f, MAX_PHOTO_BYTES);
+          if (problem) {
+            toast(problem);
             return;
           }
+          if (onPick) {
+            onPick(f);
+            return;
+          }
+          if (!onUpload) return;
           setBusy(true);
           try {
             await onUpload(f);

@@ -50,7 +50,11 @@ export function SaveStatus({ className }: { className?: string }) {
     );
   }
 
-  const busy = sync.state === "pending" || sync.state === "saving";
+  // "pending" means staged, not in flight — the pending-changes bar already
+  // says "N unsaved changes" and offers the Save button. Showing a spinner and
+  // the word "Saving…" for the same state had the header contradicting the bar
+  // while nothing at all was being sent.
+  const busy = sync.state === "saving";
   if (!busy && !showSaved) return null;
 
   return (

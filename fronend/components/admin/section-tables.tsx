@@ -11,6 +11,7 @@ import {
   type IndustrialLead,
   type IndustrialLeadStatus,
   type LeadStatus,
+  type ServiceLead,
 } from "@/lib/admin";
 import { BtnDanger, Card, Pill, selectCls, type PillTone } from "./ui";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -32,6 +33,7 @@ export function LeadsSection() {
   const { get, set, clear } = useFilterParams();
   const q = get("q");
   const status = get("status", ALL);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const count = (s: LeadStatus) => state.leads.filter((l) => l.status === s).length;
   const needle = q.trim().toLowerCase();
@@ -41,13 +43,15 @@ export function LeadsSection() {
       (!needle ||
         l.service.toLowerCase().includes(needle) ||
         l.customer.toLowerCase().includes(needle) ||
-        l.city.toLowerCase().includes(needle)),
+        l.address.toLowerCase().includes(needle)),
   );
+
+  const openLead = state.leads.find((l) => l.id === openId) ?? null;
 
   const columns: Column<(typeof state.leads)[number]>[] = [
     { key: "service", header: "Service", cell: (l) => <span className="font-bold">{l.service}</span> },
     { key: "customer", header: "Customer", cell: (l) => <span className="text-zup-mid">{l.customer}</span> },
-    { key: "city", header: "Where", priority: 2, cell: (l) => <span className="text-zup-gray">{l.city}</span> },
+    { key: "address", header: "Where", priority: 2, cell: (l) => <span className="text-zup-gray">{l.address || "—"}</span> },
     {
       key: "status",
       header: "Status",
@@ -102,7 +106,7 @@ export function LeadsSection() {
         <FilterBar
           search={q}
           onSearchChange={(v) => set({ q: v })}
-          searchPlaceholder="Search by service, name or city…"
+          searchPlaceholder="Search by service, name or address…"
           onReset={clear}
         />
 
@@ -111,6 +115,7 @@ export function LeadsSection() {
             columns={columns}
             rows={rows}
             rowKey={(l) => l.id}
+            onRowActivate={(l) => setOpenId(l.id)}
             empty={
               <EmptyState
                 icon={PhoneCall}
@@ -124,6 +129,13 @@ export function LeadsSection() {
             }
           />
         </Card>
+
+        {/* Everything the customer typed — phone, email, address, the details
+            box — was fetched and then rendered nowhere, so staff could see a
+            name and a status and nothing they could act on. */}
+        {openLead ? (
+          <RequestDetail lead={openLead} onClose={() => setOpenId(null)} />
+        ) : null}
       </div>
 
       <ContactMessages />
@@ -385,6 +397,63 @@ export function IndustrialLeadsSection() {
         />
       ) : null}
     </div>
+  );
+}
+
+/** One service request in full. Same Sheet/Detail vocabulary as the industrial
+ *  EnquiryDetail below — a service lead has fewer fields, not different ones. */
+function RequestDetail({ lead: l, onClose }: { lead: ServiceLead; onClose: () => void }) {
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" className="w-full gap-0 overflow-y-auto p-6 sm:max-w-[520px]">
+        <SheetTitle className="text-ui-xl font-extrabold tracking-[-0.015em]">
+          {l.customer}
+        </SheetTitle>
+        <p className="mt-0.5 mb-5 text-ui-sm text-zup-gray">{l.service}</p>
+
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-3.5 sm:grid-cols-2">
+          <div>
+            <dt className="text-ui-micro font-bold uppercase tracking-[0.06em] text-zup-soft">
+              Phone
+            </dt>
+            <dd className="mt-0.5 text-ui-sm font-medium">
+              {l.phone ? (
+                <a href={`tel:${l.phone}`} className="text-zup-blue hover:underline">
+                  {l.phone}
+                </a>
+              ) : (
+                <span className="text-zup-mid">—</span>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-ui-micro font-bold uppercase tracking-[0.06em] text-zup-soft">
+              Email
+            </dt>
+            <dd className="mt-0.5 text-ui-sm font-medium">
+              {l.email ? (
+                <a href={`mailto:${l.email}`} className="text-zup-blue hover:underline">
+                  {l.email}
+                </a>
+              ) : (
+                <span className="text-zup-mid">—</span>
+              )}
+            </dd>
+          </div>
+          <Detail label="Address" value={l.address} />
+          <Detail label="Came in" value={new Date(l.createdAt).toLocaleString()} />
+        </dl>
+
+        {l.notes ? (
+          <div className="mt-5">
+            <p className="text-ui-micro font-bold uppercase tracking-[0.06em] text-zup-soft">
+              What they told us
+            </p>
+            <p className="mt-1 text-ui-sm leading-relaxed text-zup-mid">{l.notes}</p>
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
   );
 }
 

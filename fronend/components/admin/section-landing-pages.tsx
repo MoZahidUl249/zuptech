@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Eye, Copy, ExternalLink } from "lucide-react";
-import { useAdmin, taka, tempId, type AdminProduct } from "@/lib/admin";
+import { isUnsaved, useAdmin, taka, tempId, type AdminProduct } from "@/lib/admin";
 import {
   useLandingPages,
   createLandingPage,
@@ -34,9 +34,12 @@ export function LandingPagesSection() {
   const { pages, loading, error, reload } = useLandingPages();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = pages.find((p) => p.id === selectedId) ?? null;
+  // Staged products have no server id yet, so a campaign can't point at one —
+  // the POST would carry an id the server has never seen.
+  const savedProducts = state.products.filter((p) => !isUnsaved(p));
 
   const addPage = async () => {
-    const firstProduct = state.products[0];
+    const firstProduct = savedProducts[0];
     if (!firstProduct) {
       toast.error("Add a product to the catalog first");
       return;
@@ -70,7 +73,7 @@ export function LandingPagesSection() {
         key={selected.id}
         page={selected}
         readOnly={readOnly}
-        products={state.products}
+        products={savedProducts}
         onBack={() => setSelectedId(null)}
         onChanged={reload}
       />
@@ -264,9 +267,25 @@ function LandingPageEditor({
           </Button>
           {!readOnly ? (
             <>
-              <Button variant="outline" size="sm" onClick={() => void togglePublish()}>
-                {draft.published ? "Unpublish" : "Publish"}
-              </Button>
+              {draft.published ? (
+                // Taking a live page down closes the only checkout route for a
+                // product that is hidden from the storefront, so it asks first.
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="outline" size="sm">
+                      Unpublish
+                    </Button>
+                  }
+                  title="Take this campaign page down?"
+                  description="The link stops working immediately. If its product isn't listed on the storefront, this is the only way anyone could buy it."
+                  confirmLabel="Unpublish"
+                  onConfirm={() => void togglePublish()}
+                />
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => void togglePublish()}>
+                  Publish
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => void duplicate()}>
                 Duplicate
               </Button>

@@ -41,12 +41,11 @@ export function ProductCard({
   const hasSale =
     product.salePrice !== undefined && product.salePrice < product.price;
   // Display-only arithmetic over two server-given numbers: the gap between
-  // them, and that gap as a percentage when the server didn't label one. No
-  // charged amount is derived here (cal-bk.md) — the card only names the
-  // difference between the two prices it was handed.
+  // them. No charged amount is derived here (cal-bk.md) — the card only names
+  // the difference between the two prices it was handed. This used to also
+  // recompute that gap as a percentage, with its own rounding that matched
+  // neither the server's nor the admin's.
   const saving = hasSale ? product.price - product.salePrice! : 0;
-  const savingPct =
-    product.salePercentage ?? (hasSale ? Math.round((saving / product.price) * 100) : 0);
 
   return (
     <Link
@@ -74,10 +73,10 @@ export function ProductCard({
         )}
         {/* Gated on hasSale, same as the price block below — so the stamp and
             the prices can never tell two different stories. */}
-        {hasSale && savingPct > 0 && (
+        {hasSale && saving > 0 && (
           <span className="absolute right-2 top-2 flex flex-col items-center rounded-xl bg-zup-orange px-2 py-1 text-white shadow-[0_4px_12px_rgba(232,83,32,.35)]">
-            <span className="text-[15px] font-extrabold leading-none">{savingPct}%</span>
-            <span className="text-[8.5px] font-bold uppercase tracking-[0.12em]">off</span>
+            <span className="text-[8.5px] font-bold uppercase tracking-[0.12em]">save</span>
+            <span className="text-[14px] font-extrabold leading-none">{formatBDT(saving)}</span>
           </span>
         )}
       </div>

@@ -6,7 +6,6 @@ import {
   FileText,
   FolderTree,
   House,
-  Image as ImageIcon,
   LayoutDashboard,
   Megaphone,
   Package,
@@ -46,6 +45,15 @@ export interface AdminNavItem {
   icon: typeof LayoutDashboard;
   /** The RBAC module actually checked. Several screens share one. */
   module: AdminModule;
+  /**
+   * Every module a screen touches, when it touches more than one. The website
+   * screens are per-page now, so one screen can carry both the banner
+   * (`homepage`) and the wording beside it (`sitecontent`); it should open for
+   * someone holding either. Mirrors `assertCanAny` on the backend. Each card on
+   * the screen still gates itself, and the server's `assertCan` is the real
+   * boundary.
+   */
+  modules?: AdminModule[];
   /** Plain-language one-liner: nav tooltip and page subtitle. */
   help: string;
   /** Marks this item current for nested routes (e.g. /admin/orders/ZT-1). */
@@ -167,6 +175,12 @@ export const NAV_GROUPS: AdminNavGroup[] = [
     ],
   },
   {
+    /*
+     * One entry per page of the website, not one per kind of content. Changing
+     * the contact page used to mean visiting three screens — "Page pictures"
+     * for its photo, "Text & contact" for its wording, and neither of them
+     * showed you what page you were editing. Now the screen is the page.
+     */
     id: "website",
     label: "Website",
     items: [
@@ -175,28 +189,40 @@ export const NAV_GROUPS: AdminNavGroup[] = [
         label: "Home page",
         icon: House,
         module: "homepage",
-        help: "The banner slideshow and the products shown on the front page.",
+        modules: ["homepage", "sitecontent"],
+        help: "The banner, the featured products and the service cards on the front page.",
       },
-      {
-        href: "/admin/website/pictures",
-        label: "Page pictures",
-        icon: ImageIcon,
-        module: "sitecontent",
-        help: "The big picture at the top of each page.",
-      },
-      {
-        href: "/admin/website/text",
-        label: "Text & contact",
-        icon: PenLine,
-        module: "sitecontent",
-        help: "The wording on the website, and your phone number and address.",
-      },
+      // No "Shop page" entry: the shop is the product catalogue, and everything
+      // on it — the products, their grouping, the featured row — is edited
+      // under Products and Home page. A screen with nothing on it is worse
+      // than no screen.
       {
         href: "/admin/website/services",
-        label: "Services",
+        label: "Services page",
         icon: Wrench,
         module: "sitecontent",
-        help: "The services you offer, as listed on the site.",
+        help: "The picture and the service cards on the services page.",
+      },
+      {
+        href: "/admin/website/industrial",
+        label: "Industrial page",
+        icon: Factory,
+        module: "sitecontent",
+        help: "The picture, wording and capability cards for industrial work.",
+      },
+      {
+        href: "/admin/website/contact",
+        label: "Contact page",
+        icon: PhoneCall,
+        module: "sitecontent",
+        help: "The wording on the contact page, your phone number and your address.",
+      },
+      {
+        href: "/admin/website/global",
+        label: "Footer & tracking",
+        icon: PenLine,
+        module: "sitecontent",
+        help: "The footer wording, and your Google Tag Manager code.",
       },
       {
         href: "/admin/website/campaigns",
@@ -232,6 +258,12 @@ export const NAV_GROUPS: AdminNavGroup[] = [
 ];
 
 export const ALL_NAV_ITEMS: AdminNavItem[] = NAV_GROUPS.flatMap((g) => g.items);
+
+/** Every module a screen touches — `modules` when it declares several, the
+ *  single `module` otherwise. Holding any one of them opens the screen. */
+export function navItemModules(item: AdminNavItem): AdminModule[] {
+  return item.modules ?? [item.module];
+}
 
 /** The nav entry a pathname belongs to — longest prefix wins, so
  *  /admin/products/new resolves to Products rather than to Today. */

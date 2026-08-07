@@ -6,7 +6,7 @@ import { badRequest, conflict, notFound } from "../../lib/http";
 import { logOrderEvent } from "../../lib/order-events";
 import { applyStatusTransition } from "../../lib/order-stock";
 import { assertCan } from "../../lib/rbac";
-import { parseOrderStatus } from "../../lib/rules";
+import { parseOrderStatus, LIST_CAP } from "../../lib/rules";
 import { adminOrderInclude, toAdminOrder, toOrderDetail } from "../../lib/serialize";
 import { ensureWarranties } from "../../lib/warranty";
 import { staffGuard } from "./guard";
@@ -38,6 +38,7 @@ export const adminOrders = new Elysia({ name: "routes/admin/orders", detail: { t
 
       const q = query.q?.trim();
       const orders = await prisma.order.findMany({
+        take: LIST_CAP,
         where: {
           ...(query.status ? { status: query.status } : {}),
           // "none" is the only reserved value — anything else is a staff id.

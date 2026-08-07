@@ -33,7 +33,7 @@ export const api = treaty<App>(origin());
  * `status` is deliberately `unknown`: Eden derives the error union from a
  * route's DECLARED responses, but most of this backend's failures are thrown
  * (`throw notFound(...)`) and mapped to a status by the global onError hook in
- * backend/src/index.ts. Those never make it into the type, so the declared
+ * backend/src/app.ts. Those never make it into the type, so the declared
  * union is narrower than what actually comes back — comparing against it
  * directly makes TypeScript reject real status codes as impossible. Read it
  * through `failureStatus` instead.

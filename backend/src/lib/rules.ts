@@ -64,9 +64,9 @@ export function parseInternalEmail(email: string): InternalEmail | null {
 /* ===== Category logos ===== */
 
 /**
- * Category logos are stored as SVG *markup*, not as files on the media-storage
- * service — that service only accepts raster formats and rasterizes what it
- * stores, which would defeat the point of a vector logo.
+ * Category logos are stored as SVG *markup*, not as uploaded files — the media
+ * pipeline only accepts raster formats and rasterizes what it stores, which
+ * would defeat the point of a vector logo.
  *
  * The storefront renders this markup inline (dangerouslySetInnerHTML), so it
  * is an XSS sink: everything below exists to make sure only inert drawing
@@ -231,26 +231,49 @@ export function isMaskedSecret(value: string): boolean {
   return value.startsWith("••••");
 }
 
-/* ===== Money ===== */
+/* ===== List limits ===== */
 
-/** Deposit due when checkout takes down payments: ceil(price × minDp / 100). */
-export function minDownPayment(price: number, minDp: number): number {
-  return Math.ceil((price * minDp) / 100);
-}
+/**
+ * Most rows an unpaginated list endpoint will return.
+ *
+ * These lists had no bound at all: `GET /admin/api/orders` loaded every order
+ * ever placed, each with its items, invoice and warranty count, on every page
+ * load of the admin. That is fine at six orders and quietly ruinous at sixty
+ * thousand, and the failure mode is a screen that gets slower every month
+ * until someone notices.
+ *
+ * The cap is deliberately generous and always paired with a newest-first sort,
+ * so what falls off the end is the oldest — the rows nobody is working from.
+ * When a real shop outgrows it the answer is proper pagination in the admin
+ * UI, not a bigger number here.
+ */
+export const LIST_CAP = 500;
 
-/** Effective unit price after an active sale discount (rounded down). */
-export function salePrice(p: { price: number; onSale: boolean; salePercentage: number }): number {
-  return p.onSale ? p.price - Math.floor((p.price * p.salePercentage) / 100) : p.price;
+/* ===== Money =====
+ *
+ * Every discount here is a flat BDT amount, not a percentage. That is a
+ * deliberate simplification: percentages meant the same discount got rounded
+ * three different ways (the server floored it, the admin preview rounded it,
+ * the product card rounded again off a different base), so a ৳999 product at
+ * 33% off displayed ৳669 in the admin and charged ৳670 at the till. Subtraction
+ * has nothing to round.
+ */
+
+/** What the customer pays: the admin-entered sale price while it is on sale and
+ *  actually below the list price, otherwise the list price. A sale price of 0
+ *  means "not set" rather than "free". */
+export function sellingPrice(p: { price: number; onSale: boolean; salePrice: number }): number {
+  return p.onSale && p.salePrice > 0 && p.salePrice < p.price ? p.salePrice : p.price;
 }
 
 /**
- * A "buy N+, take X% off" tier. Both offer kinds — QuantityOffer (off the unit
+ * A "buy N+, take ৳X off" tier. Both offer kinds — QuantityOffer (off the unit
  * price) and FreeDeliveryOffer (off the zone delivery fee) — share this shape
  * and this resolution rule, so they share the search below.
  */
 interface OfferTierLike {
   minQty: number;
-  percentage: number;
+  amount: number;
 }
 
 /** Best (highest-threshold) tier the given qty qualifies for, or null. */
@@ -265,33 +288,33 @@ export function bestOfferTier<T extends OfferTierLike>(offers: T[], qty: number)
 /** Best quantity-discount tier for this qty, or null. */
 export const bestQuantityOffer = bestOfferTier;
 
-/** % off the delivery fee at this qty: the best tier's percentage, else 0.
- *  100 means the line ships free. */
-export function deliveryDiscountPercent(offers: OfferTierLike[], qty: number): number {
-  return bestOfferTier(offers, qty)?.percentage ?? 0;
+/** BDT off the delivery fee at this qty: the best tier's amount, else 0. */
+export function deliveryDiscountAmount(offers: OfferTierLike[], qty: number): number {
+  return bestOfferTier(offers, qty)?.amount ?? 0;
 }
 
-/** The zone delivery fee a line actually pays, after its best tier. Rounded
- *  down like every other discount here, so the customer keeps the remainder. */
+/** The zone delivery fee a line actually pays, after its best tier. Clamped at
+ *  zero, which is also what makes "free delivery" expressible: an amount at or
+ *  above the fee ships the line free in whichever zone it resolves to. */
 export function discountedDeliveryFee(
   zoneFee: number,
   offers: OfferTierLike[],
   qty: number,
 ): number {
-  const percent = deliveryDiscountPercent(offers, qty);
-  return percent <= 0 ? zoneFee : zoneFee - Math.floor((zoneFee * percent) / 100);
+  return Math.max(0, zoneFee - deliveryDiscountAmount(offers, qty));
 }
 
-/** Effective unit price: the cheaper of the flat sale price and the best
- *  qty-tier price — never stacked, the customer always gets the bigger win. */
+/** Effective unit price: the cheaper of the sale price and the best qty-tier
+ *  price — never stacked, the customer always gets the bigger win. Floored at
+ *  zero so an over-generous tier can't produce a negative line. */
 export function effectiveUnitPrice(
-  p: { price: number; onSale: boolean; salePercentage: number },
+  p: { price: number; onSale: boolean; salePrice: number },
   qty: number,
   offers: OfferTierLike[],
 ): number {
   const offer = bestOfferTier(offers, qty);
-  const offerPrice = offer ? p.price - Math.floor((p.price * offer.percentage) / 100) : p.price;
-  return Math.min(salePrice(p), offerPrice);
+  const offerPrice = offer ? Math.max(0, p.price - offer.amount) : p.price;
+  return Math.min(sellingPrice(p), offerPrice);
 }
 
 /* ===== Vocabularies (validated at the API edge) ===== */
@@ -347,25 +370,6 @@ export function parseOrderStatus(value: string): OrderStatus {
   }
   return value;
 }
-
-/**
- * Pages that expose an editable hero. The list of record — the admin renders
- * one editor per key and PUT /admin/api/page-heroes/:pageKey 400s on anything
- * else, so a typo can't quietly create an orphan row nothing renders.
- * Keep in step with PAGE_HERO_KEYS in ../fronend/lib/admin.tsx.
- */
-export const PAGE_HERO_KEYS = [
-  "home",
-  "shop",
-  "services",
-  "industrial",
-  "contact",
-] as const;
-export type PageHeroKey = (typeof PAGE_HERO_KEYS)[number];
-
-/** How a hero's background is rendered. */
-export const PAGE_HERO_MODES = ["plain", "image", "posters"] as const;
-export type PageHeroMode = (typeof PAGE_HERO_MODES)[number];
 
 /**
  * Which products a customer may actually buy.
@@ -468,6 +472,19 @@ export type PaymentEnvironment = (typeof PAYMENT_ENVIRONMENTS)[number];
  *  kind is stored rather than guessed from the URL. */
 export const HERO_MEDIA_TYPES = ["image", "video"] as const;
 export type HeroMediaType = (typeof HERO_MEDIA_TYPES)[number];
+
+/** Which half of a service card its photo takes on the storefront. The card is
+ *  a 50/50 split, so this is the whole of its layout — stored per row because
+ *  alternating the side down the column is an editorial choice, not something
+ *  the frontend should infer from a row's position in the list. */
+export const SERVICE_IMAGE_SIDES = ["left", "right"] as const;
+export type ServiceImageSide = (typeof SERVICE_IMAGE_SIDES)[number];
+
+/** The marker in front of each feature on a service card: a tick, a dot, or
+ *  nothing at all. Stored per card so a list of capabilities can read as a
+ *  checklist while a list of specs reads as plain lines. */
+export const SERVICE_BULLET_STYLES = ["tick", "dot", "plain"] as const;
+export type ServiceBulletStyle = (typeof SERVICE_BULLET_STYLES)[number];
 
 /** What an OrderEvent row records. Append-only — never reuse a kind's meaning. */
 export const ORDER_EVENT_KINDS = [

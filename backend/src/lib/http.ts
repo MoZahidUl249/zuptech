@@ -1,6 +1,6 @@
 /**
  * Error type thrown anywhere in a handler to produce a clean JSON error
- * response. The global onError hook in src/index.ts turns it into
+ * response. The global onError hook in src/app.ts turns it into
  * `{ error: message }` with the given status code.
  */
 export class ApiError extends Error {

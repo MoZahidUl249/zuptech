@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import { useAdmin, taka, type AdminProduct } from "@/lib/admin";
 import {
   uploadProductPhoto,
@@ -22,20 +23,30 @@ export function ProductEditor({
   onChange,
   onDone,
   submitLabel = "Done",
+  pendingPhotos = [],
+  onPickPhoto,
+  onDropPendingPhoto,
+  busy,
 }: {
   product: AdminProduct;
   onChange: (patch: Partial<AdminProduct>) => void;
   onDone: () => void;
   submitLabel?: string;
+  /** New-product mode: photos chosen but not yet uploaded. */
+  pendingPhotos?: File[];
+  onPickPhoto?: (file: File) => void;
+  onDropPendingPhoto?: (index: number) => void;
+  busy?: boolean;
 }) {
   const { state } = useAdmin();
   // Grouped so the picker shows the real hierarchy (Section → Category)
   // instead of a flat list of category names, several of which repeat
   // across sections.
   const sections = state.sections;
-  // A draft that hasn't been saved yet has no server id — the upload
-  // endpoints attach a photo to an existing product, so the gallery stays
-  // disabled until the product has been created at least once.
+  // A draft has no server id yet, and the upload endpoints attach a photo to a
+  // product that already exists. Rather than disabling the gallery (and making
+  // "add a product with pictures" a two-visit job), a new product collects its
+  // photos locally and they are uploaded the moment it is created.
   const isNew = !p.id;
   const MAX_PHOTOS = 12;
   // The backend 400s on a repeated minQty in either ladder, so saving is
@@ -44,22 +55,24 @@ export function ProductEditor({
     duplicateMinQtys(p.quantityOffers).length > 0 ||
     duplicateMinQtys(p.freeDeliveryOffers).length > 0;
 
-  const sellingPrice =
-    p.onSale && p.salePercentage > 0
-      ? Math.round(p.price * (1 - p.salePercentage / 100))
-      : p.price;
+  // No arithmetic: the admin types what the customer pays. The old version
+  // computed this from a percentage with Math.round while the server floored
+  // the same sum, so the preview and the till disagreed by a taka.
+  const onSale = p.onSale && p.salePrice > 0 && p.salePrice < p.price;
+  const sellingPrice = onSale ? p.salePrice : p.price;
+  const saleSaving = onSale ? p.price - p.salePrice : 0;
   // Counted independently: a product can have a video and no photos, and the
   // old short-circuit on an empty gallery reported "No photos yet" for it,
   // hiding the video completely.
+  const photoCount = isNew ? pendingPhotos.length : p.photos.length;
   const mediaParts = [
-    p.photos.length ? `${p.photos.length} photo${p.photos.length === 1 ? "" : "s"}` : "",
+    photoCount ? `${photoCount} photo${photoCount === 1 ? "" : "s"}` : "",
     p.video ? "1 video" : "",
   ].filter(Boolean);
   const photoSummary = mediaParts.length ? mediaParts.join(" · ") : "No photos yet";
-  const priceSummary =
-    p.onSale && p.salePercentage > 0
-      ? `${taka(sellingPrice)} — ${p.salePercentage}% off ${taka(p.price)}`
-      : taka(p.price);
+  const priceSummary = onSale
+    ? `${taka(sellingPrice)} — ${taka(saleSaving)} off ${taka(p.price)}`
+    : taka(p.price);
   const feeSummary = `Delivery ${taka(p.deliveryFeeInsideDhaka)}/${taka(p.deliveryFeeOutsideDhaka)} · Installation ${taka(p.installationFeeInsideDhaka)}/${taka(p.installationFeeOutsideDhaka)}`;
   const tierCount = p.quantityOffers.length + p.freeDeliveryOffers.length;
   const offerSummary = tierCount === 0 ? "None" : `${tierCount} offer${tierCount === 1 ? "" : "s"}`;
@@ -195,25 +208,48 @@ export function ProductEditor({
           summary={photoSummary}
         >
           {isNew ? (
-            <p className="mb-3 rounded-xl bg-warn-bg px-3.5 py-2.5 text-ui-sm text-warn-fg">
-              Save the product first — photos attach to a product that already exists.
+            <p className="mb-3 text-ui-sm text-zup-gray">
+              Pick the photos now — they upload as soon as the product is created.
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            {p.photos.map((url, i) => (
-              <PhotoSlot
-                key={`${i}-${url}`}
-                small
-                label={i === 0 ? "Cover" : `Photo ${i + 1}`}
-                value={url}
-                disabled={isNew}
-                onUpload={uploadPhoto}
-                onRemove={() => removePhoto(i)}
-              />
-            ))}
-            {!isNew && p.photos.length < MAX_PHOTOS ? (
-              <PhotoSlot small label="Add photo" value={null} onUpload={uploadPhoto} onRemove={async () => {}} />
-            ) : null}
+            {isNew ? (
+              <>
+                {pendingPhotos.map((file, i) => (
+                  <PendingPhoto
+                    key={`${file.name}-${file.size}-${i}`}
+                    file={file}
+                    label={i === 0 ? "Cover" : `Photo ${i + 1}`}
+                    onRemove={() => onDropPendingPhoto?.(i)}
+                  />
+                ))}
+                {pendingPhotos.length < MAX_PHOTOS ? (
+                  <PhotoSlot
+                    small
+                    label="Add photo"
+                    value={null}
+                    onPick={onPickPhoto}
+                    onRemove={async () => {}}
+                  />
+                ) : null}
+              </>
+            ) : (
+              <>
+                {p.photos.map((url, i) => (
+                  <PhotoSlot
+                    key={`${i}-${url}`}
+                    small
+                    label={i === 0 ? "Cover" : `Photo ${i + 1}`}
+                    value={url}
+                    onUpload={uploadPhoto}
+                    onRemove={() => removePhoto(i)}
+                  />
+                ))}
+                {p.photos.length < MAX_PHOTOS ? (
+                  <PhotoSlot small label="Add photo" value={null} onUpload={uploadPhoto} onRemove={async () => {}} />
+                ) : null}
+              </>
+            )}
           </div>
           <p className="mt-4 mb-2 text-ui-sm font-bold text-zup-mid">Video (optional)</p>
           <VideoSlot
@@ -251,17 +287,14 @@ export function ProductEditor({
                 className={inputCls}
               />
             </Field>
-            <Field label="Smallest deposit (%)">
+            <Field label="Smallest deposit (৳)">
               <input
                 type="number"
                 inputMode="numeric"
                 min={0}
-                max={100}
-                value={p.minDp}
+                value={p.minDeposit}
                 onChange={(e) =>
-                  onChange({
-                    minDp: Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))),
-                  })
+                  onChange({ minDeposit: Math.max(0, Math.round(Number(e.target.value) || 0)) })
                 }
                 className={inputCls}
               />
@@ -278,19 +311,16 @@ export function ProductEditor({
               />
               This product is on sale
             </label>
-              <div className="w-32">
-                <Field label="Discount (%)">
+              <div className="w-40">
+                <Field label="Sale price (৳)">
               <input
                 type="number"
                 inputMode="numeric"
                 min={0}
-                max={100}
                 disabled={!p.onSale}
-                value={p.salePercentage}
+                value={p.salePrice}
                 onChange={(e) =>
-                  onChange({
-                    salePercentage: Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))),
-                  })
+                  onChange({ salePrice: Math.max(0, Math.round(Number(e.target.value) || 0)) })
                 }
                 className={`${inputCls} disabled:opacity-50`}
               />
@@ -301,12 +331,22 @@ export function ProductEditor({
                 showed a price and a percentage and left you to do the sum. */}
             <p className="mt-3 text-ui-base font-bold text-zup-body">
               Customer pays {taka(sellingPrice)}
-              {p.onSale && p.salePercentage > 0 ? (
-                <span className="ml-2 text-ui-sm font-semibold text-zup-gray line-through">
-                  {taka(p.price)}
-                </span>
+              {onSale ? (
+                <>
+                  <span className="ml-2 text-ui-sm font-semibold text-zup-gray line-through">
+                    {taka(p.price)}
+                  </span>
+                  <span className="ml-2 text-ui-sm font-semibold text-zup-green-dark">
+                    saves {taka(saleSaving)}
+                  </span>
+                </>
               ) : null}
             </p>
+            {p.onSale && p.salePrice >= p.price && p.salePrice > 0 ? (
+              <p className="mt-1.5 text-ui-sm font-semibold text-warn-fg">
+                That is not below the regular price, so nothing is discounted.
+              </p>
+            ) : null}
           </div>
         </FormGroup>
 
@@ -394,15 +434,16 @@ export function ProductEditor({
           <div className="grid gap-3 lg:grid-cols-2">
             <OfferTierEditor
               label="Quantity discount"
-              hint="Buy more, pay less per unit. The highest tier the order reaches wins — tiers never stack, and the customer always gets whichever is cheaper: this or the flat sale price."
-              unitLabel="% off each unit"
+              hint="Buy more, pay less per unit. The highest tier the order reaches wins — tiers never stack, and the customer always gets whichever is cheaper: this or the sale price."
+              unitLabel="৳ off each unit"
               tiers={p.quantityOffers}
               onChange={(quantityOffers) => onChange({ quantityOffers })}
             />
             <OfferTierEditor
               label="Free delivery"
-              hint="Buy more, pay less delivery. Applies to whichever zone fee the order resolves to; 100% means the line ships free."
-              unitLabel="% off delivery"
+              hint="Buy more, pay less delivery. Applies to whichever zone fee the order resolves to, and is capped at that fee — so an amount at or above it means the line ships free."
+              unitLabel="৳ off delivery"
+              freeAt={Math.max(p.deliveryFeeInsideDhaka, p.deliveryFeeOutsideDhaka)}
               tiers={p.freeDeliveryOffers}
               onChange={(freeDeliveryOffers) => onChange({ freeDeliveryOffers })}
             />
@@ -494,8 +535,8 @@ export function ProductEditor({
       </FormGroups>
 
       <div className="mt-5">
-        <BtnPrimary onClick={onDone} disabled={hasDuplicateTiers}>
-          {submitLabel}
+        <BtnPrimary onClick={onDone} disabled={hasDuplicateTiers || busy}>
+          {busy ? "Adding…" : submitLabel}
         </BtnPrimary>
         {hasDuplicateTiers ? (
           <p className="mt-2 text-ui-sm font-semibold text-destructive">
@@ -503,6 +544,41 @@ export function ProductEditor({
           </p>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A photo chosen for a product that doesn't exist yet.
+ *
+ * Rendered from an object URL so the operator sees what they picked; the file
+ * itself is uploaded by the create step. The URL is revoked on unmount, which
+ * is the whole reason this is a component rather than an inline <img>.
+ */
+function PendingPhoto({
+  file,
+  label,
+  onRemove,
+}: {
+  file: File;
+  label: string;
+  onRemove: () => void;
+}) {
+  const url = useMemo(() => URL.createObjectURL(file), [file]);
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+
+  return (
+    <div className="relative flex h-16 w-16 flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-zup-body/20 bg-white text-center">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={label} className="absolute inset-0 h-full w-full object-cover" />
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${label}`}
+        className="absolute right-1 top-1 cursor-pointer rounded-full bg-black/60 px-1.5 text-ui-micro font-bold text-white"
+      >
+        ✕
+      </button>
     </div>
   );
 }

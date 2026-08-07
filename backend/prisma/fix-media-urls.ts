@@ -87,26 +87,6 @@ async function run(): Promise<void> {
   );
 
   await fixScalar(
-    "PageHero",
-    "background",
-    (await prisma.pageHero.findMany({ select: { id: true, background: true } })).map((r) => ({
-      id: String(r.id),
-      value: r.background,
-    })),
-    (id, background) => prisma.pageHero.update({ where: { id }, data: { background } }),
-  );
-
-  await fixScalar(
-    "HeroPoster",
-    "image",
-    (await prisma.heroPoster.findMany({ select: { id: true, image: true } })).map((r) => ({
-      id: String(r.id),
-      value: r.image,
-    })),
-    (id, image) => prisma.heroPoster.update({ where: { id }, data: { image } }),
-  );
-
-  await fixScalar(
     "HeroSlide",
     "image",
     (await prisma.heroSlide.findMany({ select: { id: true, image: true } })).map((r) => ({
