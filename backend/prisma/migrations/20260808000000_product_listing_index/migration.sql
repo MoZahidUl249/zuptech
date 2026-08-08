@@ -1,0 +1,18 @@
+-- The storefront listing query, indexed.
+--
+-- GET /api/products filters on `visible`, sorts `createdAt` descending and
+-- takes a page. With only the categoryId index present, that planned as a
+-- sequential scan over every product followed by a top-N heapsort — 5,010 rows
+-- read to return 48 — and the paged route issues the matching COUNT in the
+-- same request, so each page view paid for it twice.
+--
+-- Equality column first, sort column second: that ordering is what lets the
+-- planner walk the index backwards and stop at the page boundary instead of
+-- sorting.
+--
+-- Plain CREATE INDEX rather than CONCURRENTLY: Prisma runs each migration in a
+-- transaction and CONCURRENTLY cannot run inside one. On a table this size the
+-- ACCESS SHARE lock is held for milliseconds. If this table ever grows to the
+-- point where that matters, build the index by hand with CONCURRENTLY first
+-- and let this statement no-op via IF NOT EXISTS.
+CREATE INDEX IF NOT EXISTS "Product_visible_createdAt_idx" ON "Product"("visible", "createdAt");

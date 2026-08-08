@@ -144,6 +144,56 @@ export function LandingPagesSection() {
   );
 }
 
+
+/* ===== Campaign content editing helpers =====
+ *
+ * The repeatable blocks are edited as plain text — one item per line, and for
+ * the two-part blocks a `left | right` split. It reads as typing rather than
+ * as a form, which is what writing ad copy actually is, and it keeps a
+ * thirty-field page from becoming thirty nested repeater widgets.
+ */
+
+const toLines = (text: string) =>
+  text.split("\n").map((l) => l.trim()).filter(Boolean);
+
+/** "Fast charging | 30 minutes to 60%" -> { title, body } */
+function parsePairs<A extends string, B extends string>(text: string, a: A, b: B) {
+  return toLines(text).map((line) => {
+    const [first = "", ...rest] = line.split("|");
+    return { [a]: first.trim(), [b]: rest.join("|").trim() } as Record<A | B, string>;
+  });
+}
+
+/** "Quote | Name | Location" -> { quote, name, location } */
+function parseTestimonials(text: string) {
+  return toLines(text).map((line) => {
+    const [quote = "", name = "", location = ""] = line.split("|");
+    return { quote: quote.trim(), name: name.trim(), location: location.trim() };
+  });
+}
+
+const joinPairs = (rows: { [k: string]: string }[], a: string, b: string) =>
+  rows.map((r) => `${r[a] ?? ""} | ${r[b] ?? ""}`).join("\n");
+
+function linesOf(p: LandingPage) {
+  return {
+    trustBadges: (p.trustBadges ?? []).join("\n"),
+    brandLogos: (p.brandLogos ?? []).join("\n"),
+    qcPoints: (p.qcPoints ?? []).join("\n"),
+    footerLines: (p.footerLines ?? []).join("\n"),
+  };
+}
+
+function blocksOf(p: LandingPage) {
+  return {
+    features: joinPairs(p.features ?? [], "title", "body"),
+    specs: joinPairs(p.specs ?? [], "value", "label"),
+    testimonials: (p.testimonials ?? [])
+      .map((t) => `${t.quote} | ${t.name} | ${t.location}`)
+      .join("\n"),
+  };
+}
+
 function LandingPageEditor({
   page,
   readOnly,
@@ -159,6 +209,10 @@ function LandingPageEditor({
 }) {
   const [draft, setDraft] = useState<LandingPage>(page);
   const [bulletsText, setBulletsText] = useState(page.benefitBullets.join("\n"));
+  /* Campaign list fields are edited as one-per-line text — a repeater widget
+     per list would be five widgets for what is, in practice, typing. */
+  const [lists, setLists] = useState(() => linesOf(page));
+  const [blocks, setBlocks] = useState(() => blocksOf(page));
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -172,6 +226,8 @@ function LandingPageEditor({
     setSyncedPage(page);
     setDraft(page);
     setBulletsText(page.benefitBullets.join("\n"));
+    setLists(linesOf(page));
+    setBlocks(blocksOf(page));
   }
 
   const set = <K extends keyof LandingPage>(key: K, value: LandingPage[K]) =>
@@ -191,10 +247,47 @@ function LandingPageEditor({
       footerNote: draft.footerNote,
       imageHint: draft.imageHint,
       gtmId: draft.gtmId,
-      benefitBullets: bulletsText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean),
+      benefitBullets: toLines(bulletsText),
+
+      /* Campaign content. Everything a visitor reads, saved with the rest —
+         there is no second save button for "the page itself". */
+      hotlineLabel: draft.hotlineLabel,
+      hotlineNumber: draft.hotlineNumber,
+      headerCtaLabel: draft.headerCtaLabel,
+      trustBadges: toLines(lists.trustBadges),
+      subheadline: draft.subheadline,
+      discountBadge: draft.discountBadge,
+      heroCtaNote: draft.heroCtaNote,
+      brandStripTitle: draft.brandStripTitle,
+      brandLogos: toLines(lists.brandLogos),
+      videoTitle: draft.videoTitle,
+      videoUrl: draft.videoUrl,
+      featuresTitle: draft.featuresTitle,
+      features: parsePairs(blocks.features, "title", "body"),
+      specTitle: draft.specTitle,
+      specMeta: draft.specMeta,
+      specs: parsePairs(blocks.specs, "value", "label"),
+      bundlesTitle: draft.bundlesTitle,
+      bundlesSubtitle: draft.bundlesSubtitle,
+      bundleUnitLabel: draft.bundleUnitLabel,
+      bundleMaxQty: Number(draft.bundleMaxQty) || 1,
+      qcTitle: draft.qcTitle,
+      qcBody: draft.qcBody,
+      qcPoints: toLines(lists.qcPoints),
+      qcImageHint: draft.qcImageHint,
+      countdownTitle: draft.countdownTitle,
+      countdownNote: draft.countdownNote,
+      countdownEndsAt: draft.countdownEndsAt,
+      countdownCtaLabel: draft.countdownCtaLabel,
+      countdownAssurance: draft.countdownAssurance,
+      testimonialsTitle: draft.testimonialsTitle,
+      testimonials: parseTestimonials(blocks.testimonials),
+      formTitle: draft.formTitle,
+      formIntro: draft.formIntro,
+      formLabels: draft.formLabels,
+      footerTagline: draft.footerTagline,
+      footerAbout: draft.footerAbout,
+      footerLines: toLines(lists.footerLines),
     };
     try {
       await patchLandingPage(page.id, patch);
@@ -454,6 +547,241 @@ function LandingPageEditor({
             disabled={readOnly}
             onChange={(e) => set("footerNote", e.target.value)}
           />
+        </Field>
+
+
+        {/* ===== Campaign page content =====
+            Every string a visitor reads on /lp/:slug. Bundle prices are NOT
+            here on purpose — they are derived from the product's quantity
+            offers, so the page can only ever advertise what the cart charges. */}
+        <div className="mt-6 border-t border-zup-line pt-5">
+          <h3 className="text-ui-sm font-bold text-zup-ink">Campaign page content</h3>
+          <p className="mt-1 text-ui-micro text-zup-soft">
+            Write these in whatever language the campaign runs in — the layout does not
+            assume English. Leave a section blank and it is left off the page entirely.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Hotline label">
+            <Input value={draft.hotlineLabel ?? ""} disabled={readOnly}
+              onChange={(e) => set("hotlineLabel", e.target.value)}
+              placeholder="হটলাইন (১০টা–১০টা)" />
+          </Field>
+          <Field label="Hotline number">
+            <Input value={draft.hotlineNumber ?? ""} disabled={readOnly}
+              onChange={(e) => set("hotlineNumber", e.target.value)}
+              placeholder="০৯৬৩৮-৪৪৫৫৬৬" />
+          </Field>
+          <Field label="Header button">
+            <Input value={draft.headerCtaLabel ?? ""} disabled={readOnly}
+              onChange={(e) => set("headerCtaLabel", e.target.value)}
+              placeholder="অর্ডার করুন" />
+          </Field>
+          <Field label="Discount badge">
+            <Input value={draft.discountBadge ?? ""} disabled={readOnly}
+              onChange={(e) => set("discountBadge", e.target.value)}
+              placeholder="৩৩% ছাড়" />
+          </Field>
+        </div>
+
+        <Field label="Sub-headline">
+          <Textarea value={draft.subheadline ?? ""} disabled={readOnly} rows={3}
+            onChange={(e) => set("subheadline", e.target.value)} />
+        </Field>
+        <Field label="Trust badges (one per line)">
+          <Textarea value={lists.trustBadges} disabled={readOnly} rows={3}
+            onChange={(e) => setLists({ ...lists, trustBadges: e.target.value })}
+            placeholder={"১০০% অরিজিনাল\n০৬ মাস ওয়ারেন্টি\nক্যাশ অন ডেলিভারি"} />
+        </Field>
+        <Field label="Note under the hero button">
+          <Input value={draft.heroCtaNote ?? ""} disabled={readOnly}
+            onChange={(e) => set("heroCtaNote", e.target.value)} />
+        </Field>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Brand strip title">
+            <Input value={draft.brandStripTitle ?? ""} disabled={readOnly}
+              onChange={(e) => set("brandStripTitle", e.target.value)}
+              placeholder="যাদের সাথে আমরা কাজ করি" />
+          </Field>
+          <Field label="Brand names (one per line)">
+            <Textarea value={lists.brandLogos} disabled={readOnly} rows={3}
+              onChange={(e) => setLists({ ...lists, brandLogos: e.target.value })}
+              placeholder={"bKash\nNagad\nSteadFast"} />
+          </Field>
+          <Field label="Video section title">
+            <Input value={draft.videoTitle ?? ""} disabled={readOnly}
+              onChange={(e) => set("videoTitle", e.target.value)} />
+          </Field>
+          <Field label="Video URL (blank hides the section)">
+            <Input value={draft.videoUrl ?? ""} disabled={readOnly}
+              onChange={(e) => set("videoUrl", e.target.value)}
+              placeholder="https://youtube.com/watch?v=…" />
+          </Field>
+        </div>
+
+        <Field label="Features title">
+          <Input value={draft.featuresTitle ?? ""} disabled={readOnly}
+            onChange={(e) => set("featuresTitle", e.target.value)} />
+        </Field>
+        <Field label="Features — one per line, “title | description”">
+          <Textarea value={blocks.features} disabled={readOnly} rows={5}
+            onChange={(e) => setBlocks({ ...blocks, features: e.target.value })}
+            placeholder={"২২.৫W সুপার ফাস্ট চার্জ | ৩০ মিনিটে ফোনে ৬০% চার্জ"} />
+        </Field>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Spec sheet title">
+            <Input value={draft.specTitle ?? ""} disabled={readOnly}
+              onChange={(e) => set("specTitle", e.target.value)} />
+          </Field>
+          <Field label="Spec sheet meta line">
+            <Input value={draft.specMeta ?? ""} disabled={readOnly}
+              onChange={(e) => set("specMeta", e.target.value)}
+              placeholder="ZT-PC20 · REV 2.4" />
+          </Field>
+        </div>
+        <Field label="Specs — one per line, “value | label”">
+          <Textarea value={blocks.specs} disabled={readOnly} rows={5}
+            onChange={(e) => setBlocks({ ...blocks, specs: e.target.value })}
+            placeholder={"২০,০০০ mAh | ক্যাপাসিটি"} />
+        </Field>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Bundle section title">
+            <Input value={draft.bundlesTitle ?? ""} disabled={readOnly}
+              onChange={(e) => set("bundlesTitle", e.target.value)} />
+          </Field>
+          <Field label="Bundle subtitle">
+            <Input value={draft.bundlesSubtitle ?? ""} disabled={readOnly}
+              onChange={(e) => set("bundlesSubtitle", e.target.value)} />
+          </Field>
+          <Field label="Unit word">
+            <Input value={draft.bundleUnitLabel ?? ""} disabled={readOnly}
+              onChange={(e) => set("bundleUnitLabel", e.target.value)}
+              placeholder="পিস" />
+          </Field>
+          <Field label="How many bundle rows">
+            <Input type="number" value={draft.bundleMaxQty ?? 3} disabled={readOnly}
+              onChange={(e) => set("bundleMaxQty", Number(e.target.value))} />
+            <p className="mt-1 text-ui-micro text-zup-soft">
+              Prices come from the product&apos;s quantity offers, so what the page
+              advertises is always what checkout charges.
+            </p>
+          </Field>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Quality section title">
+            <Input value={draft.qcTitle ?? ""} disabled={readOnly}
+              onChange={(e) => set("qcTitle", e.target.value)} />
+          </Field>
+          <Field label="Quality image hint">
+            <Input value={draft.qcImageHint ?? ""} disabled={readOnly}
+              onChange={(e) => set("qcImageHint", e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Quality section body">
+          <Textarea value={draft.qcBody ?? ""} disabled={readOnly} rows={4}
+            onChange={(e) => set("qcBody", e.target.value)} />
+        </Field>
+        <Field label="Quality points (one per line)">
+          <Textarea value={lists.qcPoints} disabled={readOnly} rows={4}
+            onChange={(e) => setLists({ ...lists, qcPoints: e.target.value })} />
+        </Field>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Countdown title">
+            <Input value={draft.countdownTitle ?? ""} disabled={readOnly}
+              onChange={(e) => set("countdownTitle", e.target.value)}
+              placeholder="অফার আজই শেষ!" />
+          </Field>
+          <Field label="Countdown ends at (blank = no clock)">
+            <Input type="datetime-local" disabled={readOnly}
+              value={(draft.countdownEndsAt ?? "").slice(0, 16)}
+              onChange={(e) =>
+                set("countdownEndsAt", e.target.value ? new Date(e.target.value).toISOString() : "")
+              } />
+          </Field>
+          <Field label="Countdown button">
+            <Input value={draft.countdownCtaLabel ?? ""} disabled={readOnly}
+              onChange={(e) => set("countdownCtaLabel", e.target.value)} />
+          </Field>
+          <Field label="Countdown assurance line">
+            <Input value={draft.countdownAssurance ?? ""} disabled={readOnly}
+              onChange={(e) => set("countdownAssurance", e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Countdown note">
+          <Textarea value={draft.countdownNote ?? ""} disabled={readOnly} rows={2}
+            onChange={(e) => set("countdownNote", e.target.value)} />
+        </Field>
+
+        <Field label="Testimonials title">
+          <Input value={draft.testimonialsTitle ?? ""} disabled={readOnly}
+            onChange={(e) => set("testimonialsTitle", e.target.value)} />
+        </Field>
+        <Field label="Testimonials — one per line, “quote | name | place”">
+          <Textarea value={blocks.testimonials} disabled={readOnly} rows={5}
+            onChange={(e) => setBlocks({ ...blocks, testimonials: e.target.value })}
+            placeholder={"লোডশেডিংয়ের সময়ও ফোন চলে | সাইফুল ইসলাম | রাজশাহী"} />
+        </Field>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Order form title">
+            <Input value={draft.formTitle ?? ""} disabled={readOnly}
+              onChange={(e) => set("formTitle", e.target.value)}
+              placeholder="অর্ডারের তথ্য" />
+          </Field>
+          <Field label="Order form intro">
+            <Input value={draft.formIntro ?? ""} disabled={readOnly}
+              onChange={(e) => set("formIntro", e.target.value)} />
+          </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            ["name", "Name label"],
+            ["phone", "Phone label"],
+            ["address", "Address label"],
+            ["packageLabel", "Package label"],
+            ["deliveryLabel", "Delivery row"],
+            ["totalLabel", "Total row"],
+            ["submit", "Submit button"],
+            ["namePlaceholder", "Name placeholder"],
+            ["phonePlaceholder", "Phone placeholder"],
+            ["addressPlaceholder", "Address placeholder"],
+            ["successMessage", "Success message"],
+          ] as const).map(([key, label]) => (
+            <Field key={key} label={label}>
+              <Input
+                value={draft.formLabels?.[key] ?? ""}
+                disabled={readOnly}
+                onChange={(e) =>
+                  set("formLabels", {
+                    ...(draft.formLabels ?? ({} as LandingPage["formLabels"])),
+                    [key]: e.target.value,
+                  })
+                }
+              />
+            </Field>
+          ))}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Footer tagline">
+            <Input value={draft.footerTagline ?? ""} disabled={readOnly}
+              onChange={(e) => set("footerTagline", e.target.value)}
+              placeholder="MAKES LIFE SIMPLE" />
+          </Field>
+          <Field label="Footer contact lines (one per line)">
+            <Textarea value={lists.footerLines} disabled={readOnly} rows={3}
+              onChange={(e) => setLists({ ...lists, footerLines: e.target.value })} />
+          </Field>
+        </div>
+        <Field label="Footer about">
+          <Textarea value={draft.footerAbout ?? ""} disabled={readOnly} rows={3}
+            onChange={(e) => set("footerAbout", e.target.value)} />
         </Field>
 
         {!readOnly ? (

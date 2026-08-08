@@ -56,9 +56,97 @@ async function unwrap<T>(
  * the backend is unreachable, so the site still renders (display only —
  * every charged amount is always computed server-side at quote/order time).
  */
+export interface ProductQuery {
+  /** Category name, as it appears on the product. */
+  category?: string;
+  /** Section name (the tier above category). */
+  section?: string;
+  /** Free-text match on the product name, applied server-side. */
+  q?: string;
+  /** Specific product ids, comma-separated. Sizes its own page server-side. */
+  ids?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** A page of products plus how many matched in total, for paging controls. */
+export interface ProductPage {
+  products: Product[];
+  total: number;
+}
+
+/**
+ * One page of the catalog, newest first.
+ *
+ * Paged because the shop outgrew a single response: rendering the whole
+ * catalog server-side cost 1.4 MB of HTML per request and made /shop the
+ * throughput ceiling for the entire site. `total` comes back in the
+ * `x-total-count` header so the response body stays a plain array.
+ */
+export async function getProductPage(query: ProductQuery = {}): Promise<ProductPage> {
+  try {
+    const { data, error, response } = await api.api.products.get({ query });
+    if (error) throw error;
+    const products = (data ?? []) as Product[];
+    const header = response?.headers?.get("x-total-count");
+    return { products, total: header ? Number(header) : products.length };
+  } catch (err) {
+    console.error("[api] products unavailable, using fallback catalog:", err);
+    return { products: fallbackCatalog, total: fallbackCatalog.length };
+  }
+}
+
+/** Largest page the API will serve — `limit` is capped there by the DTO. */
+const MAX_PAGE = 200;
+
+/**
+ * Exactly these products, in one request.
+ *
+ * For a caller holding ids and nothing else — the homepage's featured row is
+ * the one that matters. It used to reach these by downloading the catalog and
+ * filtering, which after paging meant 23 parallel requests per visit.
+ *
+ * Returns whatever exists: an id that no longer resolves (unpublished, deleted)
+ * is silently absent rather than an error, because a stale featured id should
+ * cost one missing card, not the whole row.
+ */
+export async function getProductsByIds(ids: string[]): Promise<Product[]> {
+  if (ids.length === 0) return [];
+  const { products } = await getProductPage({ ids: ids.join(",") });
+  // The server already filtered, but getProductPage answers an unreachable
+  // backend with the entire bundled seed catalog — which for this call would
+  // turn "the API is down" into "here are 40 products you did not ask for".
+  const wanted = new Set(ids);
+  return products.filter((p) => wanted.has(p.id));
+}
+
+/**
+ * The whole catalog, walked page by page.
+ *
+ * Still needed where any product id has to resolve and the server can't know
+ * which ones in advance: the cart and the account order history both receive
+ * the catalog and look up ids held in the browser, and the sitemap needs every
+ * slug. Those are low-traffic or build-time.
+ *
+ * Note the cost before adding a caller: this is `ceil(total / 200)` requests
+ * fired in parallel — 23 of them at 4,500 products, not the single request it
+ * looks like. If the caller knows which ids it wants, use `getProductsByIds`.
+ *
+ * The shop and the product page must NOT use this — they were the reason the
+ * storefront exhausted its host, and both now ask for the page they need.
+ */
 export async function getProducts(): Promise<Product[]> {
   try {
-    return await unwrap(api.api.products.get(), "GET /api/products");
+    const first = await getProductPage({ limit: MAX_PAGE });
+    if (first.products.length >= first.total) return first.products;
+
+    const rest = await Promise.all(
+      Array.from(
+        { length: Math.ceil((first.total - MAX_PAGE) / MAX_PAGE) },
+        (_, i) => getProductPage({ limit: MAX_PAGE, offset: (i + 1) * MAX_PAGE }),
+      ),
+    );
+    return [...first.products, ...rest.flatMap((page) => page.products)];
   } catch (err) {
     console.error("[api] products unavailable, using fallback catalog:", err);
     return fallbackCatalog;
@@ -336,6 +424,32 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlacedOrder> {
   return unwrap(api.api.orders.post(input), "POST /api/orders");
 }
 
+/** One row of the bundle ladder, priced by the server from the product's
+ *  quantity offers — never typed as campaign copy, so the advertised total is
+ *  always the total the cart charges. */
+export interface CampaignBundle {
+  qty: number;
+  unitPrice: number;
+  total: number;
+  wasTotal: number;
+  saving: number;
+}
+
+/** Every label on the campaign's order form, so it can run in any language. */
+export interface CampaignFormLabels {
+  name: string;
+  phone: string;
+  address: string;
+  packageLabel: string;
+  deliveryLabel: string;
+  totalLabel: string;
+  submit: string;
+  namePlaceholder: string;
+  phonePlaceholder: string;
+  addressPlaceholder: string;
+  successMessage: string;
+}
+
 export interface PublicLandingPage {
   /** Already resolved server-side — falls back to the product name. */
   headline: string;
@@ -351,6 +465,48 @@ export interface PublicLandingPage {
   benefitBullets: string[];
   imageHint: string;
   gtmId: string;
+
+  /* ===== Campaign page content — every visitor-facing string ===== */
+  hotlineLabel: string;
+  hotlineNumber: string;
+  headerCtaLabel: string;
+  trustBadges: string[];
+  subheadline: string;
+  discountBadge: string;
+  heroCtaNote: string;
+  brandStripTitle: string;
+  brandLogos: string[];
+  videoTitle: string;
+  videoUrl: string;
+  featuresTitle: string;
+  features: { title: string; body: string }[];
+  specTitle: string;
+  specMeta: string;
+  specs: { value: string; label: string }[];
+  bundlesTitle: string;
+  bundlesSubtitle: string;
+  bundleUnitLabel: string;
+  bundleMaxQty: number;
+  qcTitle: string;
+  qcBody: string;
+  qcPoints: string[];
+  qcImageHint: string;
+  countdownTitle: string;
+  countdownNote: string;
+  /** ISO timestamp, or "" for no deadline. */
+  countdownEndsAt: string;
+  countdownCtaLabel: string;
+  countdownAssurance: string;
+  testimonialsTitle: string;
+  testimonials: { quote: string; name: string; location: string }[];
+  formTitle: string;
+  formIntro: string;
+  formLabels: CampaignFormLabels;
+  footerTagline: string;
+  footerAbout: string;
+  footerLines: string[];
+
+  bundles: CampaignBundle[];
   product: Product;
 }
 

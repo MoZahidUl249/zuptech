@@ -133,12 +133,19 @@ export function ProductsSection() {
       setDraftError("Pick a category — the catalog requires one");
       return;
     }
+    // Checked here as well as by the DTO so a missing code reads as a sentence
+    // in the form rather than as a 422 listing what was received.
+    if (draft.sku.trim().length < 2) {
+      setDraftError("Enter the product code (SKU) — it comes off the supplier's paperwork, not from us");
+      return;
+    }
     setDraftError(null);
     setCreating(true);
 
     const body: AdminProduct = {
       ...draft,
       name: draft.name.trim(),
+      sku: draft.sku.trim(),
       slug: draft.slug.trim() || slugify(draft.name, "product"),
     };
 

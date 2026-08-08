@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { GTM_ID_RE, type HeroSlide, type SiteContact, type SiteCopy } from "@/lib/admin";
 import { featuredProducts, type Product } from "@/lib/products";
-import { getProducts, getSiteConfig, type PaymentOption, type SiteConfig } from "@/lib/api";
+import { getProductsByIds, getSiteConfig, type PaymentOption, type SiteConfig } from "@/lib/api";
 import { site } from "@/lib/site";
 import { DEFAULT_COPY, resolveCopy } from "@/lib/site-copy";
 
@@ -16,19 +16,34 @@ import { DEFAULT_COPY, resolveCopy } from "@/lib/site-copy";
  */
 
 let config: SiteConfig | null = null;
-let catalog: Product[] | null = null;
+let featured: Product[] | null = null;
 let started = false;
 let fetching = false;
 
 const listeners = new Set<() => void>();
 
+/*
+ * Two requests, in order — the config names the featured ids, then those ids
+ * are fetched directly.
+ *
+ * This used to fetch the config and the whole catalog in parallel and pick the
+ * featured rows out of it in the browser. That was one wasteful request while
+ * `GET /api/products` still answered with everything; once the route was paged
+ * it became `ceil(total / 200)` parallel requests — 23 at 4,500 products —
+ * fired by every browser that opened the home page, to render six cards. It
+ * was also, almost certainly, most of the 429s in the load test.
+ *
+ * Sequential costs one extra round trip and is still the right trade: the ids
+ * are not knowable until the config lands, and two small requests beat
+ * twenty-four large ones.
+ */
 async function load() {
   if (fetching) return;
   fetching = true;
   try {
-    const [nextConfig, nextCatalog] = await Promise.all([getSiteConfig(), getProducts()]);
+    const nextConfig = await getSiteConfig();
     if (nextConfig) config = nextConfig;
-    catalog = nextCatalog;
+    featured = config ? await getProductsByIds(config.featuredIds) : null;
     listeners.forEach((l) => l());
   } finally {
     fetching = false;
@@ -57,12 +72,14 @@ let featuredCache: Product[] | null = null;
 let featuredCacheKey = "";
 
 function getFeaturedSnapshot(): Product[] {
-  if (!config || !catalog) return featuredProducts;
-  const key = config.featuredIds.join(",") + "|" + catalog.length;
+  if (!config || !featured) return featuredProducts;
+  const key = config.featuredIds.join(",") + "|" + featured.length;
   if (featuredCache && featuredCacheKey === key) return featuredCache;
   featuredCacheKey = key;
+  // Ordered by featuredIds, not by whatever order the API returned — the admin
+  // controls the sequence the cards appear in.
   featuredCache = config.featuredIds
-    .map((id) => catalog!.find((p) => p.id === id))
+    .map((id) => featured!.find((p) => p.id === id))
     .filter((p): p is Product => Boolean(p));
   if (featuredCache.length === 0) featuredCache = featuredProducts;
   return featuredCache;

@@ -22,19 +22,6 @@ async function featuredIds(): Promise<string[]> {
   return config.featuredIds;
 }
 
-/**
- * Next free sequential SKU (ZT-P0011, ZT-P0012, …). Generated once at create
- * time and stable afterwards — stock movements denormalize the SKU.
- */
-async function nextSku(): Promise<string> {
-  let n = (await prisma.product.count()) + 1;
-  for (;;) {
-    const sku = `ZT-P${String(n).padStart(4, "0")}`;
-    if (!(await prisma.product.findUnique({ where: { sku } }))) return sku;
-    n++;
-  }
-}
-
 /** Both tier ladders are keyed @@unique([productId, minQty]), so a repeated
  *  threshold is a 400 rather than a Prisma constraint error. */
 function assertNoDuplicateMinQty(field: string, offers: { minQty: number }[] | undefined) {
@@ -53,7 +40,11 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
   .get("/admin/api/products", async ({ staffCtx }) => {
     assertCan(staffCtx, "products", "view");
     const [products, featured] = await Promise.all([
-      prisma.product.findMany({ take: LIST_CAP, orderBy: { createdAt: "asc" }, include: productInclude }),
+      // Newest first. Sorting oldest-first under the cap meant a product the
+      // operator had just created was not in the list they were returned to:
+      // POST answered 201, the row was absent, and creating it again produced
+      // a 409 for something they could not see anywhere in the panel.
+      prisma.product.findMany({ take: LIST_CAP, orderBy: { createdAt: "desc" }, include: productInclude }),
       featuredIds(),
     ]);
     return products.map((p) => toAdminProduct(p, featured));
@@ -69,18 +60,18 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
       assertNoDuplicateMinQty("freeDeliveryOffers", freeDeliveryOffers);
 
       const id = fields.id ?? fields.slug.replace(/-/g, "").slice(0, 20);
+      // `sku` is required by the DTO now, so it is always a real value here and
+      // always worth checking for a clash — it used to be conditional because
+      // the field could be absent and {sku: undefined} matches every row.
       const clash = await prisma.product.findFirst({
-        // {sku: undefined} would match every row — only include it when given.
-        where: { OR: [{ id }, { slug: fields.slug }, ...(fields.sku ? [{ sku: fields.sku }] : [])] },
+        where: { OR: [{ id }, { slug: fields.slug }, { sku: fields.sku }] },
       });
       if (clash) throw conflict("A product with the same id, slug or SKU already exists");
 
-      const sku = fields.sku ?? (await nextSku());
       const product = await prisma.product.create({
         data: {
           ...fields,
           id,
-          sku,
           ...(quantityOffers ? { quantityOffers: { create: quantityOffers } } : {}),
           ...(freeDeliveryOffers ? { freeDeliveryOffers: { create: freeDeliveryOffers } } : {}),
         },

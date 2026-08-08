@@ -31,7 +31,21 @@ export function MobileTabBar() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-75 grid h-16 grid-cols-5 border-t border-zup-body/8 bg-white/94 px-2 pb-[calc(6px+env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl md:hidden"
+      /*
+       * Floating, not welded to the bottom edge.
+       *
+       * It used to be a full-bleed strip with a top border sitting flush on
+       * `bottom-0`. Detaching it — inset from all three edges, fully rounded,
+       * lifted on a shadow instead of a hairline — leaves the page visible
+       * running underneath, which is what makes it read as a control layer
+       * over the site rather than part of the device chrome.
+       *
+       * The bottom offset stacks a fixed gap ON TOP of the safe-area inset, so
+       * it clears the home indicator on a notched phone and still has room to
+       * breathe on a device that reports no inset at all. The old rule spent
+       * that inset as internal padding, which is why it looked flush.
+       */
+      className="fixed inset-x-3 bottom-[calc(12px+env(safe-area-inset-bottom))] z-75 grid h-16 grid-cols-5 rounded-3xl border border-zup-body/8 bg-white/94 px-2 py-1.5 shadow-[0_8px_28px_-6px_rgba(21,24,30,0.22)] backdrop-blur-xl md:hidden"
       aria-label="Mobile navigation"
     >
       {navLinks.map(({ href, label }) => {

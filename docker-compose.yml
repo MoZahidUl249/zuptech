@@ -5,13 +5,71 @@
 # Nothing except nginx publishes a host port — the app services are reachable
 # only on the internal network, so the reverse proxy is the single ingress and
 # there is no way to bypass TLS by hitting :3000 directly.
+#
+# Every service declares `mem_limit`. Without one a container can allocate
+# until the HOST runs out, and then the kernel picks the victim — which under
+# load testing meant the storefront consuming all 10 GB and the OOM killer
+# taking it repeatedly. A limit turns "the machine dies" into "one container
+# restarts", and makes the failure legible.
+#
+# DO NOT trust `OOMKilled` to tell you a limit was hit. This file used to claim
+# the kill was invisible "because no cgroup limit was ever crossed"; that was
+# wrong, and it sent an entire investigation the wrong way. Docker reported
+# `OOMKilled=false` with `ExitCode=0` on a container the kernel had just killed
+# for crossing its cgroup limit exactly. `docker stats` is no better — on a 15s
+# interval it never sampled the peak. The authority is the VM's kernel log:
+#
+#   colima ssh -- sudo dmesg | grep 'Memory cgroup out of memory'
+#
+# Sized for a 4 GB VPS. Raise them together if the box is bigger. Note that the
+# frontend no longer needs the headroom it once did — see its comment.
 
 name: zuptech
+
+# Docker's default json-file driver never rotates: it keeps every line a
+# container has ever written until the disk is full, and on a single VPS the
+# disk filling takes the database down with it. nginx alone writes an access
+# line per request. 10 MB × 3 is a few days of real traffic and a hard ceiling
+# of 30 MB per container.
+#
+# YAML anchor rather than a daemon.json default, so the limit travels with the
+# repo instead of depending on how the box was set up.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Everything the two storefront containers share EXCEPT the build block — see
+# the note on `frontend` for why that exclusion matters.
+x-storefront: &storefront
+  image: ${REGISTRY:-ghcr.io/OWNER/REPO}/frontend:${TAG:-latest}
+  restart: unless-stopped
+  logging: *logging
+  # Measured flat at ~190 MB across a 100k-request run on the Node runtime,
+  # with no growth and no restarts. 512m is a backstop against a runaway, not
+  # a budget — see fronend/Dockerfile for what the old 2g number was hiding.
+  #
+  # Sized down from 768m for the 4 GB production box: two replicas at 768m
+  # reserved 1.5 GB on a machine that had ~440 MB free and a 32 MB swap, which
+  # left no room to build. At 512m the whole stack fits in 2432 MB and the
+  # build still has headroom.
+  mem_limit: 512m
+  environment:
+    NODE_ENV: production
+    PORT: 3001
+    HOSTNAME: 0.0.0.0
+    BACKEND_URL: http://backend:3000
+  depends_on:
+    backend:
+      condition: service_started
 
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 768m
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
@@ -35,6 +93,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 512m
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -56,12 +116,51 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       MAIL_FROM: ${MAIL_FROM}
+      # Where a 500 goes besides the container log. src/lib/observability.ts
+      # POSTs every fault here (Sentry, a Slack incoming webhook, anything that
+      # takes JSON) and does nothing at all when it is unset — which is what it
+      # was, because this line did not exist. An operator could set it in
+      # .env.production and still get no alerts, because compose never passed
+      # it into the container. Optional, but unset means nobody is told.
+      ERROR_WEBHOOK_URL: ${ERROR_WEBHOOK_URL}
+      # How many proxies sit in front of this service. Rate limiting reads the
+      # client IP this many hops from the right of X-Forwarded-For, so a wrong
+      # value either buckets the whole internet together or lets a caller spoof
+      # their way into a fresh bucket. 1 = just the nginx in this file; raise it
+      # if a CDN is put in front. See src/lib/rate-limit.ts.
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
+      # /openapi is off in production unless this is explicitly turned on.
+      OPENAPI_DOCS: ${OPENAPI_DOCS}
     depends_on:
       db:
         condition: service_healthy
 
+  # TWO storefront containers, listed one by one in nginx's `storefront`
+  # upstream, so a restart of either is invisible to visitors.
+  #
+  # Not `deploy.replicas`. Compose would happily start N copies under one
+  # service name, but open-source nginx resolves an upstream's hostname ONCE at
+  # startup and holds that single address for the process lifetime — the
+  # `resolve` parameter that re-resolves it is NGINX Plus only. Every request
+  # would land on whichever replica won the first DNS answer, and the rest
+  # would sit idle while still looking like redundancy in `docker ps`. Distinct
+  # service names are ugly and honest.
+  #
+  # Both run the same image, so they share a build and therefore the same
+  # Server Actions encryption key; instances built separately would not, and
+  # would reject each other's actions.
+  # Only `frontend` carries `build:`. The anchor deliberately does NOT, because
+  # both services point at the SAME image tag: when the anchor included the
+  # build block, `docker compose build` built that one tag twice in parallel and
+  # the two jobs raced to tag it —
+  #
+  #   failed to create an image docker.io/local/frontend:test … AlreadyExists
+  #
+  # which took the whole build down. It stayed hidden while builds named
+  # `frontend` explicitly, and surfaced the first time `deploy.sh --build` ran
+  # the full `compose build`. frontend2 just runs what frontend built.
   frontend:
-    image: ${REGISTRY:-ghcr.io/OWNER/REPO}/frontend:${TAG:-latest}
+    <<: *storefront
     build:
       context: .
       dockerfile: fronend/Dockerfile
@@ -70,19 +169,18 @@ services:
         # needs the cloud name baked in at build time to allow-list it.
         NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:?set CLOUDINARY_CLOUD_NAME}
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL}
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      PORT: 3001
-      HOSTNAME: 0.0.0.0
-      BACKEND_URL: http://backend:3000
-    depends_on:
-      backend:
-        condition: service_started
+
+  # Same image, same everything except the build. Sharing one image is also what
+  # keeps their Server Actions encryption keys in step — separately built
+  # instances would reject each other's actions.
+  frontend2:
+    <<: *storefront
 
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 128m
     ports:
       - "80:80"
       - "443:443"
@@ -102,6 +200,7 @@ services:
       NGINX_ENVSUBST_FILTER: "_DOMAIN$$"
     depends_on:
       - frontend
+      - frontend2
       - backend
     # Renders the templates, then reloads every 12h to pick up renewed certs.
     #
@@ -116,6 +215,14 @@ services:
 
   certbot:
     image: certbot/certbot
+    # This was the one service without a restart policy, which made it the one
+    # service whose death is permanent and silent. Nothing watches it, its work
+    # is invisible for 60 days, and the symptom when it has not been running is
+    # the whole site failing TLS at once — the most expensive possible way to
+    # find out. `unless-stopped` costs nothing and removes the failure mode.
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 128m
     volumes:
       - certbot_conf:/etc/letsencrypt
       - certbot_www:/var/www/certbot

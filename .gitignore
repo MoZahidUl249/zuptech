@@ -16,5 +16,13 @@ backend/src/generated/
 # Uploaded media, local only.
 storage/data/
 
+# Local working area for test harnesses, load-test output and captured fixtures.
+# NEVER commit this: it holds admin-cookies.txt, a live staff session token, and
+# whatever else a debugging session left behind.
+scratchpad/
+
+# Agent/editor local config.
+.claude/
+
 *.log
 .DS_Store

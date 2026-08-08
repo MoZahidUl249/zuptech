@@ -10,6 +10,7 @@ import {
   GTM_ID_RE,
   isLowStock,
   isMaskedSecret,
+  secretsMatch,
   isOneOf,
   isValidPhone,
   maskSecret,
@@ -133,6 +134,25 @@ describe("misc", () => {
   test("a mask we sent is recognized as unchanged", () => {
     expect(isMaskedSecret(maskSecret("bk_live_7f31a92c44e8"))).toBe(true);
     expect(isMaskedSecret("bk_live_new_secret")).toBe(false);
+  });
+
+  test("secretsMatch accepts only the exact secret", () => {
+    const secret = "bk_live_7f31a92c44e8";
+    expect(secretsMatch(secret, secret)).toBe(true);
+    expect(secretsMatch("bk_live_7f31a92c44e9", secret)).toBe(false);
+    // A correct prefix must not pass — that is the whole attack the constant-
+    // time comparison exists to stop.
+    expect(secretsMatch("bk_live_7f31a92c44e", secret)).toBe(false);
+    expect(secretsMatch(secret + "x", secret)).toBe(false);
+  });
+
+  test("secretsMatch never treats a missing secret as a match", () => {
+    // An unconfigured provider must not be open to a caller who also sends
+    // nothing — two empty values are not credentials.
+    expect(secretsMatch(undefined, "stored")).toBe(false);
+    expect(secretsMatch("supplied", undefined)).toBe(false);
+    expect(secretsMatch(undefined, undefined)).toBe(false);
+    expect(secretsMatch("", "")).toBe(false);
   });
 });
 

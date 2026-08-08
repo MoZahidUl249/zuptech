@@ -54,6 +54,27 @@ export function formatBDT(n: number): string {
 }
 
 /**
+ * Money in Bangla numerals — ৳২,৯৯০ rather than ৳ 2,990.
+ *
+ * Separate from `formatBDT` on purpose: the storefront and the admin run in
+ * English and their numbers should stay legible to whoever is reading a
+ * spreadsheet next to them. A campaign landing page is the one surface written
+ * entirely in Bangla, and Western digits in the middle of Bangla copy read as
+ * a mistake — the price is the most-read text on the page.
+ */
+/**
+ * Western digits to Bangla ones. For the numbers that are not money — a
+ * quantity, a list index — on a page written in Bangla.
+ */
+export function toBanglaDigits(value: string | number): string {
+  return String(value).replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[Number(d)]!);
+}
+
+export function formatBDTBangla(n: number): string {
+  return "৳" + n.toLocaleString("bn-BD");
+}
+
+/**
  * Serialize JSON-LD for a <script> tag. Escapes `<` so no value can ever
  * close the tag and inject markup (defense-in-depth for structured data).
  */

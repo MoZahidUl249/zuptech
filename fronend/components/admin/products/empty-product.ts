@@ -9,7 +9,7 @@ export function emptyDraftProduct(): AdminProduct {
     categoryId: "",
     category: "",
     section: "",
-    sku: "", // assigned by the server on create
+    sku: "", // typed in by the admin — the server no longer invents one
     price: 0,
     cost: 0,
     minDeposit: 0,

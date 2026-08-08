@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
-import { getProductBySlug, getProducts } from "@/lib/api";
+import { getProductBySlug, getProductPage } from "@/lib/api";
 import { formatBDT, site , jsonLd } from "@/lib/site";
 import { ProductActions } from "@/components/product-actions";
 import { ProductCard, ProductImagePlaceholder } from "@/components/product-card";
@@ -39,10 +39,23 @@ export default async function ProductPage({
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const catalog = await getProducts();
-  const related = catalog
-    .filter((p) => p.id !== product.id && p.cat === product.cat)
-    .slice(0, 4);
+  /*
+   * Related products, asked for by category instead of filtered out of the
+   * whole shop.
+   *
+   * Two things were wrong with doing it client-side. It fetched all 500 catalog
+   * rows to keep four, on the most-visited route on the site — most of why the
+   * storefront ran out of memory under load. And it matched on `cat`, which
+   * only exists on the bundled fallback seed: for live products both sides were
+   * `undefined`, so `p.cat === product.cat` was true for everything and
+   * "related" meant "any four products at all".
+   *
+   * Five, because the product itself comes back in its own category.
+   */
+  const { products: sameCategory } = product.category
+    ? await getProductPage({ category: product.category, limit: 5 })
+    : { products: [] };
+  const related = sameCategory.filter((p) => p.id !== product.id).slice(0, 4);
   const outOfStock = product.inStock === false;
   // salePrice is server-computed (PublicProductDto); never derived here.
   const onSale = product.salePrice !== undefined && product.salePrice < product.price;

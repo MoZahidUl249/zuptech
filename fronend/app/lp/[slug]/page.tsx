@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, Phone, Play } from "lucide-react";
 import { getLandingPage } from "@/lib/api";
-import { formatBDT } from "@/lib/site";
-import { ProductActions } from "@/components/product-actions";
+import { formatBDTBangla as formatBDT, toBanglaDigits } from "@/lib/site";
 import { LandingPageGtm } from "@/components/marketing/landing-page-gtm";
+import { CampaignOrderForm } from "@/components/marketing/campaign-order-form";
+import { CampaignCountdown } from "@/components/marketing/campaign-countdown";
 
 export async function generateMetadata({
   params,
@@ -20,6 +22,36 @@ export async function generateMetadata({
   };
 }
 
+/** One band of the page. Declared at module scope so React keeps the same
+ *  component identity across renders instead of remounting the whole section. */
+function Section({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <section className={`px-5 py-10 sm:py-12 ${className}`}>{children}</section>;
+}
+
+/** The reading column every band shares. */
+function Inner({ children }: { children: React.ReactNode }) {
+  return <div className="mx-auto w-full max-w-[720px]">{children}</div>;
+}
+
+/**
+ * Campaign page.
+ *
+ * Every string below comes from the landing page row, so a campaign is written
+ * end to end from the admin — the layout is fixed, the words are not, and
+ * nothing here assumes English. Sections whose content is empty render
+ * nothing at all, so a half-filled campaign degrades to a shorter page rather
+ * than a page full of blank headings.
+ *
+ * The only numbers on the page come from `pub.bundles`, which the server
+ * derived from the product's quantity offers — a campaign cannot advertise a
+ * price the cart will refuse.
+ */
 export default async function LandingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   // One call: the payload embeds the product, which is what lets a campaign
@@ -29,86 +61,403 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
   if (!pub) notFound();
 
   const product = pub.product;
+  const one = pub.bundles[0];
+  const orderHref = "#order";
 
   return (
-    <main className="mx-auto max-w-[720px] px-5 pb-16 pt-0">
+    <div className="bg-white text-zup-ink">
       <LandingPageGtm gtmId={pub.gtmId} />
 
-      {pub.ribbonText ? (
-        <div className="-mx-5 mb-6 bg-zup-orange px-5 py-2 text-center text-[12.5px] font-bold uppercase tracking-[0.04em] text-white">
-          {pub.ribbonText}
+      {/* ── 1. Header: the site's own mark, hotline, and a jump to the form ── */}
+      <header className="sticky top-0 z-30 border-b border-zup-line bg-zup-mist/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[720px] items-center justify-between gap-3 px-5 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <Image
+              src="/images/zup-mark.png"
+              alt="ZUP TECH"
+              width={30}
+              height={30}
+              className="h-[30px] w-[30px] object-contain"
+              priority
+            />
+            <span className="text-[15px] font-extrabold leading-none tracking-[0.05em] text-zup-body">
+              ZUP TECH
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {pub.hotlineNumber ? (
+              <a
+                href={`tel:${pub.hotlineNumber.replace(/\s/g, "")}`}
+                className="hidden flex-col items-end leading-tight min-[420px]:flex"
+              >
+                <span className="text-[10.5px] font-medium text-zup-soft">{pub.hotlineLabel}</span>
+                <span className="text-[13.5px] font-bold text-zup-body">{pub.hotlineNumber}</span>
+              </a>
+            ) : null}
+            {pub.headerCtaLabel ? (
+              <a
+                href={orderHref}
+                className="rounded-full bg-zup-blue px-4 py-2 text-[13.5px] font-semibold text-white"
+              >
+                {pub.headerCtaLabel}
+              </a>
+            ) : null}
+          </div>
         </div>
-      ) : null}
+      </header>
 
-      <h1 className="mb-2 text-[clamp(24px,4vw,32px)] font-bold leading-tight tracking-[-0.02em]">
-        {pub.headline}
-      </h1>
-      <p className="mb-5 text-[14.5px] leading-relaxed text-zup-gray">
-        {pub.product.description}
-      </p>
+      {/* ── 2. Hero ─────────────────────────────────────────────────────── */}
+      <Section className="pt-8">
+        <Inner>
+          {pub.trustBadges.length ? (
+            <ul className="mb-4 flex flex-wrap gap-2">
+              {pub.trustBadges.map((b) => (
+                <li
+                  key={b}
+                  className="rounded-full border border-zup-line bg-white px-3 py-1 text-[11.5px] font-semibold text-zup-body"
+                >
+                  {b}
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
-      <div
-        className="mb-6 flex min-h-[220px] items-center justify-center overflow-hidden rounded-2xl bg-[repeating-linear-gradient(-45deg,#EFF1F4_0_14px,#F6F7F9_14px_28px)]"
-        role="img"
-        aria-label={pub.imageHint || pub.product.name}
-      >
-        <span className="rounded-lg bg-white/85 px-3 py-1.5 text-center font-mono text-[11px] text-zup-faint">
-          {pub.imageHint || `${pub.product.name} photo`}
-        </span>
-      </div>
+          <h1 className="text-[clamp(26px,5.2vw,34px)] font-bold leading-[1.25] tracking-[-0.02em]">
+            {pub.headline}
+          </h1>
+          {pub.subheadline ? (
+            <p className="mt-3 text-[16px] leading-relaxed text-zup-body">{pub.subheadline}</p>
+          ) : null}
 
-      <div className="mb-6 flex flex-wrap items-baseline gap-3">
-        <span className="text-[32px] font-extrabold tracking-[-0.02em]">
-          {formatBDT(pub.offerPrice)}
-        </span>
-        {pub.compareAtPrice > pub.offerPrice ? (
-          <>
-            <span className="text-lg text-zup-faint line-through">
-              {formatBDT(pub.compareAtPrice)}
-            </span>
-            <span className="rounded-full bg-zup-orange px-3 py-1 text-xs font-bold text-white">
-              SAVE {formatBDT(pub.youSave)}
-            </span>
-          </>
-        ) : null}
-      </div>
-      {pub.youSave > 0 ? (
-        // Server-derived (LANDING-PAGES.md §3) — the page renders the figure,
-        // it never subtracts one itself.
-        <p className="-mt-4 mb-6 text-sm font-semibold text-zup-green">
-          Save {formatBDT(pub.youSave)} today
-        </p>
-      ) : null}
-
-      {pub.benefitBullets.length > 0 ? (
-        <ul className="mb-7 flex flex-col gap-2.5 rounded-2xl border border-zup-body/6 bg-white px-5 py-5">
-          {pub.benefitBullets.map((bullet) => (
-            <li key={bullet} className="flex items-start gap-2.5 text-[14.5px]">
-              <Check
-                className="mt-0.5 h-[18px] w-[18px] flex-none text-zup-green"
-                strokeWidth={2.5}
-                aria-hidden
+          {/* Pack shot. imageHint is the admin's description of the art that
+              belongs here; until a photo exists it stands in for one. */}
+          <div className="relative mt-6 overflow-hidden rounded-2xl border border-zup-line bg-zup-mist">
+            {product.photos?.[0] ? (
+              <Image
+                src={product.photos[0]!}
+                alt={product.name}
+                width={720}
+                height={540}
+                className="h-auto w-full object-cover"
+                priority
               />
-              <span>{bullet}</span>
-            </li>
-          ))}
-        </ul>
+            ) : (
+              <div className="flex aspect-[4/3] items-center justify-center bg-[repeating-linear-gradient(135deg,#f4f5f7_0_12px,#eceef1_12px_24px)]">
+                <span className="rounded-full bg-white/80 px-3 py-1 text-[12px] text-zup-soft">
+                  {pub.imageHint || product.name}
+                </span>
+              </div>
+            )}
+            {pub.discountBadge ? (
+              <span className="absolute right-3 top-3 rounded-full bg-zup-orange px-3 py-1 text-[12.5px] font-bold text-white">
+                {pub.discountBadge}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-baseline gap-3">
+            <span className="text-[34px] font-bold leading-none">{formatBDT(one?.total ?? 0)}</span>
+            {one && one.wasTotal > one.total ? (
+              <span className="text-[19px] text-zup-soft line-through">
+                {formatBDT(one.wasTotal)}
+              </span>
+            ) : null}
+          </div>
+
+          <a
+            href={orderHref}
+            className="mt-5 block rounded-full bg-zup-orange px-5 py-3.5 text-center text-[16.5px] font-bold text-white"
+          >
+            {pub.buttonLabel}
+          </a>
+          {pub.heroCtaNote ? (
+            <p className="mt-2.5 text-center text-[12.5px] text-zup-soft">{pub.heroCtaNote}</p>
+          ) : null}
+        </Inner>
+      </Section>
+
+      {/* ── 3. Brand strip ──────────────────────────────────────────────── */}
+      {pub.brandLogos.length ? (
+        <Section className="border-y border-zup-line bg-zup-mist py-7">
+          <Inner>
+            {pub.brandStripTitle ? (
+              <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-zup-soft">
+                {pub.brandStripTitle}
+              </p>
+            ) : null}
+            <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+              {pub.brandLogos.map((b) => (
+                <li key={b} className="text-[13px] font-semibold text-zup-gray">
+                  {b}
+                </li>
+              ))}
+            </ul>
+          </Inner>
+        </Section>
       ) : null}
 
-      <div className="flex flex-col gap-3.5 pb-24 md:pb-0">
-        {/* The headline price above is campaign copy; checkout reprices from
-            the catalog (LANDING-PAGES.md §3). Retitling the ladder keeps the
-            two from reading as contradictory claims about the same order. */}
-        <ProductActions
-          product={product}
-          ctaLabel={pub.buttonLabel || "Buy Now"}
-          offersTitle="Additional offers applied at checkout"
-        />
-      </div>
-
-      {pub.footerNote ? (
-        <p className="mt-6 text-center text-xs text-zup-soft">{pub.footerNote}</p>
+      {/* ── 4. Video ────────────────────────────────────────────────────── */}
+      {pub.videoUrl ? (
+        <Section>
+          <Inner>
+            {pub.videoTitle ? (
+              <h2 className="mb-4 text-center text-[21px] font-bold leading-snug">
+                {pub.videoTitle}
+              </h2>
+            ) : null}
+            <a
+              href={pub.videoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex aspect-video items-center justify-center rounded-2xl border border-zup-line bg-zup-mist"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-zup-blue text-white">
+                <Play className="h-6 w-6 fill-current" aria-hidden />
+              </span>
+            </a>
+          </Inner>
+        </Section>
       ) : null}
-    </main>
+
+      {/* ── 5. Numbered features ────────────────────────────────────────── */}
+      {pub.features.length ? (
+        <Section className="bg-zup-mist">
+          <Inner>
+            {pub.featuresTitle ? (
+              <h2 className="mb-6 text-center text-[22px] font-bold">{pub.featuresTitle}</h2>
+            ) : null}
+            <ol className="flex flex-col gap-3.5">
+              {pub.features.map((f, i) => (
+                <li
+                  key={`${f.title}-${i}`}
+                  className="rounded-2xl border border-zup-line bg-white p-4 sm:p-5"
+                >
+                  <span className="font-mono text-[12.5px] font-bold text-zup-blue">
+                    {toBanglaDigits(String(i + 1).padStart(2, "0"))}
+                  </span>
+                  <h3 className="mt-1 text-[16.5px] font-bold leading-snug">{f.title}</h3>
+                  {f.body ? (
+                    <p className="mt-1.5 text-[14.5px] leading-relaxed text-zup-gray">{f.body}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          </Inner>
+        </Section>
+      ) : null}
+
+      {/* ── 6. Spec sheet ───────────────────────────────────────────────── */}
+      {pub.specs.length ? (
+        <Section className="bg-zup-ink text-white">
+          <Inner>
+            <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
+              {pub.specTitle ? <h2 className="text-[21px] font-bold">{pub.specTitle}</h2> : null}
+              {pub.specMeta ? (
+                <span className="font-mono text-[11.5px] uppercase tracking-[0.08em] text-white/50">
+                  {pub.specMeta}
+                </span>
+              ) : null}
+            </div>
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {pub.specs.map((s, i) => (
+                <div key={`${s.label}-${i}`} className="rounded-xl bg-white/5 p-4">
+                  <dt className="font-mono text-[22px] font-bold leading-none">{s.value}</dt>
+                  <dd className="mt-1.5 text-[12.5px] text-white/60">{s.label}</dd>
+                </div>
+              ))}
+            </dl>
+          </Inner>
+        </Section>
+      ) : null}
+
+      {/* ── 7. Bundle ladder — priced from the product, never from copy ─── */}
+      {pub.bundles.length > 1 ? (
+        <Section>
+          <Inner>
+            {pub.bundlesTitle ? (
+              <h2 className="text-center text-[22px] font-bold">{pub.bundlesTitle}</h2>
+            ) : null}
+            {pub.bundlesSubtitle ? (
+              <p className="mt-2 text-center text-[14.5px] text-zup-gray">{pub.bundlesSubtitle}</p>
+            ) : null}
+            <ul className="mt-6 flex flex-col gap-3">
+              {pub.bundles.map((b) => (
+                <li
+                  key={b.qty}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-zup-line bg-white p-4"
+                >
+                  <div>
+                    <p className="text-[16px] font-bold">
+                      {toBanglaDigits(b.qty)} {pub.bundleUnitLabel}
+                    </p>
+                    {b.saving > 0 ? (
+                      <p className="mt-0.5 text-[12.5px] font-semibold text-zup-orange">
+                        {formatBDT(b.saving)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="text-right">
+                    {b.wasTotal > b.total ? (
+                      <p className="text-[13px] text-zup-soft line-through">
+                        {formatBDT(b.wasTotal)}
+                      </p>
+                    ) : null}
+                    <p className="text-[19px] font-bold">{formatBDT(b.total)}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Inner>
+        </Section>
+      ) : null}
+
+      {/* ── 8. Quality control / anti-counterfeit ───────────────────────── */}
+      {pub.qcTitle || pub.qcBody ? (
+        <Section className="bg-zup-mist">
+          <Inner>
+            <div className="flex aspect-[16/9] items-center justify-center rounded-2xl border border-zup-line bg-[repeating-linear-gradient(135deg,#f4f5f7_0_12px,#eceef1_12px_24px)]">
+              <span className="rounded-full bg-white/80 px-3 py-1 text-[12px] text-zup-soft">
+                {pub.qcImageHint}
+              </span>
+            </div>
+            {pub.qcTitle ? (
+              <h2 className="mt-5 text-[21px] font-bold leading-snug">{pub.qcTitle}</h2>
+            ) : null}
+            {pub.qcBody ? (
+              <p className="mt-2.5 text-[14.5px] leading-relaxed text-zup-gray">{pub.qcBody}</p>
+            ) : null}
+            {pub.qcPoints.length ? (
+              <ul className="mt-4 flex flex-col gap-2">
+                {pub.qcPoints.map((pt) => (
+                  <li key={pt} className="flex gap-2.5 text-[14.5px] text-zup-body">
+                    <Check className="mt-0.5 h-4 w-4 flex-none text-zup-blue" aria-hidden />
+                    <span>{pt}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </Inner>
+        </Section>
+      ) : null}
+
+      {/* ── 9. Urgency ──────────────────────────────────────────────────── */}
+      {pub.countdownTitle ? (
+        <Section className="bg-zup-blue text-white">
+          <Inner>
+            <h2 className="text-center text-[22px] font-bold">{pub.countdownTitle}</h2>
+            {pub.countdownEndsAt ? (
+              <div className="mt-5">
+                <CampaignCountdown
+                  endsAt={pub.countdownEndsAt}
+                  labels={["ঘণ্টা", "মিনিট", "সেকেন্ড"]}
+                />
+              </div>
+            ) : null}
+            {pub.countdownNote ? (
+              <p className="mt-5 text-center text-[14.5px] leading-relaxed text-white/80">
+                {pub.countdownNote}
+              </p>
+            ) : null}
+            {pub.countdownCtaLabel ? (
+              <a
+                href={orderHref}
+                className="mx-auto mt-5 block max-w-[360px] rounded-full bg-white px-5 py-3.5 text-center text-[16px] font-bold text-zup-blue"
+              >
+                {pub.countdownCtaLabel}
+              </a>
+            ) : null}
+            {pub.countdownAssurance ? (
+              <p className="mt-3 text-center text-[12.5px] text-white/70">
+                {pub.countdownAssurance}
+              </p>
+            ) : null}
+          </Inner>
+        </Section>
+      ) : null}
+
+      {/* ── 10. Testimonials ────────────────────────────────────────────── */}
+      {pub.testimonials.length ? (
+        <Section>
+          <Inner>
+            {pub.testimonialsTitle ? (
+              <h2 className="mb-6 text-center text-[22px] font-bold">{pub.testimonialsTitle}</h2>
+            ) : null}
+            <ul className="flex flex-col gap-3.5">
+              {pub.testimonials.map((t, i) => (
+                <li
+                  key={`${t.name}-${i}`}
+                  className="rounded-2xl border border-zup-line bg-white p-4 sm:p-5"
+                >
+                  <p className="text-[13px] text-zup-orange" aria-label="5 out of 5">
+                    ★★★★★
+                  </p>
+                  <p className="mt-2 text-[14.5px] leading-relaxed text-zup-body">{t.quote}</p>
+                  <p className="mt-3 text-[13px] font-semibold text-zup-gray">
+                    {t.name}
+                    {t.location ? ` — ${t.location}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </Inner>
+        </Section>
+      ) : null}
+
+      {/* ── 11. Order form ──────────────────────────────────────────────── */}
+      <Section className="bg-zup-mist">
+        <Inner>
+          <div id="order" className="scroll-mt-20" />
+          <CampaignOrderForm
+            productId={product.id}
+            bundles={pub.bundles}
+            labels={pub.formLabels}
+            title={pub.formTitle}
+            intro={pub.formIntro}
+            deliveryFee={product.deliveryFeeInsideDhaka ?? 0}
+            unitLabel={pub.bundleUnitLabel}
+          />
+        </Inner>
+      </Section>
+
+      {/* ── 12. Footer ──────────────────────────────────────────────────── */}
+      <footer className="bg-zup-ink px-5 py-10 text-white">
+        <div className="mx-auto w-full max-w-[720px]">
+          <div className="flex items-center gap-2.5">
+            <Image
+              src="/images/zup-mark.png"
+              alt=""
+              width={28}
+              height={28}
+              className="h-7 w-7 object-contain"
+            />
+            <span className="text-[16px] font-extrabold tracking-[0.05em]">ZUP TECH</span>
+          </div>
+          {pub.footerTagline ? (
+            <p className="mt-1 text-[12px] uppercase tracking-[0.1em] text-white/50">
+              {pub.footerTagline}
+            </p>
+          ) : null}
+          {pub.footerAbout ? (
+            <p className="mt-4 text-[14px] leading-relaxed text-white/70">{pub.footerAbout}</p>
+          ) : null}
+          {pub.footerLines.length ? (
+            <ul className="mt-4 flex flex-col gap-1.5 text-[14px] text-white/70">
+              {pub.footerLines.map((l) => (
+                <li key={l} className="flex gap-2">
+                  <Phone className="mt-1 h-3.5 w-3.5 flex-none text-white/40" aria-hidden />
+                  <span>{l}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {pub.footerNote ? (
+            <p className="mt-6 border-t border-white/10 pt-4 text-[12.5px] text-white/50">
+              {pub.footerNote}
+            </p>
+          ) : null}
+        </div>
+      </footer>
+    </div>
   );
 }

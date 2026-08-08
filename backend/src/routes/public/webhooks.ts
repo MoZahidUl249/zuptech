@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { paymentWebhookDto } from "../../dtos/payments.dto";
 import { prisma } from "../../lib/db";
 import { notFound, unauthorized } from "../../lib/http";
-import { isOneOf } from "../../lib/rules";
+import { isOneOf, secretsMatch } from "../../lib/rules";
 
 /**
  * Payment gateway callbacks (bKash / Nagad / SSLCommerz).
@@ -36,7 +36,11 @@ export const paymentWebhooks = new Elysia({ name: "routes/public/webhooks", deta
     // TODO(production): replace with each provider's real signature/IPN
     // verification (method.apiKey/apiSecret feed into that, differently per
     // gateway). Until then, require the shared secret so this isn't wide open.
-    if (!method.apiSecret || headers["x-webhook-secret"] !== method.apiSecret) {
+    //
+    // Compared in constant time. `!==` returned as soon as two bytes differed,
+    // which let the secret be recovered a character at a time from response
+    // timing instead of guessed whole — on the endpoint that marks orders paid.
+    if (!secretsMatch(headers["x-webhook-secret"], method.apiSecret ?? undefined)) {
       throw unauthorized("Invalid webhook credentials");
     }
 

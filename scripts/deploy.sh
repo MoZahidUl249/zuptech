@@ -38,7 +38,28 @@ done
 log()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31m==> %s\033[0m\n' "$*" >&2; exit 1; }
 
-compose() { docker compose --env-file "$ENV_FILE" -f "$APP_DIR/docker-compose.yml" "$@"; }
+# An optional second compose file, layered over the base one.
+#
+# This exists so the deploy can be REHEARSED. Without it the only way to find
+# out whether this script works was to run it on the live box, because the
+# compose file was hardcoded and a second stack could not be brought up beside
+# the real one. `deploy/rehearsal.override.yml` moves the published ports so a
+# clean-box deploy can be run end to end against empty volumes:
+#
+#   COMPOSE_PROJECT_NAME=zuptech-rehearsal \
+#   COMPOSE_EXTRA_FILE=deploy/rehearsal.override.yml \
+#   bash scripts/deploy.sh --build --seed
+#
+# Unset in production, which is the point — the real deploy is unchanged.
+COMPOSE_EXTRA_FILE="${COMPOSE_EXTRA_FILE:-}"
+compose() {
+  if [ -n "$COMPOSE_EXTRA_FILE" ]; then
+    docker compose --env-file "$ENV_FILE" \
+      -f "$APP_DIR/docker-compose.yml" -f "$APP_DIR/$COMPOSE_EXTRA_FILE" "$@"
+  else
+    docker compose --env-file "$ENV_FILE" -f "$APP_DIR/docker-compose.yml" "$@"
+  fi
+}
 
 # ---------- Preflight ----------
 [ -f "$ENV_FILE" ] || fail "$ENV_FILE not found — copy .env.production.example and fill it in (DEPLOYMENT.md §3)"
@@ -111,6 +132,66 @@ if [ "$healthy" = true ]; then
 else
   echo "    backend did not become healthy — recent logs:" >&2
   compose logs --tail=80 backend >&2
+  exit 1
+fi
+
+# Both storefront containers, not just one.
+#
+# This step used to gate on the backend alone, which meant a storefront that
+# could not serve a single page still counted as a successful deploy — and the
+# storefront is where the last outage actually was. Each replica is checked on
+# its own port rather than through nginx, because nginx will happily mask a
+# dead container by sending everything to its sibling: the point here is to
+# notice that half the capacity is missing, not just that the site answers.
+log "Waiting for both storefront containers to serve"
+for svc in frontend frontend2; do
+  up=false
+  for _ in $(seq 1 30); do
+    if compose exec -T "$svc" \
+         node -e "fetch('http://127.0.0.1:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
+         >/dev/null 2>&1; then
+      up=true
+      break
+    fi
+    sleep 4
+  done
+  if [ "$up" = true ]; then
+    echo "    $svc serving"
+  else
+    echo "    $svc did not serve — recent logs:" >&2
+    compose logs --tail=80 "$svc" >&2
+    exit 1
+  fi
+done
+
+# And the only container the public can actually reach.
+#
+# Every check above passed on a box where nginx was in a restart loop, and this
+# script still printed "Deployed." — the app was perfectly healthy on an
+# internal network nobody outside could get to. nginx exits at startup if the
+# certificate is missing or the rendered config is invalid, which are the two
+# most likely things to be wrong right after a deploy, so a green deploy that
+# never looks at it is green about the wrong thing.
+#
+# Certificates are obtained before the first deploy (DEPLOYMENT.md §4), so by
+# the time this runs nginx has everything it needs and staying down is a fault.
+log "Checking the reverse proxy is up"
+nginx_up=false
+for _ in $(seq 1 15); do
+  if [ "$(compose ps -q nginx | xargs -r docker inspect -f '{{.State.Running}}' 2>/dev/null)" = "true" ] \
+     && compose exec -T nginx nginx -t >/dev/null 2>&1; then
+    nginx_up=true
+    break
+  fi
+  sleep 4
+done
+if [ "$nginx_up" = true ]; then
+  echo "    nginx up, config valid"
+else
+  echo "    nginx is NOT serving — the site is unreachable from outside." >&2
+  echo "    Most likely the certificate is missing (DEPLOYMENT.md §4) or the" >&2
+  echo "    rendered config is invalid. Recent logs:" >&2
+  compose logs --tail=40 nginx >&2
   exit 1
 fi
 

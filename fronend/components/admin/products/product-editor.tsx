@@ -186,13 +186,20 @@ export function ProductEditor({
                 className={`${inputCls} font-mono`}
               />
             </Field>
-              <Field label="Product code (made for you)">
+              {/*
+                Typed in, not handed out. This was read-only against a
+                server-generated ZT-P0001, which is a code no delivery note,
+                supplier invoice or shelf label has ever carried — the SKU is
+                how the warehouse and the paperwork name the same box, so it
+                has to be the one the business already uses.
+              */}
+              <Field label="Product code (SKU)">
               <input
                 value={p.sku}
-                readOnly
-                disabled
-                placeholder="Auto-generated"
-                aria-label="SKU (auto-generated)"
+                onChange={(e) => onChange({ sku: e.target.value })}
+                placeholder="e.g. ZT-IPS-1000"
+                aria-label="SKU"
+                required
                 className={`${inputCls} font-mono`}
               />
             </Field>

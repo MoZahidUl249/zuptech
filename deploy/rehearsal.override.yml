@@ -1,0 +1,24 @@
+# Clean-box deploy rehearsal.
+#
+#   docker compose -p zuptech-rehearsal \
+#     -f docker-compose.yml -f deploy/rehearsal.override.yml \
+#     --env-file .env.production.local up -d --build
+#
+# Runs the production stack a second time, on its own volumes, so a deploy can
+# be rehearsed against a genuinely empty database without touching the stack
+# that is already running. The project name (-p) is what separates the volumes
+# and container names; this file only moves the published ports out of the way,
+# because two nginx containers cannot both hold 80/443.
+#
+# Everything else — images, migrations, health checks, seeding, memory limits —
+# is inherited unchanged, which is the point: a rehearsal that differs from the
+# real thing proves nothing about the real thing.
+services:
+  nginx:
+    # `!override`, not a plain list. Compose MERGES sequence fields across
+    # files, so without it the rehearsal nginx inherits 80/443 from the base
+    # file and merely adds 8081/8444 — then fails to start because the real
+    # stack already holds :80. The tag replaces the list instead of extending it.
+    ports: !override
+      - "8081:80"
+      - "8444:443"

@@ -50,10 +50,34 @@ const initialStockFields = {
 
 /** GET /api/products query — filter by category name and/or its section,
  *  e.g. ?section=Industrial&category=Solar. Both match on name, not id, so
- *  the storefront can build links straight from GET /api/sections. */
+ *  the storefront can build links straight from GET /api/sections.
+ *
+ *  `limit`/`offset` exist because the catalogue outgrew being a single
+ *  response. Without them the route fell back to a hard cap, and since it
+ *  sorted oldest-first the cap silently withheld the NEWEST products: at 4,499
+ *  visible products, 3,999 of them could not be reached from the shop at all.
+ *  The default is a screenful, not the whole shop. */
 export const productsQueryDto = t.Object({
   section: t.Optional(t.String({ maxLength: 80 })),
   category: t.Optional(t.String({ maxLength: 80 })),
+  /** Free-text match on name — server-side so search reaches past page one. */
+  q: t.Optional(t.String({ maxLength: 120 })),
+  /**
+   * Comma-separated product ids, for a caller that already knows which rows it
+   * wants and would otherwise have to walk the catalogue to find them.
+   *
+   * The homepage is why this exists. Its featured row renders a handful of
+   * products chosen by id in SiteConfig, and it got them by asking for every
+   * product and filtering client-side — one request before paging, and 23
+   * parallel ones after, from every browser that opened the site. Asking for
+   * the ids directly makes it one request that returns 6 rows.
+   *
+   * Bounded so it can't be turned into an unpaged catalogue dump: LIST_CAP
+   * still applies, and the string caps at roughly a hundred cuids.
+   */
+  ids: t.Optional(t.String({ maxLength: 3000 })),
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: 200 })),
+  offset: t.Optional(t.Integer({ minimum: 0 })),
 });
 
 /** One "buy N+, take ৳X off each unit" tier. Kept out of `productFields`,
@@ -78,9 +102,15 @@ export const createProductDto = t.Object({
   id: t.Optional(t.String({ minLength: 2, maxLength: 50 })),
   ...productFields,
   ...initialStockFields,
-  // SKU is server-generated when omitted (ZT-P0001, ZT-P0002, …); passing one
-  // explicitly is still allowed for imports/seeds.
-  sku: t.Optional(t.String({ minLength: 2, maxLength: 50 })),
+  // `sku` stays REQUIRED here — inherited from productFields, deliberately not
+  // relaxed to optional.
+  //
+  // It used to be optional, and the server invented `ZT-P0001` when it was
+  // omitted. That number means nothing to anyone: the SKU is how the warehouse,
+  // the supplier's invoice and the stock count refer to the same physical box,
+  // so it has to be the code the business already uses, not one this service
+  // made up. A generated placeholder is worse than a missing value, because it
+  // looks like a real code until someone tries to match it against a delivery.
   quantityOffers: quantityOffersField,
   freeDeliveryOffers: freeDeliveryOffersField,
 });

@@ -38,10 +38,24 @@ let staffRow: {
   role: { id: string; name: string; isSystem: boolean; permissions: Record<string, string> };
 } | null = null;
 
+/*
+ * Shaped like a row with `productInclude` applied, not like the minimum
+ * priceCart reads.
+ *
+ * It was the minimum, and that was enough right up until a public route
+ * returned one of these: `toPublicProduct` reaches through `p.category.section`
+ * and got a 500 out of a fixture that priceCart had never needed a category
+ * for. Any row here has to survive serialization, because any row here can end
+ * up in a response.
+ */
 interface FakeProduct {
   id: string;
+  slug: string;
   name: string;
+  categoryId: string;
+  category: { name: string; svgLogo: string | null; section: { name: string } };
   price: number;
+  minDeposit: number;
   onSale: boolean;
   salePrice: number;
   stock: number;
@@ -52,14 +66,25 @@ interface FakeProduct {
   installationFeeOutsideDhaka: number;
   quantityOffers: { minQty: number; amount: number }[];
   freeDeliveryOffers: { minQty: number; amount: number }[];
+  rating: number;
+  sold: number;
+  imgHint: string | null;
+  specs: string[];
+  description: string | null;
+  video: string | null;
+  photos: string[];
 }
 
 /** ৳1,000 each; 10+ take ৳200 off the unit price. */
 const CATALOG: FakeProduct[] = [
   {
     id: "ips1000",
+    slug: "1000va-ips",
     name: "1000VA IPS",
+    categoryId: "cat-ips",
+    category: { name: "IPS", svgLogo: null, section: { name: "Home" } },
     price: 1000,
+    minDeposit: 0,
     onSale: false,
     salePrice: 0,
     stock: 5,
@@ -70,6 +95,13 @@ const CATALOG: FakeProduct[] = [
     installationFeeOutsideDhaka: 80,
     quantityOffers: [{ minQty: 10, amount: 200 }],
     freeDeliveryOffers: [],
+    rating: 0,
+    sold: 0,
+    imgHint: null,
+    specs: [],
+    description: null,
+    video: null,
+    photos: [],
   },
 ];
 
@@ -77,6 +109,8 @@ type Where = { id?: { in?: string[] } };
 
 mock.module("./lib/db", () => ({
   prisma: {
+    // /health proves the adapter is connected before reporting ok.
+    $queryRaw: async () => [{ "?column?": 1 }],
     // getStaffContext's lookup — the door every admin route goes through.
     staff: { findUnique: async () => staffRow },
     // priceCart's catalog read. The `where` carries orderableProductWhere()'s
@@ -86,6 +120,9 @@ mock.module("./lib/db", () => ({
       findMany: async ({ where }: { where?: Where } = {}) =>
         where?.id?.in ? CATALOG.filter((p) => where.id?.in?.includes(p.id)) : [],
       findFirst: async () => null,
+      // The catalogue is paged; the route asks for the matching total so the
+      // shop can render page controls.
+      count: async () => 0,
     },
     siteConfig: {
       findUnique: async () => ({ featuredIds: [] }),
@@ -178,6 +215,36 @@ describe("admin routes reject callers without a staff session", () => {
     expect((await call("GET", "/api/team")).status).toBe(200);
     expect((await call("GET", "/health")).status).toBe(200);
   });
+
+  test("?ids= returns just those products, so callers stop walking the catalogue", async () => {
+    // The home page's featured row reaches its products by id. Before this it
+    // downloaded the whole catalogue and filtered in the browser — one request
+    // while /api/products answered with everything, then 23 parallel ones once
+    // the route was paged.
+    const { status, body } = await call("GET", "/api/products?ids=ips1000");
+    expect(status).toBe(200);
+    // `call` types the body as an object because most routes return one; this
+    // route answers with a bare array (the total rides in x-total-count).
+    const rows = body as unknown as { id: string }[];
+    expect(Array.isArray(rows)).toBe(true);
+    expect(rows.map((p) => p.id)).toEqual(["ips1000"]);
+  });
+
+  test("?ids= ignores empty segments rather than matching nothing", async () => {
+    // A trailing comma used to become an id, and an id that matches nothing
+    // silently shrinks the result.
+    const { status, body } = await call("GET", "/api/products?ids=ips1000,");
+    expect(status).toBe(200);
+    expect((body as unknown as { id: string }[]).map((p) => p.id)).toEqual(["ips1000"]);
+  });
+
+  test("health reports the database, not just the process", async () => {
+    // It answered {ok:true} with Postgres stopped, so Docker kept reporting
+    // the container healthy while no data route could be served.
+    const up = await call("GET", "/health");
+    expect(up.status).toBe(200);
+    expect(up.body?.database).toBe("up");
+  });
 });
 
 /* ========================================================================
@@ -263,6 +330,23 @@ describe("bodies are validated before any handler runs", () => {
 
   test("a missing route is 404, not 500", async () => {
     expect((await call("GET", "/api/no-such-thing")).status).toBe(404);
+  });
+
+  test("an unparseable body is the client's fault, not a server fault", async () => {
+    // It used to fall through to the 500 branch, which also fires the error
+    // reporter — so every broken client raised a false incident.
+    const res = await app.handle(
+      new Request("http://localhost/api/pricing/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not json",
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; requestId?: string };
+    expect(body.error).toBe("Malformed request body");
+    // No request id: that field is what marks a response as a reported fault.
+    expect(body.requestId).toBeUndefined();
   });
 });
 

@@ -98,6 +98,15 @@ model Product {
   landingPages       LandingPage[]
 
   @@index([categoryId])
+  // The storefront listing, in the order it actually runs: filter on
+  // `visible`, sort newest-first, take a page. Without this, GET /api/products
+  // was a Seq Scan over every product plus a top-N heapsort to return 48 rows
+  // — measured reading all 5,010 rows and 264 buffers per request, and the
+  // paged route runs the matching COUNT alongside it, so that was twice per
+  // page view on the busiest dynamic route on the site. Column order matters:
+  // the equality column first, then the sort column, so Postgres can walk the
+  // index backwards and stop at the page boundary.
+  @@index([visible, createdAt])
 }
 
 /// A "buy N+, take ৳X off each unit" tier on a product. A product may have
@@ -345,6 +354,81 @@ model LandingPage {
   footerNote     String   @default("")
   benefitBullets String[] @default([])
   imageHint      String   @default("")
+
+  /// ===== Campaign page content =====
+  ///
+  /// Every string a visitor can read on /lp/:slug lives here, so a campaign is
+  /// written entirely from the admin — including in Bangla. Nothing below is
+  /// money: prices come from the product, and the bundle ladder is rendered
+  /// from `Product.quantityOffers`, so an advertised bundle total is by
+  /// construction the total the cart charges.
+  ///
+  /// The repeatable blocks are Json rather than child tables because they are
+  /// copy, edited as a whole page and never queried across campaigns.
+
+  /// Header: hotline strip + the button beside it.
+  hotlineLabel    String @default("")
+  hotlineNumber   String @default("")
+  headerCtaLabel  String @default("")
+
+  /// Hero: the badges above the headline, the standfirst under it, and the
+  /// discount flag on the pack shot.
+  trustBadges   String[] @default([])
+  subheadline   String   @default("")
+  discountBadge String   @default("")
+  heroCtaNote   String   @default("")
+
+  /// "যাদের সাথে আমরা কাজ করি" + the payment/courier names under it.
+  brandStripTitle String   @default("")
+  brandLogos      String[] @default([])
+
+  /// Product video block. `videoUrl` blank hides the whole section.
+  videoTitle String @default("")
+  videoUrl   String @default("")
+
+  /// Numbered feature list: [{ title, body }]
+  featuresTitle String @default("")
+  features      Json   @default("[]")
+
+  /// Spec sheet: a model/revision line plus stat cells [{ value, label }]
+  specTitle String @default("")
+  specMeta  String @default("")
+  specs     Json   @default("[]")
+
+  /// Bundle ladder. Only the wording is stored — every price shown is derived
+  /// from the product's quantity offers at render time.
+  bundlesTitle    String @default("")
+  bundlesSubtitle String @default("")
+  bundleUnitLabel String @default("")
+  bundleMaxQty    Int    @default(3)
+
+  /// Quality-control / anti-counterfeit block.
+  qcTitle     String   @default("")
+  qcBody      String   @default("")
+  qcPoints    String[] @default([])
+  qcImageHint String   @default("")
+
+  /// Urgency block. `countdownEndsAt` null hides the timer but keeps the copy.
+  countdownTitle     String    @default("")
+  countdownNote      String    @default("")
+  countdownEndsAt    DateTime?
+  countdownCtaLabel  String    @default("")
+  countdownAssurance String    @default("")
+
+  /// Reviews: [{ quote, name, location }]
+  testimonialsTitle String @default("")
+  testimonials      Json   @default("[]")
+
+  /// The inline cash-on-delivery order form. `formLabels` holds every field
+  /// label and the summary rows, so the whole form can be written in Bangla.
+  formTitle  String @default("")
+  formIntro  String @default("")
+  formLabels Json   @default("{}")
+
+  /// Footer.
+  footerTagline String   @default("")
+  footerAbout   String   @default("")
+  footerLines   String[] @default([])
   /// This page's own GTM container, so ad spend is tracked separately from
   /// the main site's.
   gtmId          String   @default("")

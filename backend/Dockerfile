@@ -8,7 +8,6 @@ WORKDIR /app
 COPY package.json bun.lock* ./
 COPY backend/package.json    backend/
 COPY fronend/package.json    fronend/
-COPY storage/package.json    storage/
 RUN bun install --frozen-lockfile
 
 FROM deps AS build

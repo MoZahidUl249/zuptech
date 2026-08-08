@@ -50,7 +50,22 @@ export const adminWarranty = new Elysia({
             : {}),
         },
         include: warrantyInclude,
-        orderBy: { number: "desc" },
+        /*
+         * Newest first by TIME, not by counter.
+         *
+         * `number` is a surrogate the Counter hands out, and sorting on it only
+         * means "newest" while that counter has always been the sole source of
+         * these rows. It stops being true the moment any row arrives with a
+         * number from somewhere else — an import, a migration, a restored
+         * backup, or a seeded fixture — and then the newest real row sorts
+         * BELOW the imported block and falls off the end of LIST_CAP entirely.
+         * That is not hypothetical: it hid a just-issued warranty behind 799
+         * fixture rows numbered from 900000.
+         *
+         * In production the two orderings are identical, so this costs nothing
+         * and removes the assumption.
+         */
+        orderBy: { createdAt: "desc" },
       });
       return warranties.map(toWarranty);
     },

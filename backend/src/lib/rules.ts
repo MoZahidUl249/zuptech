@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import * as cheerio from "cheerio";
 
 /**
@@ -226,6 +227,26 @@ export function maskSecret(secret: string): string {
   return secret ? `••••${secret.slice(-4)}` : "";
 }
 
+/**
+ * Compare a caller-supplied secret against the stored one in constant time.
+ *
+ * `a !== b` on a secret leaks its contents: string comparison returns as soon
+ * as two bytes differ, so the time it takes to reject an attempt tells the
+ * caller how many leading characters were right, and a secret can be recovered
+ * a character at a time rather than guessed whole. The payment webhook was
+ * comparing its shared secret that way.
+ *
+ * Both sides are hashed first because `timingSafeEqual` throws on a length
+ * mismatch — which would itself leak the secret's length. Hashing makes both
+ * inputs 32 bytes whatever was sent.
+ */
+export function secretsMatch(supplied: string | undefined, stored: string | undefined): boolean {
+  if (!supplied || !stored) return false;
+  const a = createHash("sha256").update(supplied).digest();
+  const b = createHash("sha256").update(stored).digest();
+  return timingSafeEqual(a, b);
+}
+
 /** True when a client-submitted secret is the mask we sent (i.e. unchanged). */
 export function isMaskedSecret(value: string): boolean {
   return value.startsWith("••••");
@@ -248,6 +269,16 @@ export function isMaskedSecret(value: string): boolean {
  * UI, not a bigger number here.
  */
 export const LIST_CAP = 500;
+
+/**
+ * Rows a paged endpoint returns when the caller doesn't say.
+ *
+ * A screenful, not a catalogue. The storefront's shop grid is 3–4 across, so
+ * 48 fills several scrolls without asking the server to render 1.4 MB of HTML
+ * per request — which is what the unpaged version cost, and what made one page
+ * the throughput ceiling for the entire site.
+ */
+export const DEFAULT_PAGE_SIZE = 48;
 
 /* ===== Money =====
  *

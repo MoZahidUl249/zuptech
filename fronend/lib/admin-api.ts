@@ -430,8 +430,12 @@ function productBody(p: AdminProduct) {
     imgHint: p.imgHint,
     specs: p.specs.filter((s) => s.trim() !== ""),
     description: p.description,
-    // SKU is server-generated on create; never send an empty one back.
-    ...(p.sku ? { sku: p.sku } : {}),
+    // Always sent. The server used to invent a SKU when this was omitted, so
+    // this spread dropped an empty one rather than letting a blank overwrite a
+    // generated code. Nothing generates one now — the admin types it, and a
+    // blank has to reach the DTO so it comes back as a validation error instead
+    // of being quietly discarded on its way out.
+    sku: p.sku,
     cost: p.cost,
     reorderAt: p.reorderAt,
     visible: p.visible,

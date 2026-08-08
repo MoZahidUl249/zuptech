@@ -121,7 +121,16 @@ export function ContactButton() {
       ref={rootRef}
       className={cn(
         "fixed right-4 z-80 flex flex-col items-end gap-2.5 md:bottom-6",
-        aboveBuyBar ? "bottom-38" : "bottom-20",
+        /*
+         * Sits above the mobile tab bar, which now floats: it clears the
+         * bottom edge by 12px plus the safe-area inset and is 64px tall, so
+         * anything stacked over it has to start past ~76px + inset. The old
+         * flat `bottom-20` (80px) was measured against a bar welded to the
+         * edge and left only a few pixels once it lifted off.
+         */
+        aboveBuyBar
+          ? "bottom-[calc(152px+env(safe-area-inset-bottom))]"
+          : "bottom-[calc(88px+env(safe-area-inset-bottom))]",
       )}
     >
       {/* Rendered only when open rather than hidden with opacity, so the

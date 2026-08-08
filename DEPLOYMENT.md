@@ -8,11 +8,20 @@ storefront serves.
 
 ```
              ┌───────── nginx (:80/:443, the only public ports) ─────────┐
- <domain> ───┤ frontend:3001   api.<domain> → backend:3000
+ <domain> ───┤ frontend:3001  ┐
+             │ frontend2:3001 ┘ api.<domain> → backend:3000
              └──────────────────────────────────────────────────────────┘
                          backend ──► postgres (zuptech)
                          backend ──► Cloudinary (media)
 ```
+
+The storefront runs as **two** containers, both in nginx's `storefront`
+upstream, so restarting or losing one is invisible to visitors — measured at
+30,687 requests with zero errors across a deliberate kill and restart of one of
+them. They are separate compose services rather than replicas of one because
+open-source nginx resolves an upstream hostname once at startup; see the comment
+in `docker-compose.yml`. Both run the same image, which is what keeps their
+Server Actions encryption keys in step.
 
 Throughout, `<domain>` is the site's domain (e.g. `example.com`). It appears in
 exactly three places: `.env.production` on the VPS, two GitHub repository
@@ -248,8 +257,24 @@ Postgres only — media lives on Cloudinary, which has its own backup/export
 tooling in the Console.
 
 Those backups sit on the same disk as the app, which does not survive losing
-the VPS. Copy them off-box (`rsync`/`rclone` to object storage) and test a
-restore before you rely on them.
+the VPS. Copy them off-box (`rsync`/`rclone` to object storage).
+
+**Restoring.** The dump is `pg_dumpall` output, so it replays into an empty
+cluster with plain `psql` — no `pg_restore`, and no database to create first.
+Verified end to end against a scratch container: row counts came back identical
+to the source (5,010 products, 20,009 orders, 3 staff, 1 SiteConfig).
+
+```bash
+docker run -d --name pg-restore-test -e POSTGRES_PASSWORD=x postgres:16-alpine
+gunzip -c /backup/pg-YYYY-MM-DD-HHMM.sql.gz | docker exec -i pg-restore-test psql -U postgres
+docker exec pg-restore-test psql -U postgres -d zuptech -c 'SELECT count(*) FROM "Product"'
+```
+
+`ERROR: role "postgres" already exists` on the way past is expected and
+harmless — `pg_dumpall` emits a `CREATE ROLE` for a role the fresh image has
+already made. Any *other* error means the dump is not good, which is the whole
+reason to run this against a scratch container rather than finding out during
+an incident.
 
 ## Things that will bite you
 

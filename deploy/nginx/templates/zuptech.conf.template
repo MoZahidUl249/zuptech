@@ -11,6 +11,14 @@
 # The app also sets its own headers (fronend/next.config.ts, and the backend's
 # .onAfterHandle); these are the edge's copy, so a misconfigured or bypassed
 # origin still can't serve the site unprotected.
+#
+# Which means every response carried BOTH copies. Three of them agreed so the
+# duplication was merely untidy, but Permissions-Policy did not: Next sends
+# `payment=()` and this file does not, and a browser given two Permissions-Policy
+# headers has no obligation to union them — the stricter directive was being
+# dropped on a coin flip. `proxy_hide_header` strips the origin's copy first, so
+# exactly one of each leaves the edge and this file is the single source of
+# truth for them.
 
 # RENDERED AT CONTAINER START — this is a template, not a live config.
 #
@@ -28,9 +36,44 @@
 # Media (product photos/video, hero images, service images) is served
 # straight from Cloudinary's own CDN, so there is no media vhost here.
 
+# ---------- http-level settings ----------
+# This file is included from inside nginx.conf's `http` block, so anything
+# outside a `server {}` here applies to every vhost below. That is why the
+# upstreams can live at the top, and it is the right place for the settings
+# that must not drift between the three server blocks.
+
+# Don't advertise the exact patch version in every response and error page.
+# It tells a scanner which CVEs to try and buys nothing.
+server_tokens off;
+
+# Pinned rather than inherited. nginx's built-in default happens to be
+# TLSv1.2 + TLSv1.3 today (verified: 1.0 and 1.1 are refused), but that is a
+# default that has changed across releases, and an image bump silently
+# widening the accepted protocol set is not something anyone would notice.
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_prefer_server_ciphers off;
+
+# Without a session cache every connection pays a full handshake — the most
+# expensive thing this server does. 10m holds roughly 40k sessions.
+ssl_session_cache   shared:SSL:10m;
+ssl_session_timeout 1d;
+ssl_session_tickets off;
+
 # Upstreams are compose service names on the internal network.
-upstream storefront { server frontend:3001; }
-upstream api        { server backend:3000; }
+#
+# The storefront is listed twice because it RUNS twice (see docker-compose.yml).
+# Both entries are named explicitly rather than relying on one name resolving to
+# several containers: nginx open-source resolves an upstream host once at
+# startup and keeps that address forever, so a single name would pin every
+# request to whichever container answered DNS first.
+#
+# `max_fails`/`fail_timeout` take a dead container out of rotation instead of
+# retrying into it for the duration of its restart.
+upstream storefront {
+    server frontend:3001  max_fails=3 fail_timeout=10s;
+    server frontend2:3001 max_fails=3 fail_timeout=10s;
+}
+upstream api { server backend:3000; }
 
 # ACME + HTTP->HTTPS. Keep this server block on :80 permanently; certbot
 # renews through it.
@@ -63,7 +106,7 @@ server {
     add_header X-Content-Type-Options    "nosniff" always;
     add_header X-Frame-Options           "DENY" always;
     add_header Referrer-Policy           "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy        "camera=(), microphone=(), geolocation=()" always;
+    add_header Permissions-Policy        "camera=(), microphone=(), geolocation=(), payment=()" always;
 
     return 301 https://${APP_DOMAIN}$request_uri;
 }
@@ -82,7 +125,53 @@ server {
     add_header X-Content-Type-Options    "nosniff" always;
     add_header X-Frame-Options           "DENY" always;
     add_header Referrer-Policy           "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy        "camera=(), microphone=(), geolocation=()" always;
+    add_header Permissions-Policy        "camera=(), microphone=(), geolocation=(), payment=()" always;
+
+    # Strip the origin's copies so each header is sent exactly once (see top).
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
+    proxy_hide_header Permissions-Policy;
+
+    # Admin media uploads arrive HERE, not on the API vhost.
+    #
+    # The browser posts to window.location.origin (fronend/lib/eden.ts), which
+    # is this host — API calls have to be same-origin or the Better Auth session
+    # cookie (host-only, no cookie domain) is not sent. So the API vhost's
+    # client_max_body_size never applies to a single upload a human makes, and
+    # this block was silently running nginx's 1 MB default while the DTOs accept
+    # 8 MB photos and 300 MB video. Every product photo over 1 MB got an nginx
+    # HTML 413 that the admin could only report as an unparseable failure.
+    client_max_body_size 320m;
+
+    # API traffic goes STRAIGHT to the backend — it never touches Next.
+    #
+    # These paths are `rewrites()` in next.config.ts, which is what makes them
+    # work in local dev where there is no nginx. In production that indirection
+    # was doing real harm: every browser API call was proxied through the Next
+    # server, and on a multipart body over ~1 MB its proxy would simply stop
+    # forwarding — the request hung until nginx gave up at 60s and returned 504.
+    # Measured at roughly two failures in three for a 1.79 MB product photo,
+    # while the same file on the same path succeeded at 50 KB. Worse, the
+    # backend sometimes completed the upload anyway, so the operator saw a
+    # gateway error for a photo that had already reached Cloudinary.
+    #
+    # Same origin, same cookie, one less hop, and the storefront no longer
+    # spends its memory proxying JSON. Keep these in step with the rewrites in
+    # next.config.ts: a path that exists there and not here silently falls back
+    # to going through Next.
+    location ~ ^/(api|admin/api|pay)/ {
+        proxy_pass http://api;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Cloudinary round-trips a large photo through the backend; the default
+        # 60s read timeout is not enough for a 300 MB video on a slow uplink.
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
 
     location / {
         proxy_pass http://storefront;
@@ -93,6 +182,17 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade           $http_upgrade;
         proxy_set_header Connection        "upgrade";
+
+        # Send the request to the other container rather than the visitor a 502.
+        #
+        # This is what a storefront restart used to cost: nginx logged 290
+        # `upstream prematurely closed` in one run and passed every one of them
+        # through as a 502. Only non_idempotent is missing on purpose — a POST
+        # that died mid-flight may already have been applied, and replaying an
+        # order is worse than an error page.
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 2;
+        proxy_next_upstream_timeout 10s;
     }
 }
 
@@ -110,7 +210,18 @@ server {
     add_header X-Content-Type-Options    "nosniff" always;
     add_header X-Frame-Options           "DENY" always;
     add_header Referrer-Policy           "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy        "camera=(), microphone=(), geolocation=()" always;
+    add_header Permissions-Policy        "camera=(), microphone=(), geolocation=(), payment=()" always;
+
+    # This vhost had the duplication the top of this file describes, the whole
+    # time the storefront was being fixed for it. Measured: every one of these
+    # four went out TWICE on api.${APP_DOMAIN}, and the two Permissions-Policy
+    # copies did not even agree — the backend sends the three-directive form and
+    # this block now sends four, which is exactly the disagreement a browser is
+    # free to resolve by dropping the stricter one.
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
+    proxy_hide_header Permissions-Policy;
 
     # Admin photo/video uploads proxy through the API to Cloudinary.
     client_max_body_size 320m;
@@ -122,5 +233,11 @@ server {
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # Accepting a 320 MB body on a 60s read timeout is not a coherent
+        # position: the storefront vhost raised these when it took over upload
+        # traffic and this block, which still accepts the same uploads on the
+        # API host, kept the default and would 504 on anything slow.
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
     }
 }

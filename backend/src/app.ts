@@ -1,6 +1,7 @@
 import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
+import { prisma } from "./lib/db";
 import { ApiError } from "./lib/http";
 import { newRequestId, reportError } from "./lib/observability";
 import { adminAuth } from "./routes/admin/auth";
@@ -110,12 +111,22 @@ export function createApp({ quiet = false }: { quiet?: boolean } = {}) {
           : new Elysia({ name: "openapi-disabled" }),
       )
 
-      // Baseline security headers on every response (mirrors next.config.ts).
+      /*
+       * Baseline security headers on every response.
+       *
+       * Three copies of this list exist — here, next.config.ts, and the nginx
+       * template — because each layer has to stand alone if the others are
+       * bypassed. nginx strips this copy at the edge so exactly one goes out,
+       * but they still have to AGREE: this one lagged behind at three
+       * directives while the other two had four, so api.<domain> was serving
+       * two Permissions-Policy headers that disagreed about `payment`. Change
+       * one, change all three.
+       */
       .onAfterHandle(({ set }) => {
         set.headers["x-content-type-options"] = "nosniff";
         set.headers["x-frame-options"] = "DENY";
         set.headers["referrer-policy"] = "strict-origin-when-cross-origin";
-        set.headers["permissions-policy"] = "camera=(), microphone=(), geolocation=()";
+        set.headers["permissions-policy"] = "camera=(), microphone=(), geolocation=(), payment=()";
       })
 
       /*
@@ -168,6 +179,21 @@ export function createApp({ quiet = false }: { quiet?: boolean } = {}) {
           set.status = 404;
           return { error: "Not found" };
         }
+        /*
+         * A body that isn't parseable JSON is the client's mistake, not ours.
+         *
+         * Elysia surfaces it as PARSE, or — depending on where parsing gives
+         * up — as a plain Error whose message is literally "Bad Request".
+         * Neither is caught by the branches above, so it fell through to the
+         * 500 handler below: the caller got "Something went wrong" with a
+         * request id, and the error reporter fired. Every truncated upload and
+         * every broken client became a server-fault alert on the channel that
+         * is supposed to mean a real incident. 400, and nothing is raised.
+         */
+        if (code === "PARSE" || (error instanceof Error && error.message === "Bad Request")) {
+          set.status = 400;
+          return { error: "Malformed request body" };
+        }
         // Anything reaching here is a fault, not a rejected request. Give it an id,
         // record it with enough context to find, and hand the id back so a report
         // of "it broke" can be traced to one stack.
@@ -184,7 +210,28 @@ export function createApp({ quiet = false }: { quiet?: boolean } = {}) {
         return { error: "Something went wrong", requestId };
       })
 
-      .get("/health", () => ({ ok: true, service: "zuptech-backend" }))
+      /*
+   * Readiness, not liveness.
+   *
+   * This used to return `{ok:true}` unconditionally, which made it a check that
+   * the process was running and nothing else. With Postgres stopped it still
+   * answered ok and Docker still reported the container "healthy", while every
+   * data route failed — so `depends_on: service_healthy`, a load balancer, or
+   * anything else that trusts this would keep sending it traffic it could not
+   * serve. A backend that cannot reach its database is not healthy.
+   *
+   * `SELECT 1` is the cheapest possible proof the adapter is actually
+   * connected, and it fails fast rather than hanging a probe.
+   */
+  .get("/health", async ({ set }) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return { ok: true, service: "zuptech-backend", database: "up" };
+    } catch {
+      set.status = 503;
+      return { ok: false, service: "zuptech-backend", database: "down" };
+    }
+  })
 
       // Public storefront
       .use(publicProducts)

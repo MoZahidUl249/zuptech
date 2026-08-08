@@ -35,6 +35,61 @@ export interface LandingPage {
   imageHint: string;
   gtmId: string;
   published: boolean;
+
+  /* ===== Campaign page content =====
+   * Every visitor-facing string on /lp/:slug. None of it is money — the bundle
+   * prices the page shows are derived server-side from the product's quantity
+   * offers, so a campaign can never advertise a total the cart won't charge. */
+  hotlineLabel: string;
+  hotlineNumber: string;
+  headerCtaLabel: string;
+  trustBadges: string[];
+  subheadline: string;
+  discountBadge: string;
+  heroCtaNote: string;
+  brandStripTitle: string;
+  brandLogos: string[];
+  videoTitle: string;
+  videoUrl: string;
+  featuresTitle: string;
+  features: { title: string; body: string }[];
+  specTitle: string;
+  specMeta: string;
+  specs: { value: string; label: string }[];
+  bundlesTitle: string;
+  bundlesSubtitle: string;
+  bundleUnitLabel: string;
+  bundleMaxQty: number;
+  qcTitle: string;
+  qcBody: string;
+  qcPoints: string[];
+  qcImageHint: string;
+  countdownTitle: string;
+  countdownNote: string;
+  /** ISO timestamp, or "" for no deadline. */
+  countdownEndsAt: string;
+  countdownCtaLabel: string;
+  countdownAssurance: string;
+  testimonialsTitle: string;
+  testimonials: { quote: string; name: string; location: string }[];
+  formTitle: string;
+  formIntro: string;
+  formLabels: {
+    name: string;
+    phone: string;
+    address: string;
+    packageLabel: string;
+    deliveryLabel: string;
+    totalLabel: string;
+    submit: string;
+    namePlaceholder: string;
+    phonePlaceholder: string;
+    addressPlaceholder: string;
+    successMessage: string;
+  };
+  footerTagline: string;
+  footerAbout: string;
+  footerLines: string[];
   viewCount: number;
   orderCount: number;
   createdAt: string;
@@ -56,7 +111,29 @@ export interface LandingPage {
 
 export const listLandingPages = () => unwrap(api.admin.api["landing-pages"].get(), "GET /admin/api/landing-pages");
 
-/** The writable subset — everything the server resolves or owns is stripped. */
+/** The campaign content keys — optional on a draft, see below. */
+type CampaignKey =
+  | "hotlineLabel" | "hotlineNumber" | "headerCtaLabel"
+  | "trustBadges" | "subheadline" | "discountBadge" | "heroCtaNote"
+  | "brandStripTitle" | "brandLogos"
+  | "videoTitle" | "videoUrl"
+  | "featuresTitle" | "features"
+  | "specTitle" | "specMeta" | "specs"
+  | "bundlesTitle" | "bundlesSubtitle" | "bundleUnitLabel" | "bundleMaxQty"
+  | "qcTitle" | "qcBody" | "qcPoints" | "qcImageHint"
+  | "countdownTitle" | "countdownNote" | "countdownEndsAt"
+  | "countdownCtaLabel" | "countdownAssurance"
+  | "testimonialsTitle" | "testimonials"
+  | "formTitle" | "formIntro" | "formLabels"
+  | "footerTagline" | "footerAbout" | "footerLines";
+
+/**
+ * The writable subset — everything the server resolves or owns is stripped.
+ *
+ * Campaign content is optional rather than required, mirroring the server DTO:
+ * "New landing page" creates a page in one click and the sections are written
+ * afterwards, so a create body that carried 37 empty strings would be noise.
+ */
 export type LandingPageDraft = Omit<
   LandingPage,
   | "id"
@@ -68,7 +145,9 @@ export type LandingPageDraft = Omit<
   | "productSlug"
   | "productVisible"
   | "productSellingPrice"
->;
+  | CampaignKey
+> &
+  Partial<Pick<LandingPage, CampaignKey>>;
 
 export const createLandingPage = (draft: LandingPageDraft) =>
   unwrap(api.admin.api["landing-pages"].post(draft), "POST /admin/api/landing-pages");

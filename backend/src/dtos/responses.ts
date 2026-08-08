@@ -274,7 +274,81 @@ export interface LeadDto {
 /** A campaign page as the admin list renders it. `productName`/`productSlug`
  *  are resolved for display; `productVisible` lets the admin flag pages whose
  *  product is off-catalogue (sold *only* here). */
-export interface LandingPageDto {
+/**
+ * Every visitor-facing string on a campaign page, shared by the admin payload
+ * and the public one. Editing a campaign means editing these; none of them is
+ * money.
+ */
+export interface CampaignContentDto {
+  hotlineLabel: string;
+  hotlineNumber: string;
+  headerCtaLabel: string;
+  trustBadges: string[];
+  subheadline: string;
+  discountBadge: string;
+  heroCtaNote: string;
+  brandStripTitle: string;
+  brandLogos: string[];
+  videoTitle: string;
+  videoUrl: string;
+  featuresTitle: string;
+  features: { title: string; body: string }[];
+  specTitle: string;
+  specMeta: string;
+  specs: { value: string; label: string }[];
+  bundlesTitle: string;
+  bundlesSubtitle: string;
+  bundleUnitLabel: string;
+  bundleMaxQty: number;
+  qcTitle: string;
+  qcBody: string;
+  qcPoints: string[];
+  qcImageHint: string;
+  countdownTitle: string;
+  countdownNote: string;
+  /** ISO timestamp, or "" for no deadline (copy stays, clock disappears). */
+  countdownEndsAt: string;
+  countdownCtaLabel: string;
+  countdownAssurance: string;
+  testimonialsTitle: string;
+  testimonials: { quote: string; name: string; location: string }[];
+  formTitle: string;
+  formIntro: string;
+  formLabels: {
+    name: string;
+    phone: string;
+    address: string;
+    packageLabel: string;
+    deliveryLabel: string;
+    totalLabel: string;
+    submit: string;
+    namePlaceholder: string;
+    phonePlaceholder: string;
+    addressPlaceholder: string;
+    successMessage: string;
+  };
+  footerTagline: string;
+  footerAbout: string;
+  footerLines: string[];
+}
+
+/**
+ * One row of the bundle ladder, priced from the product's quantity offers.
+ *
+ * Derived on the server precisely so the advertised bundle total and the total
+ * priceCart() charges come from one calculation — a campaign cannot promise a
+ * bundle price the cart will refuse.
+ */
+export interface CampaignBundleDto {
+  qty: number;
+  unitPrice: number;
+  total: number;
+  /** qty × the normal selling price, for the struck-through comparison. */
+  wasTotal: number;
+  saving: number;
+}
+
+export interface LandingPageDto extends CampaignContentDto {
   id: string;
   /** Internal admin name — never shown to visitors. */
   title: string;
@@ -310,7 +384,7 @@ export interface LandingPageDto {
 /** GET /api/landing-pages/:slug — the public campaign payload. Carries the
  *  full product so /lp/:slug needs no second call, which also means an
  *  off-catalogue product renders even though GET /api/products/:slug 404s. */
-export interface PublicLandingPageDto {
+export interface PublicLandingPageDto extends CampaignContentDto {
   /** Already resolved — the internal title never reaches this payload. */
   headline: string;
   slug: string;
@@ -326,6 +400,8 @@ export interface PublicLandingPageDto {
   benefitBullets: string[];
   imageHint: string;
   gtmId: string;
+  /** The bundle ladder, already priced — see CampaignBundleDto. */
+  bundles: CampaignBundleDto[];
   product: PublicProductDto;
 }
 

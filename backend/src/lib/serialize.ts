@@ -65,6 +65,7 @@ import {
   INDUSTRIAL_LEAD_STATUSES,
   INVOICE_STATUSES,
   isLowStock,
+  effectiveUnitPrice,
   LEAD_STATUSES,
   maskSecret,
   ORDER_EVENT_KINDS,
@@ -394,6 +395,74 @@ export const landingPageInclude = { product: { include: productInclude } };
 
 type LandingPageRow = LandingPage & { product: ProductWithRelations };
 
+/**
+ * The campaign content block, shared by the admin and public payloads.
+ *
+ * Json columns come back as Prisma.JsonValue, so each repeatable is coerced to
+ * the shape the page renders rather than trusted — a hand-edited row in the
+ * database must not be able to crash the campaign it is attached to.
+ */
+function campaignContent(lp: LandingPageRow) {
+  const list = <T>(v: unknown, pick: (o: Record<string, unknown>) => T): T[] =>
+    Array.isArray(v) ? v.filter((o) => o && typeof o === "object").map((o) => pick(o as Record<string, unknown>)) : [];
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const labels = (lp.formLabels ?? {}) as Record<string, unknown>;
+
+  return {
+    hotlineLabel: lp.hotlineLabel,
+    hotlineNumber: lp.hotlineNumber,
+    headerCtaLabel: lp.headerCtaLabel,
+    trustBadges: lp.trustBadges,
+    subheadline: lp.subheadline,
+    discountBadge: lp.discountBadge,
+    heroCtaNote: lp.heroCtaNote,
+    brandStripTitle: lp.brandStripTitle,
+    brandLogos: lp.brandLogos,
+    videoTitle: lp.videoTitle,
+    videoUrl: lp.videoUrl,
+    featuresTitle: lp.featuresTitle,
+    features: list(lp.features, (o) => ({ title: str(o.title), body: str(o.body) })),
+    specTitle: lp.specTitle,
+    specMeta: lp.specMeta,
+    specs: list(lp.specs, (o) => ({ value: str(o.value), label: str(o.label) })),
+    bundlesTitle: lp.bundlesTitle,
+    bundlesSubtitle: lp.bundlesSubtitle,
+    bundleUnitLabel: lp.bundleUnitLabel,
+    bundleMaxQty: lp.bundleMaxQty,
+    qcTitle: lp.qcTitle,
+    qcBody: lp.qcBody,
+    qcPoints: lp.qcPoints,
+    qcImageHint: lp.qcImageHint,
+    countdownTitle: lp.countdownTitle,
+    countdownNote: lp.countdownNote,
+    countdownEndsAt: lp.countdownEndsAt ? lp.countdownEndsAt.toISOString() : "",
+    countdownCtaLabel: lp.countdownCtaLabel,
+    countdownAssurance: lp.countdownAssurance,
+    testimonialsTitle: lp.testimonialsTitle,
+    testimonials: list(lp.testimonials, (o) => ({
+      quote: str(o.quote), name: str(o.name), location: str(o.location),
+    })),
+    formTitle: lp.formTitle,
+    formIntro: lp.formIntro,
+    formLabels: {
+      name: str(labels.name),
+      phone: str(labels.phone),
+      address: str(labels.address),
+      packageLabel: str(labels.packageLabel),
+      deliveryLabel: str(labels.deliveryLabel),
+      totalLabel: str(labels.totalLabel),
+      submit: str(labels.submit),
+      namePlaceholder: str(labels.namePlaceholder),
+      phonePlaceholder: str(labels.phonePlaceholder),
+      addressPlaceholder: str(labels.addressPlaceholder),
+      successMessage: str(labels.successMessage),
+    },
+    footerTagline: lp.footerTagline,
+    footerAbout: lp.footerAbout,
+    footerLines: lp.footerLines,
+  };
+}
+
 export function toLandingPage(lp: LandingPageRow): LandingPageDto {
   return {
     id: lp.id,
@@ -416,6 +485,7 @@ export function toLandingPage(lp: LandingPageRow): LandingPageDto {
     imageHint: lp.imageHint,
     gtmId: lp.gtmId,
     published: lp.published,
+    ...campaignContent(lp),
     viewCount: lp.viewCount,
     orderCount: lp.orderCount,
     createdAt: lp.createdAt.toISOString(),
@@ -440,6 +510,21 @@ export function toPublicLandingPage(lp: LandingPageRow): PublicLandingPageDto {
     benefitBullets: lp.benefitBullets,
     imageHint: lp.imageHint,
     gtmId: lp.gtmId,
+    ...campaignContent(lp),
+    /* The bundle ladder, priced from the product rather than typed as copy.
+     * Building it here means the number the ad shows and the number
+     * priceCart() charges come from one source and cannot drift. */
+    bundles: Array.from({ length: Math.max(1, lp.bundleMaxQty) }, (_, i) => {
+      const qty = i + 1;
+      const unit = effectiveUnitPrice(lp.product, qty, lp.product.quantityOffers);
+      return {
+        qty,
+        unitPrice: unit,
+        total: unit * qty,
+        wasTotal: sellingPrice(lp.product) * qty,
+        saving: Math.max(0, (sellingPrice(lp.product) - unit) * qty),
+      };
+    }),
     product: toPublicProduct(lp.product),
   };
 }
