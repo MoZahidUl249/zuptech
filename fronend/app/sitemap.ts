@@ -2,6 +2,13 @@ import type { MetadataRoute } from "next";
 import { site } from "@/lib/site";
 import { getProducts } from "@/lib/api";
 
+/**
+ * Also prerendered at build time, so every product added after a deploy was
+ * missing from the sitemap until the next one. Hourly is plenty for search
+ * engines and costs one catalogue walk an hour.
+ */
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const products = await getProducts();

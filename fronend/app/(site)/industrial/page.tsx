@@ -5,6 +5,23 @@ import { site, jsonLd } from "@/lib/site";
 import { getIndustrialServices, getSiteConfig } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
 
+/**
+ * Rebuild this page from the admin's content at most once a minute.
+ *
+ * Without it Next prerenders the page ONCE, when the Docker image is built, and
+ * bakes whatever the admin happened to contain at that moment into static HTML.
+ * Everything on this page comes from the admin — service cards, showcase cards,
+ * site copy — so editing any of it changed nothing on the live site until the
+ * next deploy rebuilt the image. That is the bug this fixes.
+ *
+ * ISR rather than `force-dynamic`: this content changes a few times a week, not
+ * per request, so regenerating in the background keeps the page as fast as a
+ * static one and a minute of staleness costs nothing. Note the two storefront
+ * replicas each hold their own cache, so for up to a minute after an edit one
+ * may serve the new copy while the other still serves the old.
+ */
+export const revalidate = 60;
+
 export const metadata: Metadata = {
   title: "Industrial — Utility-Scale Electrical Infrastructure",
   description:
