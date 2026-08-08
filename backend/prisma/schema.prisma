@@ -593,6 +593,20 @@ model HeroSlide {
   fit       String  @default("cover") // "cover" | "contain"
   bg        String  @default("")
   sort      Int     @default(0)
+
+  /// Which pages this slide appears on: any of "home", "services",
+  /// "industrial".
+  ///
+  /// An array rather than one page because the same banner is often wanted in
+  /// more than one place, and the alternative is uploading the same art twice
+  /// and then having to remember to change both.
+  ///
+  /// Every existing slide was migrated to ["home"], which is where they all
+  /// rendered before this existed — /services and /industrial used to show the
+  /// homepage's carousel verbatim, which is the thing this replaces. A page
+  /// with no slides of its own falls back to the built-in art, exactly as an
+  /// empty set always has.
+  pages String[] @default(["home"])
 }
 
 /// A person on the contact page. No slug: two colleagues can share a name, and

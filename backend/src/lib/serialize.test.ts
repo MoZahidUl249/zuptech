@@ -114,6 +114,7 @@ describe("toSlide", () => {
     fit: "contain",
     bg: "#0B1F3A",
     sort: 0,
+    pages: ["home"],
   };
 
   test("keeps the stored media kind rather than guessing it from the URL", () => {
@@ -127,6 +128,17 @@ describe("toSlide", () => {
   test("an unknown media kind degrades to image", () => {
     expect(toSlide({ ...slide, mediaType: "audio" }).mediaType).toBe("image");
   });
+  test("keeps only pages the storefront actually renders", () => {
+    // The column is a free text array, so a hand-edited or legacy row can hold
+    // anything. A junk value must not become a page the carousel tries to match.
+    expect(toSlide({ ...slide, pages: ["home", "nonsense", "industrial"] }).pages)
+      .toEqual(["home", "industrial"]);
+  });
+
+  test("a slide assigned to no page is parked, not shown everywhere", () => {
+    expect(toSlide({ ...slide, pages: [] }).pages).toEqual([]);
+  });
+
 });
 
 describe("site copy contract", () => {

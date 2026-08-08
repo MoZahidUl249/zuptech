@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { GTM_ID_RE, type HeroSlide, type SiteContact, type SiteCopy } from "@/lib/admin";
+import { GTM_ID_RE, type HeroPage, type HeroSlide, type SiteContact, type SiteCopy } from "@/lib/admin";
 import { featuredProducts, type Product } from "@/lib/products";
 import { getProductsByIds, getSiteConfig, type PaymentOption, type SiteConfig } from "@/lib/api";
 import { site } from "@/lib/site";
@@ -91,6 +91,13 @@ export function useFeaturedProducts(): Product[] {
 
 /* ===== Hero slides ===== */
 
+/**
+ * Built-in art, used by any page with no slides of its own.
+ *
+ * Each is tagged with the pages it suits, so an unconfigured /services does not
+ * fall back to a power-products banner. This is only ever a fallback — the
+ * moment the admin assigns a real slide to a page, that page stops using these.
+ */
 export const DEFAULT_SLIDES: HeroSlide[] = [
   {
     id: "sl1",
@@ -100,6 +107,7 @@ export const DEFAULT_SLIDES: HeroSlide[] = [
     active: true,
     fit: "cover",
     bg: "linear-gradient(115deg,#0B4FE0 0%,#083A9E 100%)",
+    pages: ["home", "industrial"],
   },
   {
     id: "sl2",
@@ -109,26 +117,64 @@ export const DEFAULT_SLIDES: HeroSlide[] = [
     active: true,
     fit: "contain",
     bg: "linear-gradient(115deg,#DDE7F3 0%,#F5F8FC 100%)",
+    pages: ["home", "services"],
   },
 ];
 
-let slidesCache: HeroSlide[] | null = null;
-let slidesCacheKey = "";
+/**
+ * One cache per page, keyed on the slides that page resolves to.
+ *
+ * useSyncExternalStore compares snapshots by reference and re-renders whenever
+ * one changes identity, so a snapshot that built a fresh array on every call
+ * would loop forever. Caching per page keeps each page's snapshot stable while
+ * still letting the three differ.
+ */
+const slidesCache = new Map<HeroPage, { key: string; slides: HeroSlide[] }>();
 
-function getSlidesSnapshot(): HeroSlide[] {
-  const slides = config?.slides;
-  if (!slides) return DEFAULT_SLIDES;
-  const active = slides.filter((s) => s.active && s.image);
-  if (active.length === 0) return DEFAULT_SLIDES;
-  const key = JSON.stringify(active);
-  if (slidesCache && slidesCacheKey === key) return slidesCache;
-  slidesCacheKey = key;
-  slidesCache = active;
-  return slidesCache;
+/** Slides assigned to `page`, treating an untagged slide as a home slide —
+ *  that is where every slide rendered before pages existed. */
+function forPage(slides: HeroSlide[], page: HeroPage): HeroSlide[] {
+  return slides.filter((s) => (s.pages?.length ? s.pages.includes(page) : page === "home"));
 }
 
-export function useHeroSlides(): HeroSlide[] {
-  return useSyncExternalStore(subscribe, getSlidesSnapshot, () => DEFAULT_SLIDES);
+/**
+ * The per-page fallbacks, built ONCE.
+ *
+ * These have to be stable references. useSyncExternalStore re-renders whenever
+ * the snapshot changes identity, so returning a freshly filtered array here
+ * meant a new array every render and an infinite loop — React error #185, with
+ * the whole page failing to hydrate. Filtering a constant per call looks free
+ * and is not.
+ */
+const DEFAULTS_BY_PAGE: Record<HeroPage, HeroSlide[]> = {
+  home: forPage(DEFAULT_SLIDES, "home"),
+  services: forPage(DEFAULT_SLIDES, "services"),
+  industrial: forPage(DEFAULT_SLIDES, "industrial"),
+};
+
+function getSlidesSnapshot(page: HeroPage): HeroSlide[] {
+  const all = config?.slides;
+  const fallback = DEFAULTS_BY_PAGE[page];
+  if (!all) return fallback;
+
+  const active = forPage(all.filter((s) => s.active && s.image), page);
+  if (active.length === 0) return fallback;
+
+  const key = JSON.stringify(active);
+  const hit = slidesCache.get(page);
+  if (hit && hit.key === key) return hit.slides;
+  slidesCache.set(page, { key, slides: active });
+  return active;
+}
+
+/** The hero slides for one page. Defaults to the home carousel so existing
+ *  callers keep their behaviour. */
+export function useHeroSlides(page: HeroPage = "home"): HeroSlide[] {
+  return useSyncExternalStore(
+    subscribe,
+    () => getSlidesSnapshot(page),
+    () => DEFAULTS_BY_PAGE[page],
+  );
 }
 
 /* ===== Payment methods (checkout options) ===== */

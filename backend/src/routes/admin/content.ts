@@ -53,6 +53,10 @@ export const adminContent = new Elysia({ name: "routes/admin/content", detail: {
                 // Omitted by any client that predates video slides, and those
                 // were all stills.
                 mediaType: slide.mediaType ?? "image",
+                // Same reasoning for pages: a client that predates per-page
+                // heroes sends none, and every slide it knows about belonged
+                // to the home carousel.
+                pages: slide.pages ?? ["home"],
                 sort: index,
               },
             }),

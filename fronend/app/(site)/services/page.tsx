@@ -70,7 +70,7 @@ export default async function ServicesPage() {
           page still has exactly one, for search engines and for a screen
           reader arriving here. */}
       <h1 className="sr-only">{copy.servicesHeroHeadline}</h1>
-      <HeroBanner />
+      <HeroBanner page="services" />
 
       {/* The page is the catalogue and the form it books through. The
           residential grid, the trust badges and the closing CTA that used to

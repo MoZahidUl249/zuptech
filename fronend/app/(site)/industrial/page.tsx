@@ -73,7 +73,7 @@ export default async function IndustrialPage() {
           page still has exactly one, for search engines and for a screen
           reader arriving here. */}
       <h1 className="sr-only">{copy.industrialHeroHeadline}</h1>
-      <HeroBanner />
+      <HeroBanner page="industrial" />
 
       {/* Same shape as /services — capability cards, then the enquiry form.
           The grid-solutions split, the bespoke numbered cards and the

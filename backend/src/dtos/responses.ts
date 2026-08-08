@@ -442,6 +442,10 @@ export interface SlideDto {
    *  wider than either side actually supports. */
   fit: "cover" | "contain";
   bg: string;
+  /** Pages this slide renders on. Typed as the union rather than string[]
+   *  because `toSlide` already drops anything outside it — the consumer should
+   *  not have to re-validate what the serializer guarantees. */
+  pages: ("home" | "services" | "industrial")[];
 }
 
 /** Shared shape for the two service catalogues — they differ only in which

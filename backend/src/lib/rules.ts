@@ -501,6 +501,15 @@ export type PaymentEnvironment = (typeof PAYMENT_ENVIRONMENTS)[number];
 /** What a hero slide's art actually is. A video slide plays inline, muted and
  *  looping; an image slide is a still. The two need different markup, so the
  *  kind is stored rather than guessed from the URL. */
+/**
+ * The pages a hero slide can appear on.
+ *
+ * /services and /industrial used to render the homepage carousel verbatim, so
+ * every page showed the same art. A slide now names the pages it belongs to.
+ */
+export const HERO_PAGES = ["home", "services", "industrial"] as const;
+export type HeroPage = (typeof HERO_PAGES)[number];
+
 export const HERO_MEDIA_TYPES = ["image", "video"] as const;
 export type HeroMediaType = (typeof HERO_MEDIA_TYPES)[number];
 

@@ -406,7 +406,20 @@ export interface HeroSlide {
   active: boolean;
   fit?: "cover" | "contain";
   bg?: string;
+  /** Pages this slide appears on. Absent on rows written before per-page
+   *  heroes existed, which all belonged to the home carousel. */
+  pages?: HeroPage[];
 }
+
+/** The pages a hero slide can be assigned to. */
+export type HeroPage = "home" | "services" | "industrial";
+
+/** Label for each, for the admin's page picker. */
+export const HERO_PAGE_LABELS: Record<HeroPage, string> = {
+  home: "Home",
+  services: "Services",
+  industrial: "Industrial",
+};
 
 /** Admin-editable page copy. A blank string means "use the frontend's
  *  built-in default" — see DEFAULT_COPY / resolveCopy in lib/admin-bridge.ts. */

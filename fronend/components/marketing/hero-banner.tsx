@@ -1,6 +1,7 @@
 "use client";
 
 import { useHeroSlides } from "@/lib/admin-bridge";
+import type { HeroPage } from "@/lib/admin";
 import { HeroCarousel } from "@/components/marketing/hero-carousel";
 
 /**
@@ -11,10 +12,15 @@ import { HeroCarousel } from "@/components/marketing/hero-carousel";
  * slides to be, so a correctly-sized banner fills the frame without cropping.
  *
  * The carousel itself lives in HeroCarousel, shared with the per-page poster
- * backdrops — this component is now just the homepage's data source and frame.
+ * backdrops — this component is just the data source and frame.
+ *
+ * `page` selects which slides render. /services and /industrial used to show
+ * the homepage's carousel verbatim, so all three pages had identical art; each
+ * now draws the slides assigned to it in the admin, falling back to the
+ * built-in banner for that page when none are.
  */
-export function HeroBanner() {
-  const slides = useHeroSlides();
+export function HeroBanner({ page = "home" }: { page?: HeroPage }) {
+  const slides = useHeroSlides(page);
   if (slides.length === 0) return null;
 
   return (

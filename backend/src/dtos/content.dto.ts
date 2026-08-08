@@ -1,5 +1,5 @@
 import { t } from "elysia";
-import { heroMediaTypeDto } from "./common";
+import { heroMediaTypeDto, heroPagesDto } from "./common";
 
 /** Whole-document PUT — the panel edits the full slide set and saves it back. */
 export const updateSlidesDto = t.Object({
@@ -17,6 +17,10 @@ export const updateSlidesDto = t.Object({
       active: t.Boolean(),
       fit: t.Union([t.Literal("cover"), t.Literal("contain")]),
       bg: t.String({ maxLength: 300 }),
+      /* Which pages this slide shows on. Optional so a client that predates
+       * per-page heroes keeps working — the route defaults it to ["home"],
+       * which is where every slide rendered before this existed. */
+      pages: t.Optional(t.Array(heroPagesDto, { maxItems: 3 })),
     }),
     { maxItems: 10 },
   ),

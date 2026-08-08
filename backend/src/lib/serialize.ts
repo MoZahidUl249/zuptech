@@ -66,6 +66,8 @@ import {
   INVOICE_STATUSES,
   isLowStock,
   effectiveUnitPrice,
+  HERO_PAGES,
+  type HeroPage,
   LEAD_STATUSES,
   maskSecret,
   ORDER_EVENT_KINDS,
@@ -554,6 +556,12 @@ export function toSlide(s: HeroSlide): SlideDto {
     fit: s.fit === "contain" ? "contain" : "cover",
     mediaType: coerceTo(HERO_MEDIA_TYPES, s.mediaType, "image"),
     bg: s.bg,
+    // Same defensive read as `fit`: the column is a free text array, so drop
+    // anything that isn't a page the storefront actually renders. A slide left
+    // with no valid page is parked rather than shown everywhere.
+    pages: (s.pages ?? []).filter((p): p is HeroPage =>
+      (HERO_PAGES as readonly string[]).includes(p),
+    ),
   };
 }
 

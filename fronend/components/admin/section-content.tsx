@@ -15,6 +15,7 @@ import {
 } from "@/lib/admin";
 import { uploadSlideImage } from "@/lib/admin-api";
 import { DEFAULT_COPY } from "@/lib/site-copy";
+import { HERO_PAGE_LABELS, type HeroPage } from "@/lib/admin";
 import {
   bannerDimensionWarning,
   checkImageFile,
@@ -74,6 +75,7 @@ export function BannerSlidesCard() {
           active: false,
           fit: "cover",
           bg: "",
+          pages: ["home"],
         },
       ],
     });
@@ -180,6 +182,42 @@ export function BannerSlidesCard() {
                 }
               />
               <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
+                <Field label="Shows on">
+                  {/* Which pages this banner appears on. /services and
+                      /industrial used to render the home carousel verbatim, so
+                      all three pages showed the same art; a slide now names
+                      where it belongs. Untick every page and the slide is
+                      parked — it stays here but renders nowhere. */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {(Object.keys(HERO_PAGE_LABELS) as HeroPage[]).map((pg) => {
+                      const on = (s.pages ?? ["home"]).includes(pg);
+                      return (
+                        <button
+                          key={pg}
+                          type="button"
+                          disabled={readOnly}
+                          aria-pressed={on}
+                          onClick={() => {
+                            const current = s.pages ?? ["home"];
+                            setSlide(s.id, {
+                              pages: on
+                                ? current.filter((x) => x !== pg)
+                                : [...current, pg],
+                            });
+                          }}
+                          className="cursor-pointer disabled:cursor-default"
+                        >
+                          <Pill tone={on ? "green" : "gray"}>{HERO_PAGE_LABELS[pg]}</Pill>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(s.pages ?? ["home"]).length === 0 ? (
+                    <p className="mt-1 text-ui-micro text-warn-fg">
+                      Not shown on any page — pick at least one.
+                    </p>
+                  ) : null}
+                </Field>
                 <Field label="Button label">
                   <input
                     value={s.cta}
