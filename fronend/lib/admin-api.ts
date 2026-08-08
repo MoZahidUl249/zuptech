@@ -343,6 +343,13 @@ export const putSlides = (slides: HeroSlide[]) =>
         active: s.active,
         fit: s.fit ?? "cover",
         bg: s.bg ?? "",
+        // Must be sent. This body is built field by field rather than spread,
+        // so a field that isn't listed here is silently dropped — `pages` was,
+        // and the route's `?? ["home"]` fallback then reset every slide to the
+        // home page on every save. Assigning a banner to Services appeared to
+        // work until you pressed Save. Add new slide fields HERE as well as to
+        // the type, or they will not persist.
+        pages: s.pages ?? ["home"],
       })),
     }),
     "PUT /admin/api/slides",

@@ -33,7 +33,7 @@ function Screen({ children }: { children: React.ReactNode }) {
 export function HomePageScreen() {
   return (
     <Screen>
-      <BannerSlidesCard />
+      <BannerSlidesCard page="home" />
       <FeaturedRowEditor />
       <CopyCard title="Home page wording" fields={HOME_COPY} />
       {/* The front page's own cards. Not the service catalogue — these exist so
@@ -51,6 +51,7 @@ export function HomePageScreen() {
 export function ServicesPageScreen() {
   return (
     <Screen>
+      <BannerSlidesCard page="services" />
       <CopyCard title="Services page wording" fields={SERVICES_COPY} />
       <ServiceCatalogueCard
         kind="services"
@@ -64,6 +65,7 @@ export function ServicesPageScreen() {
 export function IndustrialPageScreen() {
   return (
     <Screen>
+      <BannerSlidesCard page="industrial" />
       <CopyCard title="Industrial page wording" fields={INDUSTRIAL_COPY} />
       <ServiceCatalogueCard
         kind="industrial-services"

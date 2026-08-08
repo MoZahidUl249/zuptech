@@ -54,56 +54,84 @@ const FIT_OPTIONS = [
   { value: "contain" as const, label: "Contain" },
 ];
 
-export function BannerSlidesCard() {
+/**
+ * The hero banners for ONE page.
+ *
+ * Each page's screen renders its own copy of this card, and it only ever sees
+ * and writes the slides belonging to that page. The previous version put a
+ * single list on the home screen with a "shows on" toggle per slide, which made
+ * the three pages feel like one shared thing — editing the home banners looked
+ * like it was editing the services page too, and deleting a slide from what
+ * read as "the home page's banners" removed it everywhere.
+ *
+ * `state.slides` is still one flat array (it maps to one PUT), so every write
+ * here recombines: the slides for other pages pass through untouched and only
+ * this page's are replaced. That is what keeps the three genuinely independent.
+ */
+export function BannerSlidesCard({ page = "home" }: { page?: HeroPage }) {
   const { state, update, can } = useAdmin();
   const readOnly = can("homepage") !== "manage";
 
+  // A slide with no pages is a home slide — that is where every slide lived
+  // before pages existed, and rows written by an older client still look that way.
+  const belongsHere = (s: HeroSlide) =>
+    s.pages?.length ? s.pages.includes(page) : page === "home";
+
+  const mine = state.slides.filter(belongsHere);
+  const others = state.slides.filter((s) => !belongsHere(s));
+
+  /** Write this page's slides back without disturbing any other page's. */
+  const commit = (next: HeroSlide[]) => update({ slides: [...others, ...next] });
+
   const setSlide = (id: string, patch: Partial<HeroSlide>) =>
-    update({
-      slides: state.slides.map((s) => (s.id === id ? { ...s, ...patch } : s)),
-    });
+    commit(mine.map((s) => (s.id === id ? { ...s, ...patch } : s)));
 
   const addSlide = () => {
-    update({
-      slides: [
-        ...state.slides,
-        {
-          id: tempId("slide"),
-          image: null,
-          cta: "Shop Now",
-          href: "/shop",
-          active: false,
-          fit: "cover",
-          bg: "",
-          pages: ["home"],
-        },
-      ],
-    });
-    toast("Slide added — upload a banner image and activate it");
+    commit([
+      ...mine,
+      {
+        id: tempId("slide"),
+        image: null,
+        cta: "Shop Now",
+        href: "/shop",
+        // Active on creation: you add a banner because you want it shown, and
+        // the old default of `false` meant every new slide silently did nothing
+        // until someone found the toggle.
+        active: true,
+        fit: "cover",
+        bg: "",
+        pages: [page],
+      },
+    ]);
+    toast("Slide added — upload a banner image");
   };
 
   /* Order is positional: PUT /admin/api/slides rewrites `sort` from the array
-   * index, so moving a slide is pure local array manipulation. */
+   * index, so moving a slide is pure local array manipulation — within this
+   * page's slides only. */
   const move = (index: number, dir: -1 | 1) => {
-    const next = [...state.slides];
+    const next = [...mine];
     const target = index + dir;
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target]!, next[index]!];
-    update({ slides: next });
+    commit(next);
   };
 
-  const activeCount = state.slides.filter((s) => s.active && s.image).length;
+  const activeCount = mine.filter((s) => s.active && s.image).length;
 
   return (
     <Card className="px-5 py-5 sm:px-6">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-ui-base font-bold">Hero banner slides</h2>
+          <h2 className="text-ui-base font-bold">
+            {HERO_PAGE_LABELS[page]} page banners
+          </h2>
           <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">
-            These slides rotate in the store&apos;s home-page banner, in the order shown
-            below. Each is a wide image with one button — 2000×800 works well.{" "}
-            {IMAGE_FORMATS_LABEL}, under 8 MB. Banners are served at full resolution, so
-            aim for 200–400 KB.
+            These rotate in the banner at the top of the {HERO_PAGE_LABELS[page].toLowerCase()}{" "}
+            page, in the order shown. They belong to this page only — the other pages have
+            their own, and nothing you change here touches them. Each is a wide image with
+            one button; 2000×800 works well. {IMAGE_FORMATS_LABEL}, under 8 MB, ideally
+            200–400 KB.
           </p>
         </div>
         {!readOnly ? (
@@ -114,12 +142,12 @@ export function BannerSlidesCard() {
       </div>
       {activeCount === 0 ? (
         <p className="mt-2 rounded-xl bg-warn-bg px-3.5 py-2.5 text-ui-sm font-semibold text-warn-fg">
-          No active slides with an image — the store shows its default banners.
+          No active slides with an image — this page falls back to its built-in banner.
         </p>
       ) : null}
 
       <div className="mt-4 flex flex-col gap-4">
-        {state.slides.map((s, i) => (
+        {mine.map((s, i) => (
           <div key={s.id} className="rounded-2xl border border-zup-body/8 p-4 sm:p-5">
             <div className="mb-3.5 flex items-center justify-between gap-3">
               <p className="text-xs font-bold uppercase tracking-[0.1em] text-zup-soft">
@@ -139,7 +167,7 @@ export function BannerSlidesCard() {
                     </BtnGhost>
                     <BtnGhost
                       aria-label={`Move slide ${i + 1} down`}
-                      disabled={i === state.slides.length - 1}
+                      disabled={i === mine.length - 1}
                       onClick={() => move(i, 1)}
                     >
                       <ArrowDown className="h-3.5 w-3.5" aria-hidden />
@@ -161,7 +189,7 @@ export function BannerSlidesCard() {
                       description="It will disappear from the home-page banner immediately."
                       confirmLabel="Remove"
                       onConfirm={() => {
-                        update({ slides: state.slides.filter((x) => x.id !== s.id) });
+                        commit(mine.filter((x) => x.id !== s.id));
                         toast("Slide removed");
                       }}
                     />
@@ -182,42 +210,6 @@ export function BannerSlidesCard() {
                 }
               />
               <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
-                <Field label="Shows on">
-                  {/* Which pages this banner appears on. /services and
-                      /industrial used to render the home carousel verbatim, so
-                      all three pages showed the same art; a slide now names
-                      where it belongs. Untick every page and the slide is
-                      parked — it stays here but renders nowhere. */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {(Object.keys(HERO_PAGE_LABELS) as HeroPage[]).map((pg) => {
-                      const on = (s.pages ?? ["home"]).includes(pg);
-                      return (
-                        <button
-                          key={pg}
-                          type="button"
-                          disabled={readOnly}
-                          aria-pressed={on}
-                          onClick={() => {
-                            const current = s.pages ?? ["home"];
-                            setSlide(s.id, {
-                              pages: on
-                                ? current.filter((x) => x !== pg)
-                                : [...current, pg],
-                            });
-                          }}
-                          className="cursor-pointer disabled:cursor-default"
-                        >
-                          <Pill tone={on ? "green" : "gray"}>{HERO_PAGE_LABELS[pg]}</Pill>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {(s.pages ?? ["home"]).length === 0 ? (
-                    <p className="mt-1 text-ui-micro text-warn-fg">
-                      Not shown on any page — pick at least one.
-                    </p>
-                  ) : null}
-                </Field>
                 <Field label="Button label">
                   <input
                     value={s.cta}
