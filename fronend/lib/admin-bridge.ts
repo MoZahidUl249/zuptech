@@ -5,6 +5,7 @@ import { GTM_ID_RE, type HeroPage, type HeroSlide, type SiteContact, type SiteCo
 import { featuredProducts, type Product } from "@/lib/products";
 import { getProductsByIds, getSiteConfig, type PaymentOption, type SiteConfig } from "@/lib/api";
 import { site } from "@/lib/site";
+import { DEFAULTS_BY_PAGE, resolveSlides } from "@/lib/hero-slides";
 import { DEFAULT_COPY, resolveCopy } from "@/lib/site-copy";
 
 /*
@@ -92,83 +93,30 @@ export function useFeaturedProducts(): Product[] {
 /* ===== Hero slides ===== */
 
 /**
- * Built-in art, used by any page with no slides of its own.
+ * The client half of the hero.
  *
- * Each is tagged with the pages it suits, so an unconfigured /services does not
- * fall back to a power-products banner. This is only ever a fallback — the
- * moment the admin assigns a real slide to a page, that page stops using these.
+ * First paint comes from the SERVER now — each page resolves its own slides
+ * from the site config it already fetches and passes them to HeroBanner as a
+ * prop. This store exists for the refresh-on-focus path: a banner changed in
+ * another tab appears without a reload. Resolution itself lives in
+ * lib/hero-slides.ts so both halves reach the same answer.
  */
-export const DEFAULT_SLIDES: HeroSlide[] = [
-  {
-    id: "sl1",
-    image: "/images/banner-power-solutions.png",
-    cta: "Shop Products",
-    href: "/shop",
-    active: true,
-    fit: "cover",
-    bg: "linear-gradient(115deg,#0B4FE0 0%,#083A9E 100%)",
-    pages: ["home", "industrial"],
-  },
-  {
-    id: "sl2",
-    image: "/images/banner-engineering-services.png",
-    cta: "Explore Services",
-    href: "/services",
-    active: true,
-    fit: "contain",
-    bg: "linear-gradient(115deg,#DDE7F3 0%,#F5F8FC 100%)",
-    pages: ["home", "services"],
-  },
-];
 
-/**
- * One cache per page, keyed on the slides that page resolves to.
- *
- * useSyncExternalStore compares snapshots by reference and re-renders whenever
- * one changes identity, so a snapshot that built a fresh array on every call
- * would loop forever. Caching per page keeps each page's snapshot stable while
- * still letting the three differ.
- */
+/** One cache per page, so each page's snapshot keeps a stable identity. */
 const slidesCache = new Map<HeroPage, { key: string; slides: HeroSlide[] }>();
 
-/** Slides assigned to `page`, treating an untagged slide as a home slide —
- *  that is where every slide rendered before pages existed. */
-function forPage(slides: HeroSlide[], page: HeroPage): HeroSlide[] {
-  return slides.filter((s) => (s.pages?.length ? s.pages.includes(page) : page === "home"));
-}
-
-/**
- * The per-page fallbacks, built ONCE.
- *
- * These have to be stable references. useSyncExternalStore re-renders whenever
- * the snapshot changes identity, so returning a freshly filtered array here
- * meant a new array every render and an infinite loop — React error #185, with
- * the whole page failing to hydrate. Filtering a constant per call looks free
- * and is not.
- */
-const DEFAULTS_BY_PAGE: Record<HeroPage, HeroSlide[]> = {
-  home: forPage(DEFAULT_SLIDES, "home"),
-  services: forPage(DEFAULT_SLIDES, "services"),
-  industrial: forPage(DEFAULT_SLIDES, "industrial"),
-};
-
 function getSlidesSnapshot(page: HeroPage): HeroSlide[] {
-  const all = config?.slides;
-  const fallback = DEFAULTS_BY_PAGE[page];
-  if (!all) return fallback;
-
-  const active = forPage(all.filter((s) => s.active && s.image), page);
-  if (active.length === 0) return fallback;
-
-  const key = JSON.stringify(active);
+  const resolved = resolveSlides(config?.slides, page);
+  // Reference stability: useSyncExternalStore re-renders on identity change,
+  // and resolveSlides builds a new array each call.
+  const key = JSON.stringify(resolved);
   const hit = slidesCache.get(page);
   if (hit && hit.key === key) return hit.slides;
-  slidesCache.set(page, { key, slides: active });
-  return active;
+  slidesCache.set(page, { key, slides: resolved });
+  return resolved;
 }
 
-/** The hero slides for one page. Defaults to the home carousel so existing
- *  callers keep their behaviour. */
+/** The hero slides for one page, kept current after the initial server render. */
 export function useHeroSlides(page: HeroPage = "home"): HeroSlide[] {
   return useSyncExternalStore(
     subscribe,

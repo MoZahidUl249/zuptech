@@ -1,26 +1,21 @@
-"use client";
-
-import { useHeroSlides } from "@/lib/admin-bridge";
-import type { HeroPage } from "@/lib/admin";
 import { HeroCarousel } from "@/components/marketing/hero-carousel";
+import type { HeroSlide } from "@/lib/admin";
 
 /**
- * The admin-managed hero banner carousel — now the homepage's entire hero.
+ * The admin-managed hero banner carousel.
+ *
+ * Takes its slides as a prop, resolved on the SERVER by the page that renders
+ * it. That is the whole point: this used to read them from the client store, so
+ * the server emitted the built-in banners and the real art only arrived after
+ * the browser had fetched the site config — every refresh flashed the default
+ * banner on the biggest element of the page, and the hero image was invisible
+ * to the preload scanner because its URL did not exist until JS ran.
  *
  * Full-bleed: no max-width, no gutters, no rounded corners, so the art runs
  * edge to edge. The 5/2 desktop ratio matches the 2000×800 the admin asks
  * slides to be, so a correctly-sized banner fills the frame without cropping.
- *
- * The carousel itself lives in HeroCarousel, shared with the per-page poster
- * backdrops — this component is just the data source and frame.
- *
- * `page` selects which slides render. /services and /industrial used to show
- * the homepage's carousel verbatim, so all three pages had identical art; each
- * now draws the slides assigned to it in the admin, falling back to the
- * built-in banner for that page when none are.
  */
-export function HeroBanner({ page = "home" }: { page?: HeroPage }) {
-  const slides = useHeroSlides(page);
+export function HeroBanner({ slides }: { slides: HeroSlide[] }) {
   if (slides.length === 0) return null;
 
   return (

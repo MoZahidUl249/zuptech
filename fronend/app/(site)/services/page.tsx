@@ -4,6 +4,7 @@ import { ServiceBooking } from "@/components/marketing/service-booking";
 import { site, jsonLd } from "@/lib/site";
 import { getServices, getSiteConfig } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
+import { resolveSlides } from "@/lib/hero-slides";
 
 /**
  * Rebuild this page from the admin's content at most once a minute.
@@ -42,6 +43,9 @@ export default async function ServicesPage() {
   // Admin → Website has nothing else to place on this page.
   const [bookable, config] = await Promise.all([getServices(), getSiteConfig()]);
   const copy = resolveCopy(config?.copy);
+  // Resolved here so the right banner is in the HTML on first paint —
+  // no extra request, `config` is already fetched above.
+  const slides = resolveSlides(config?.slides, "services");
 
   // Built from the live list so structured data only ever describes what the
   // page actually shows.
@@ -70,7 +74,7 @@ export default async function ServicesPage() {
           page still has exactly one, for search engines and for a screen
           reader arriving here. */}
       <h1 className="sr-only">{copy.servicesHeroHeadline}</h1>
-      <HeroBanner page="services" />
+      <HeroBanner slides={slides} />
 
       {/* The page is the catalogue and the form it books through. The
           residential grid, the trust badges and the closing CTA that used to

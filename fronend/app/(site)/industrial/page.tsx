@@ -4,6 +4,7 @@ import { ServiceBooking } from "@/components/marketing/service-booking";
 import { site, jsonLd } from "@/lib/site";
 import { getIndustrialServices, getSiteConfig } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
+import { resolveSlides } from "@/lib/hero-slides";
 
 /**
  * Rebuild this page from the admin's content at most once a minute.
@@ -42,6 +43,9 @@ export default async function IndustrialPage() {
   // Admin → Website has nothing else to place on this page.
   const [services, config] = await Promise.all([getIndustrialServices(), getSiteConfig()]);
   const copy = resolveCopy(config?.copy);
+  // Resolved here so the right banner is in the HTML on first paint —
+  // no extra request, `config` is already fetched above.
+  const slides = resolveSlides(config?.slides, "industrial");
 
   // Built from the live list so structured data matches what renders. The
   // static fallback catalogue this page used to fall back on is gone: the
@@ -73,7 +77,7 @@ export default async function IndustrialPage() {
           page still has exactly one, for search engines and for a screen
           reader arriving here. */}
       <h1 className="sr-only">{copy.industrialHeroHeadline}</h1>
-      <HeroBanner page="industrial" />
+      <HeroBanner slides={slides} />
 
       {/* Same shape as /services — capability cards, then the enquiry form.
           The grid-solutions split, the bespoke numbered cards and the

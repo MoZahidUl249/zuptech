@@ -4,6 +4,7 @@ import { FeaturedEquipment } from "@/components/marketing/featured-equipment";
 import { site, jsonLd } from "@/lib/site";
 import { getIndustrialServices, getServices, getShowcaseCards, getSiteConfig } from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
+import { resolveSlides } from "@/lib/hero-slides";
 import { ShowcaseStrip } from "@/components/marketing/showcase-strip";
 import { HomeBooking } from "@/components/marketing/home-booking";
 
@@ -55,6 +56,9 @@ export default async function HomePage() {
     getSiteConfig(),
   ]);
   const copy = resolveCopy(config?.copy);
+  // Resolved here so the right banner is in the HTML on first paint —
+  // no extra request, `config` is already fetched above.
+  const slides = resolveSlides(config?.slides, "home");
 
   return (
     <main>
@@ -69,7 +73,7 @@ export default async function HomePage() {
           screen reader announces something other than "Featured promotions"
           on arrival. It renders nothing on screen. */}
       <h1 className="sr-only">{copy.homeHeroHeadline}</h1>
-      <HeroBanner />
+      <HeroBanner slides={slides} />
 
       <FeaturedEquipment />
 
