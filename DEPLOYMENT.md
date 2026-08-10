@@ -91,6 +91,13 @@ git clone git@github.com:OWNER/REPO.git /opt/zuptech
 cd /opt/zuptech && git status     # proves the key works
 ```
 
+`/opt/zuptech` is this guide's path, not a requirement — `scripts/deploy.sh`
+resolves its own checkout, and the deploy workflow takes `APP_DIR` (falling
+back to `~/zup/zuptech`, where the live box actually keeps it). If the clone
+lives somewhere else, set `APP_DIR` rather than moving it: the workflow used to
+hardcode `/opt/zuptech` and every rollout failed on its first line, on a box
+whose checkout was one directory over.
+
 Note there are **two different keys** in this setup, and mixing them up is the
 usual cause of a failed first deploy:
 

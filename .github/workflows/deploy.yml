@@ -93,7 +93,11 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            cd /opt/zuptech
+            # Wherever the checkout actually is. It was hardcoded to
+            # /opt/zuptech, which does not exist on the box — the live stack
+            # runs out of ~/zup/zuptech, so every rollout died on its first
+            # line while CI reported the images published.
+            cd "${APP_DIR:-$HOME/zup/zuptech}"
 
             # Compose files and nginx config are read from the checkout, so the
             # VPS needs the repo even though it runs prebuilt images.
@@ -102,6 +106,13 @@ jobs:
 
             echo "${{ secrets.GITHUB_TOKEN }}" \
               | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # REGISTRY is exported here rather than read from .env.production,
+            # which still carries the placeholder the images were built under
+            # by hand. A shell variable wins over --env-file in compose's
+            # interpolation, so this points the pull at the packages the
+            # publish job just pushed without editing anything on the box.
+            export REGISTRY=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
             # Pull, migrate BOTH databases, start, verify, prune. Deliberately
             # the same script an operator runs by hand, so a fix to the rollout
@@ -125,7 +136,7 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            cd /opt/zuptech
+            cd "${APP_DIR:-$HOME/zup/zuptech}"
             code=$(docker compose --env-file .env.production exec -T backend \
               bun -e "fetch('http://127.0.0.1:3000/api/site-config').then(r=>console.log(r.status)).catch(()=>console.log('000'))")
             echo "GET /api/site-config -> $code"
