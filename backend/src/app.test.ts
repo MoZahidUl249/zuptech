@@ -71,7 +71,11 @@ interface FakeProduct {
   imgHint: string | null;
   specs: string[];
   description: string | null;
-  video: string | null;
+  // Not nullable, and not `null` here either: the column is
+  // `String @default("")`, and a fixture that says null sends the media
+  // cleanup on delete into `null.startsWith(...)` — a 500 this suite would be
+  // reporting against a shape the database cannot produce.
+  video: string;
   photos: string[];
 }
 
@@ -100,7 +104,7 @@ const CATALOG: FakeProduct[] = [
     imgHint: null,
     specs: [],
     description: null,
-    video: null,
+    video: "",
     photos: [],
   },
 ];
@@ -117,10 +121,31 @@ let productCounts = {
   landingPages: 0,
 };
 
+/** Product ids whose stock ledger the delete route cleared, in order. */
+let deletedMovementsFor: string[] = [];
+
+/** The subset of the client the delete route's transaction touches. Handed to
+ *  the callback as `tx`, so what the route does inside the transaction is
+ *  observable — the ledger clearing in particular. */
+const txClient = {
+  stockMovement: {
+    deleteMany: async ({ where }: { where: { productId: string } }) => {
+      deletedMovementsFor.push(where.productId);
+      return { count: 0 };
+    },
+  },
+  product: { delete: async () => CATALOG[0] },
+  siteConfig: {
+    findUniqueOrThrow: async () => ({ featuredIds: [] }),
+    update: async () => ({ featuredIds: [] }),
+  },
+};
+
 mock.module("./lib/db", () => ({
   prisma: {
     // /health proves the adapter is connected before reporting ok.
     $queryRaw: async () => [{ "?column?": 1 }],
+    $transaction: async (fn: (tx: typeof txClient) => Promise<unknown>) => fn(txClient),
     // getStaffContext's lookup — the door every admin route goes through.
     staff: { findUnique: async () => staffRow },
     // priceCart's catalog read. The `where` carries orderableProductWhere()'s
@@ -318,18 +343,15 @@ describe("deleting a product refuses what the database would refuse", () => {
     };
   };
 
+  beforeEach(() => {
+    deletedMovementsFor = [];
+  });
   afterEach(() => counts({}));
 
-  // Every `Restrict` foreign key on Product, one per case. A relation missing
-  // from the route's `_count` reaches prisma.delete() and comes back as a 500
-  // from Postgres — which is what a landing page did in production.
-  for (const relation of [
-    "orderItems",
-    "purchaseOrders",
-    "movements",
-    "warranties",
-    "landingPages",
-  ] as const) {
+  // Trading history, one case each. A relation missing from the route's
+  // `_count` reaches prisma.delete() and comes back as a 500 from Postgres —
+  // which is what a landing page did in production.
+  for (const relation of ["orderItems", "purchaseOrders", "warranties", "landingPages"] as const) {
     test(`${relation} block the delete with a 409, not a 500`, async () => {
       signInAs({ products: "manage" });
       counts({ [relation]: 1 });
@@ -344,6 +366,17 @@ describe("deleting a product refuses what the database would refuse", () => {
     counts({ landingPages: 2 });
     const { body } = await call("DELETE", "/admin/api/products/ips1000");
     expect(String(body?.error)).toContain("landing page");
+  });
+
+  // The counting ledger is not trading history. One stock adjustment used to
+  // make a product permanently undeletable, which is how a mistyped test row
+  // became a permanent catalogue entry with nothing behind it.
+  test("a stock movement does not block — the ledger goes with the product", async () => {
+    signInAs({ products: "manage" });
+    counts({ movements: 3 });
+    const { status } = await call("DELETE", "/admin/api/products/ips1000");
+    expect(status).toBe(200);
+    expect(deletedMovementsFor).toEqual(["ips1000"]);
   });
 });
 

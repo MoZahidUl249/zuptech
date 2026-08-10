@@ -134,8 +134,18 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
   )
 
   /**
-   * Deleting is only possible for products with no history (orders, POs,
-   * movements reference them). Anything with history should be hidden instead.
+   * Deleting is only possible for products with no *trading* history. Anything
+   * a customer or a supplier is party to — an order line, a purchase order, a
+   * warranty — should be hidden instead, because those rows are the evidence
+   * for money that moved and they name a product that has to keep existing.
+   *
+   * A StockMovement deliberately does NOT block, and is deleted with the
+   * product below. It used to block, which meant one stock adjustment made a
+   * product permanently undeletable: nothing had ever been bought or sold, and
+   * the panel still answered "set it to Hidden instead", forever, for a row
+   * created by mistake. A movement is this service's own counting ledger, and
+   * counting a product nobody ever traded proves nothing once the product is
+   * gone. Orders, POs and warranties are the history worth refusing over.
    *
    * The count below must name **every** relation whose foreign key is
    * `Restrict` — only QuantityOffer and FreeDeliveryOffer cascade. It used to
@@ -144,7 +154,7 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
    * ("Foreign key constraint violated on the constraint:
    * `LandingPage_productId_fkey`"): an unexplained failure on the one screen
    * that could not act on it. Adding a relation to schema.prisma without adding
-   * it here reintroduces exactly that.
+   * it here — to the guard or to the transaction — reintroduces exactly that.
    */
   .delete("/admin/api/products/:id", async ({ params, staffCtx }) => {
     assertCan(staffCtx, "products", "manage");
@@ -165,10 +175,10 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
     });
     if (!product) throw notFound("Product");
 
-    const { orderItems, purchaseOrders, movements, warranties, landingPages } = product._count;
-    if (orderItems + purchaseOrders + movements + warranties > 0) {
+    const { orderItems, purchaseOrders, warranties, landingPages } = product._count;
+    if (orderItems + purchaseOrders + warranties > 0) {
       throw conflict(
-        "This product has order/inventory history — set it to Hidden instead of deleting",
+        "This product has been ordered or bought in — set it to Hidden instead of deleting",
       );
     }
     // A campaign page is the admin's own row, not customer history, so this one
@@ -180,6 +190,9 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
     }
 
     await prisma.$transaction(async (tx) => {
+      // The ledger goes first — its foreign key is Restrict, so the delete
+      // below fails while a movement still points here.
+      await tx.stockMovement.deleteMany({ where: { productId: params.id } });
       await tx.product.delete({ where: { id: params.id } });
       // Deleted products leave the featured row automatically (§4.7).
       const config = await tx.siteConfig.findUniqueOrThrow({ where: { id: 1 } });
