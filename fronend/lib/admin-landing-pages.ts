@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { unwrap } from "@/lib/admin-http";
 import { api } from "@/lib/eden";
+import { whole } from "@/lib/utils";
 
 /** Row shape of GET /admin/api/landing-pages (LandingPageDto). */
 export interface LandingPage {
@@ -149,12 +150,32 @@ export type LandingPageDraft = Omit<
 > &
   Partial<Pick<LandingPage, CampaignKey>>;
 
+/**
+ * Round the campaign's three numeric fields to what the DTO takes.
+ *
+ * Same boundary rule as `productBody` in admin-api.ts: the editor's number
+ * inputs hold what is being typed, including a partial decimal, and every one
+ * of these is an integer server-side. A fractional offer price answered 422
+ * with a schema dump, on a screen whose only other option was to lose the copy
+ * already written into the form.
+ */
+function campaignNumbers<T extends Partial<LandingPageDraft>>(body: T): T {
+  const out = { ...body };
+  for (const key of ["offerPrice", "compareAtPrice", "bundleMaxQty"] as const) {
+    if (typeof out[key] === "number") out[key] = whole(out[key]) as T[typeof key];
+  }
+  return out;
+}
+
 export const createLandingPage = (draft: LandingPageDraft) =>
-  unwrap(api.admin.api["landing-pages"].post(draft), "POST /admin/api/landing-pages");
+  unwrap(api.admin.api["landing-pages"].post(campaignNumbers(draft)), "POST /admin/api/landing-pages");
 
 
 export const patchLandingPage = (id: string, patch: Partial<LandingPageDraft>) =>
-  unwrap(api.admin.api["landing-pages"]({ id }).patch(patch), "PATCH /admin/api/landing-pages/:id");
+  unwrap(
+    api.admin.api["landing-pages"]({ id }).patch(campaignNumbers(patch)),
+    "PATCH /admin/api/landing-pages/:id",
+  );
 
 export const deleteLandingPage = (id: string) => unwrap(api.admin.api["landing-pages"]({ id }).delete(), "DELETE /admin/api/landing-pages/:id");
 

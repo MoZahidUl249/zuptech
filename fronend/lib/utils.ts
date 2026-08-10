@@ -17,23 +17,42 @@ export function slugify(name: string, fallbackPrefix = "item"): string {
   return s.length >= 2 ? s : `${fallbackPrefix}-${Date.now()}`;
 }
 
+type Bounds = { min?: number; max?: number };
+
 /**
- * Read a number input as the whole number the API will accept.
+ * Read a number input into state, while it is still being typed.
  *
- * Every money and count field on the admin is an integer server-side (money is
- * integer BDT throughout), and `<input type="number">` hands back whatever was
- * typed — "1250.50", "12e3", "" or "abc". The fields used to do
- * `Math.max(0, Number(value) || 0)`, which passes 1250.5 through untouched: the
- * DTO then answered 422 with a schema dump, so a price typed with poysha made
- * the whole product unsavable. Some fields rounded and some didn't, and the
- * ones that didn't were the ones people type into.
+ * Deliberately does NOT round. A controlled `<input type="number">` renders
+ * back whatever this returns, so rounding here fights the keyboard: typing
+ * "1250.50" rounds at the "1250." keystroke, the input re-renders as "1250",
+ * the dot the operator typed is gone, and the remaining "5" and "0" land as
+ * digits — ৳12,510 saved silently for a ৳1,250.50 that was typed. Wrong money
+ * with no error is worse than the 422 that rounding here was meant to prevent.
  *
- * NaN (and any non-finite result) reads as `min`, so a half-typed value never
- * becomes a submitted one.
+ * Rounding to the integer the API takes belongs at the boundary, on the way
+ * out — see `whole()`.
+ *
+ * A half-typed or unparseable value ("", "-", "abc") reads as `min`, so state
+ * never holds NaN.
+ */
+export function numberInput(value: string, { min = 0, max = Infinity }: Bounds = {}): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * The whole number the API will accept, for the boundary that sends it.
+ *
+ * Every money and count field is an integer server-side (money is integer BDT
+ * throughout), and `t.Integer` answers 1250.5 with a 422 carrying a schema
+ * dump — which is how a price typed with poysha made a product unsavable, with
+ * nothing in the panel saying why. Apply this where the request body is built,
+ * not where the keystroke arrives.
  */
 export function whole(
-  value: string,
-  { min = 0, max = Number.MAX_SAFE_INTEGER }: { min?: number; max?: number } = {},
+  value: string | number,
+  { min = 0, max = Number.MAX_SAFE_INTEGER }: Bounds = {},
 ): number {
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return min;

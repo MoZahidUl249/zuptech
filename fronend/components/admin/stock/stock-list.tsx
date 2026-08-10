@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { cn, whole } from "@/lib/utils";
+import { cn, numberInput } from "@/lib/utils";
 import {
   isUnsaved,
   useAdmin,
@@ -447,7 +447,7 @@ function ReorderDialog({
                 inputMode="numeric"
                 min={1}
                 value={qty}
-                onChange={(e) => setQty(whole(e.target.value, { min: 1 }))}
+                onChange={(e) => setQty(numberInput(e.target.value, { min: 1 }))}
                 className={inputCls}
               />
             </Field>

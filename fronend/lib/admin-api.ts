@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { unwrap } from "@/lib/admin-http";
 import { api } from "@/lib/eden";
 import { emptyState } from "@/lib/admin";
+import { whole } from "@/lib/utils";
 import type { ServiceBulletStyle, ServiceImageSide } from "@/lib/api";
 import type {
   AdminModule,
@@ -415,25 +416,33 @@ export const putPaymentMethod = (id: string, body: Partial<PaymentMethod>) =>
 /* ===== Location tree (delivery/installation pricing) ===== */
 
 
-/** Fields the backend accepts for product create/update (rest is computed). */
+/**
+ * Fields the backend accepts for product create/update (rest is computed).
+ *
+ * Every amount goes out through `whole()`. The editor lets a fractional value
+ * exist in state while it is being typed — it has to, or the input eats the
+ * decimal point mid-keystroke — so this is the point where "1250.50" becomes
+ * the 1251 that `t.Integer` accepts. Without it the DTO answers 422 with a
+ * schema dump and the product cannot be saved at all.
+ */
 function productBody(p: AdminProduct) {
   return {
     name: p.name,
     slug: p.slug,
     categoryId: p.categoryId,
-    price: p.price,
-    minDeposit: p.minDeposit,
+    price: whole(p.price),
+    minDeposit: whole(p.minDeposit),
     onSale: p.onSale,
-    salePrice: p.salePrice,
-    deliveryFeeInsideDhaka: p.deliveryFeeInsideDhaka,
-    deliveryFeeOutsideDhaka: p.deliveryFeeOutsideDhaka,
-    installationFeeInsideDhaka: p.installationFeeInsideDhaka,
-    installationFeeOutsideDhaka: p.installationFeeOutsideDhaka,
+    salePrice: whole(p.salePrice),
+    deliveryFeeInsideDhaka: whole(p.deliveryFeeInsideDhaka),
+    deliveryFeeOutsideDhaka: whole(p.deliveryFeeOutsideDhaka),
+    installationFeeInsideDhaka: whole(p.installationFeeInsideDhaka),
+    installationFeeOutsideDhaka: whole(p.installationFeeOutsideDhaka),
     // Nested relation writes, not columns — the backend replaces each whole
     // tier list with whatever is sent, so always send the current ones.
     quantityOffers: p.quantityOffers,
     freeDeliveryOffers: p.freeDeliveryOffers,
-    warrantyMonths: p.warrantyMonths,
+    warrantyMonths: whole(p.warrantyMonths, { max: 240 }),
     imgHint: p.imgHint,
     specs: p.specs.filter((s) => s.trim() !== ""),
     description: p.description,
@@ -443,8 +452,8 @@ function productBody(p: AdminProduct) {
     // blank has to reach the DTO so it comes back as a validation error instead
     // of being quietly discarded on its way out.
     sku: p.sku,
-    cost: p.cost,
-    reorderAt: p.reorderAt,
+    cost: whole(p.cost),
+    reorderAt: whole(p.reorderAt),
     visible: p.visible,
     photos: p.photos.filter((x): x is string => Boolean(x)),
     video: p.video ?? "",
@@ -463,8 +472,8 @@ function productBody(p: AdminProduct) {
 export const createProduct = (p: AdminProduct) =>
   unwrap(api.admin.api.products.post({
     ...productBody(p),
-    stock: p.stock,
-    reserved: p.reserved,
+    stock: whole(p.stock),
+    reserved: whole(p.reserved),
   }), "POST /admin/api/products").then(toAdminProduct);
 
 export const patchProduct = (p: AdminProduct) =>
@@ -670,7 +679,12 @@ export function useTeam() {
 }
 
 export const adjustStock = (productId: string, onHand: number, reason: string) =>
-  unwrap(api.admin.api.stock({ productId }).patch({ onHand, reason }), "PATCH /admin/api/stock/:id");
+  unwrap(
+    // Whole units, like every other amount this client sends — the count box
+    // holds what is being typed, the request holds what the API takes.
+    api.admin.api.stock({ productId }).patch({ onHand: whole(onHand), reason }),
+    "PATCH /admin/api/stock/:id",
+  );
 
 export const createPurchaseOrder = (po: { supplierId: string; productId: string; qty: number }) =>
   unwrap(api.admin.api["purchase-orders"].post({
