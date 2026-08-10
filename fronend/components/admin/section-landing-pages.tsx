@@ -16,6 +16,7 @@ import {
   type LandingPageDraft,
 } from "@/lib/admin-landing-pages";
 import { site } from "@/lib/site";
+import { whole } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -488,7 +489,7 @@ function LandingPageEditor({
               type="number"
               value={draft.offerPrice}
               disabled={readOnly}
-              onChange={(e) => set("offerPrice", Number(e.target.value))}
+              onChange={(e) => set("offerPrice", whole(e.target.value))}
             />
             {/* Money is always recomputed from the catalog at checkout
                 (cal-bk.md §3) — this field is ad copy. Without this warning
@@ -507,7 +508,7 @@ function LandingPageEditor({
               type="number"
               value={draft.compareAtPrice}
               disabled={readOnly}
-              onChange={(e) => set("compareAtPrice", Number(e.target.value))}
+              onChange={(e) => set("compareAtPrice", whole(e.target.value))}
             />
           </Field>
           <Field label="Ribbon / urgency badge">
@@ -664,7 +665,7 @@ function LandingPageEditor({
           </Field>
           <Field label="How many bundle rows">
             <Input type="number" value={draft.bundleMaxQty ?? 3} disabled={readOnly}
-              onChange={(e) => set("bundleMaxQty", Number(e.target.value))} />
+              onChange={(e) => set("bundleMaxQty", whole(e.target.value))} />
             <p className="mt-1 text-ui-micro text-zup-soft">
               Prices come from the product&apos;s quantity offers, so what the page
               advertises is always what checkout charges.

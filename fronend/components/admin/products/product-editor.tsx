@@ -15,7 +15,7 @@ import {
   selectCls,
 } from "../ui";
 import { FormGroup, FormGroups } from "../primitives/form-section";
-import { slugChars } from "@/lib/utils";
+import { slugChars, whole } from "@/lib/utils";
 import { PhotoSlot, VideoSlot } from "./media-uploader";
 import { OfferTierEditor, duplicateMinQtys } from "./offer-tier-editor";
 
@@ -288,7 +288,7 @@ export function ProductEditor({
                 type="number"
                 inputMode="numeric"
                 value={p.price}
-                onChange={(e) => onChange({ price: Math.max(0, Number(e.target.value) || 0) })}
+                onChange={(e) => onChange({ price: whole(e.target.value) })}
                 className={inputCls}
               />
             </Field>
@@ -297,7 +297,7 @@ export function ProductEditor({
                 type="number"
                 inputMode="numeric"
                 value={p.cost}
-                onChange={(e) => onChange({ cost: Math.max(0, Number(e.target.value) || 0) })}
+                onChange={(e) => onChange({ cost: whole(e.target.value) })}
                 className={inputCls}
               />
             </Field>
@@ -308,7 +308,7 @@ export function ProductEditor({
                 min={0}
                 value={p.minDeposit}
                 onChange={(e) =>
-                  onChange({ minDeposit: Math.max(0, Math.round(Number(e.target.value) || 0)) })
+                  onChange({ minDeposit: whole(e.target.value) })
                 }
                 className={inputCls}
               />
@@ -334,7 +334,7 @@ export function ProductEditor({
                 disabled={!p.onSale}
                 value={p.salePrice}
                 onChange={(e) =>
-                  onChange({ salePrice: Math.max(0, Math.round(Number(e.target.value) || 0)) })
+                  onChange({ salePrice: whole(e.target.value) })
                 }
                 className={`${inputCls} disabled:opacity-50`}
               />
@@ -391,7 +391,7 @@ export function ProductEditor({
                 inputMode="numeric"
                 value={p.deliveryFeeInsideDhaka}
                 onChange={(e) =>
-                  onChange({ deliveryFeeInsideDhaka: Math.max(0, Number(e.target.value) || 0) })
+                  onChange({ deliveryFeeInsideDhaka: whole(e.target.value) })
                 }
                 className={inputCls}
               />
@@ -402,7 +402,7 @@ export function ProductEditor({
                 inputMode="numeric"
                 value={p.deliveryFeeOutsideDhaka}
                 onChange={(e) =>
-                  onChange({ deliveryFeeOutsideDhaka: Math.max(0, Number(e.target.value) || 0) })
+                  onChange({ deliveryFeeOutsideDhaka: whole(e.target.value) })
                 }
                 className={inputCls}
               />
@@ -416,7 +416,7 @@ export function ProductEditor({
                 inputMode="numeric"
                 value={p.installationFeeInsideDhaka}
                 onChange={(e) =>
-                  onChange({ installationFeeInsideDhaka: Math.max(0, Number(e.target.value) || 0) })
+                  onChange({ installationFeeInsideDhaka: whole(e.target.value) })
                 }
                 className={inputCls}
               />
@@ -427,7 +427,7 @@ export function ProductEditor({
                 inputMode="numeric"
                 value={p.installationFeeOutsideDhaka}
                 onChange={(e) =>
-                  onChange({ installationFeeOutsideDhaka: Math.max(0, Number(e.target.value) || 0) })
+                  onChange({ installationFeeOutsideDhaka: whole(e.target.value) })
                 }
                 className={inputCls}
               />
@@ -477,7 +477,7 @@ export function ProductEditor({
                 type="number"
                 inputMode="numeric"
                 value={p.stock}
-                onChange={(e) => onChange({ stock: Math.max(0, Number(e.target.value) || 0) })}
+                onChange={(e) => onChange({ stock: whole(e.target.value) })}
                 className={inputCls}
               />
             </Field>
@@ -486,7 +486,7 @@ export function ProductEditor({
                 type="number"
                 inputMode="numeric"
                 value={p.reorderAt}
-                onChange={(e) => onChange({ reorderAt: Math.max(0, Number(e.target.value) || 0) })}
+                onChange={(e) => onChange({ reorderAt: whole(e.target.value) })}
                 className={inputCls}
               />
             </Field>
@@ -511,7 +511,7 @@ export function ProductEditor({
                 // delivered — see components/admin/section-warranty.tsx.
                 onChange={(e) =>
                   onChange({
-                    warrantyMonths: Math.min(240, Math.max(0, Number(e.target.value) || 0)),
+                    warrantyMonths: whole(e.target.value, { max: 240 }),
                   })
                 }
                 className={inputCls}
