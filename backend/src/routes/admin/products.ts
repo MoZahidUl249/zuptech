@@ -136,20 +136,46 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
   /**
    * Deleting is only possible for products with no history (orders, POs,
    * movements reference them). Anything with history should be hidden instead.
+   *
+   * The count below must name **every** relation whose foreign key is
+   * `Restrict` — only QuantityOffer and FreeDeliveryOffer cascade. It used to
+   * check three of the five, so a product carried by a landing page passed the
+   * guard, reached `product.delete()` and came back as a 500 from Postgres
+   * ("Foreign key constraint violated on the constraint:
+   * `LandingPage_productId_fkey`"): an unexplained failure on the one screen
+   * that could not act on it. Adding a relation to schema.prisma without adding
+   * it here reintroduces exactly that.
    */
   .delete("/admin/api/products/:id", async ({ params, staffCtx }) => {
     assertCan(staffCtx, "products", "manage");
 
     const product = await prisma.product.findUnique({
       where: { id: params.id },
-      include: { _count: { select: { orderItems: true, purchaseOrders: true, movements: true } } },
+      include: {
+        _count: {
+          select: {
+            orderItems: true,
+            purchaseOrders: true,
+            movements: true,
+            warranties: true,
+            landingPages: true,
+          },
+        },
+      },
     });
     if (!product) throw notFound("Product");
 
-    const { orderItems, purchaseOrders, movements } = product._count;
-    if (orderItems + purchaseOrders + movements > 0) {
+    const { orderItems, purchaseOrders, movements, warranties, landingPages } = product._count;
+    if (orderItems + purchaseOrders + movements + warranties > 0) {
       throw conflict(
         "This product has order/inventory history — set it to Hidden instead of deleting",
+      );
+    }
+    // A campaign page is the admin's own row, not customer history, so this one
+    // says what to go and do rather than pointing at Hidden.
+    if (landingPages > 0) {
+      throw conflict(
+        `This product is used by ${landingPages} landing page${landingPages === 1 ? "" : "s"} — delete ${landingPages === 1 ? "it" : "them"} first, or point ${landingPages === 1 ? "it" : "them"} at another product`,
       );
     }
 

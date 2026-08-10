@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 /**
  * HTTP-level tests.
@@ -107,6 +107,16 @@ const CATALOG: FakeProduct[] = [
 
 type Where = { id?: { in?: string[] } };
 
+/** What DELETE /admin/api/products/:id sees hanging off the row it was asked
+ *  to remove. Reassigned per test; nothing else reads it. */
+let productCounts = {
+  orderItems: 0,
+  purchaseOrders: 0,
+  movements: 0,
+  warranties: 0,
+  landingPages: 0,
+};
+
 mock.module("./lib/db", () => ({
   prisma: {
     // /health proves the adapter is connected before reporting ok.
@@ -120,6 +130,10 @@ mock.module("./lib/db", () => ({
       findMany: async ({ where }: { where?: Where } = {}) =>
         where?.id?.in ? CATALOG.filter((p) => where.id?.in?.includes(p.id)) : [],
       findFirst: async () => null,
+      // The delete guard's lookup. `productCounts` is what the test under
+      // "deleting a product refuses what the database would refuse" sets to
+      // stand a product on top of history it can't be deleted out from under.
+      findUnique: async () => ({ ...CATALOG[0], _count: productCounts }),
       // The catalogue is paged; the route asks for the matching total so the
       // shop can render page controls.
       count: async () => 0,
@@ -285,6 +299,51 @@ describe("admin routes enforce per-module permissions", () => {
 
     signInAs({ homepage: "manage" });
     expect((await call("PATCH", "/admin/api/products/featured", { ids: [] })).status).toBe(200);
+  });
+});
+
+/* ========================================================================
+ * Deleting a product
+ * ==================================================================== */
+
+describe("deleting a product refuses what the database would refuse", () => {
+  const counts = (over: Partial<typeof productCounts>) => {
+    productCounts = {
+      orderItems: 0,
+      purchaseOrders: 0,
+      movements: 0,
+      warranties: 0,
+      landingPages: 0,
+      ...over,
+    };
+  };
+
+  afterEach(() => counts({}));
+
+  // Every `Restrict` foreign key on Product, one per case. A relation missing
+  // from the route's `_count` reaches prisma.delete() and comes back as a 500
+  // from Postgres — which is what a landing page did in production.
+  for (const relation of [
+    "orderItems",
+    "purchaseOrders",
+    "movements",
+    "warranties",
+    "landingPages",
+  ] as const) {
+    test(`${relation} block the delete with a 409, not a 500`, async () => {
+      signInAs({ products: "manage" });
+      counts({ [relation]: 1 });
+      const { status, body } = await call("DELETE", "/admin/api/products/ips1000");
+      expect(status).toBe(409);
+      expect(typeof body?.error).toBe("string");
+    });
+  }
+
+  test("a landing page names itself, so the operator knows what to go and delete", async () => {
+    signInAs({ products: "manage" });
+    counts({ landingPages: 2 });
+    const { body } = await call("DELETE", "/admin/api/products/ips1000");
+    expect(String(body?.error)).toContain("landing page");
   });
 });
 

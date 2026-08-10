@@ -142,11 +142,15 @@ export function ProductsSection() {
     setDraftError(null);
     setCreating(true);
 
+    // A hand-typed slug is normalized as it's typed, but it can still be too
+    // short for the API's minLength — fall back to the name-derived one rather
+    // than sending something that comes back 422.
+    const typed = draft.slug.trim().replace(/^-+|-+$/g, "");
     const body: AdminProduct = {
       ...draft,
       name: draft.name.trim(),
       sku: draft.sku.trim(),
-      slug: draft.slug.trim() || slugify(draft.name, "product"),
+      slug: typed.length >= 2 ? typed : slugify(draft.name, "product"),
     };
 
     let created: AdminProduct;

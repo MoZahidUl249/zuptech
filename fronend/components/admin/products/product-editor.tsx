@@ -15,6 +15,7 @@ import {
   selectCls,
 } from "../ui";
 import { FormGroup, FormGroups } from "../primitives/form-section";
+import { slugChars } from "@/lib/utils";
 import { PhotoSlot, VideoSlot } from "./media-uploader";
 import { OfferTierEditor, duplicateMinQtys } from "./offer-tier-editor";
 
@@ -178,9 +179,15 @@ export function ProductEditor({
             </summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <Field label="Web address" className="col-span-2">
+              {/*
+                Normalized on the way in, not validated on the way out. The API
+                takes `^[a-z0-9-]+$` and answers anything else with a 422 the
+                operator can do nothing with, so a capital letter or a space
+                typed here used to make the whole product unsavable.
+              */}
               <input
                 value={p.slug}
-                onChange={(e) => onChange({ slug: e.target.value })}
+                onChange={(e) => onChange({ slug: slugChars(e.target.value) })}
                 placeholder="auto-generated-from-name"
                 aria-label="URL slug"
                 className={`${inputCls} font-mono`}
