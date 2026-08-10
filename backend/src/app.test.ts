@@ -115,14 +115,20 @@ type Where = { id?: { in?: string[] } };
  *  to remove. Reassigned per test; nothing else reads it. */
 let productCounts = {
   orderItems: 0,
-  purchaseOrders: 0,
   movements: 0,
   warranties: 0,
   landingPages: 0,
 };
 
+/** The product's purchase orders, read as rows because only a Received one is
+ *  history — a Cancelled PO must not stand in the way of a delete. */
+let productPurchaseOrders: { status: string }[] = [];
+
 /** Product ids whose stock ledger the delete route cleared, in order. */
 let deletedMovementsFor: string[] = [];
+
+/** Same, for the purchase orders it cleared alongside the product. */
+let deletedPosFor: string[] = [];
 
 /** The subset of the client the delete route's transaction touches. Handed to
  *  the callback as `tx`, so what the route does inside the transaction is
@@ -131,6 +137,12 @@ const txClient = {
   stockMovement: {
     deleteMany: async ({ where }: { where: { productId: string } }) => {
       deletedMovementsFor.push(where.productId);
+      return { count: 0 };
+    },
+  },
+  purchaseOrder: {
+    deleteMany: async ({ where }: { where: { productId: string } }) => {
+      deletedPosFor.push(where.productId);
       return { count: 0 };
     },
   },
@@ -158,7 +170,11 @@ mock.module("./lib/db", () => ({
       // The delete guard's lookup. `productCounts` is what the test under
       // "deleting a product refuses what the database would refuse" sets to
       // stand a product on top of history it can't be deleted out from under.
-      findUnique: async () => ({ ...CATALOG[0], _count: productCounts }),
+      findUnique: async () => ({
+        ...CATALOG[0],
+        _count: productCounts,
+        purchaseOrders: productPurchaseOrders,
+      }),
       // The catalogue is paged; the route asks for the matching total so the
       // shop can render page controls.
       count: async () => 0,
@@ -333,25 +349,23 @@ describe("admin routes enforce per-module permissions", () => {
 
 describe("deleting a product refuses what the database would refuse", () => {
   const counts = (over: Partial<typeof productCounts>) => {
-    productCounts = {
-      orderItems: 0,
-      purchaseOrders: 0,
-      movements: 0,
-      warranties: 0,
-      landingPages: 0,
-      ...over,
-    };
+    productCounts = { orderItems: 0, movements: 0, warranties: 0, landingPages: 0, ...over };
   };
 
   beforeEach(() => {
     deletedMovementsFor = [];
+    deletedPosFor = [];
+    productPurchaseOrders = [];
   });
-  afterEach(() => counts({}));
+  afterEach(() => {
+    counts({});
+    productPurchaseOrders = [];
+  });
 
-  // Trading history, one case each. A relation missing from the route's
-  // `_count` reaches prisma.delete() and comes back as a 500 from Postgres —
-  // which is what a landing page did in production.
-  for (const relation of ["orderItems", "purchaseOrders", "warranties", "landingPages"] as const) {
+  // Trading history, one case each. A relation missing from the route's guard
+  // reaches prisma.delete() and comes back as a 500 from Postgres — which is
+  // what a landing page did in production.
+  for (const relation of ["orderItems", "warranties", "landingPages"] as const) {
     test(`${relation} block the delete with a 409, not a 500`, async () => {
       signInAs({ products: "manage" });
       counts({ [relation]: 1 });
@@ -360,6 +374,39 @@ describe("deleting a product refuses what the database would refuse", () => {
       expect(typeof body?.error).toBe("string");
     });
   }
+
+  test("a received purchase order blocks — that one is inventory history", async () => {
+    signInAs({ products: "manage" });
+    productPurchaseOrders = [{ status: "Received" }];
+    const { status, body } = await call("DELETE", "/admin/api/products/ips1000");
+    expect(status).toBe(409);
+    expect(String(body?.error)).toContain("received purchase order");
+  });
+
+  // DELETE /admin/api/purchase-orders/:id refuses only a Received PO, so a
+  // Cancelled one is a row the inventory screen would delete on its own. It
+  // blocked the product delete anyway: an order for 100 units that never
+  // arrived made "Voltage Protector 220V 40A" permanently undeletable.
+  for (const status of ["Cancelled", "Confirmed", "In transit"] as const) {
+    test(`a ${status} purchase order does not block, and goes with the product`, async () => {
+      signInAs({ products: "manage" });
+      productPurchaseOrders = [{ status }];
+      const res = await call("DELETE", "/admin/api/products/ips1000");
+      expect(res.status).toBe(200);
+      expect(deletedPosFor).toEqual(["ips1000"]);
+    });
+  }
+
+  test("the refusal names what is behind the product, with counts", async () => {
+    signInAs({ products: "manage" });
+    counts({ orderItems: 2, warranties: 1 });
+    productPurchaseOrders = [{ status: "Received" }];
+    const { body } = await call("DELETE", "/admin/api/products/ips1000");
+    // "ordered or bought in" left three screens to guess between.
+    expect(String(body?.error)).toContain("2 order lines");
+    expect(String(body?.error)).toContain("1 received purchase order");
+    expect(String(body?.error)).toContain("1 warranty");
+  });
 
   test("a landing page names itself, so the operator knows what to go and delete", async () => {
     signInAs({ products: "manage" });

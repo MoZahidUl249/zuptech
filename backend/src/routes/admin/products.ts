@@ -162,23 +162,33 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
     const product = await prisma.product.findUnique({
       where: { id: params.id },
       include: {
-        _count: {
-          select: {
-            orderItems: true,
-            purchaseOrders: true,
-            movements: true,
-            warranties: true,
-            landingPages: true,
-          },
-        },
+        _count: { select: { orderItems: true, warranties: true, landingPages: true } },
+        // Read as rows, not a count: only a *received* PO is history. See below.
+        purchaseOrders: { select: { status: true } },
       },
     });
     if (!product) throw notFound("Product");
 
-    const { orderItems, purchaseOrders, warranties, landingPages } = product._count;
-    if (orderItems + purchaseOrders + warranties > 0) {
+    const { orderItems, warranties, landingPages } = product._count;
+    // DELETE /admin/api/purchase-orders/:id already draws this line — a
+    // Received PO is inventory history and cannot be deleted, anything else
+    // can. The product guard used to refuse on *any* PO, so a single
+    // **Cancelled** order for something that never arrived, and which the
+    // inventory screen would happily delete on its own, made the product
+    // permanently undeletable. One rule, in both places.
+    const receivedPos = product.purchaseOrders.filter((po) => po.status === "Received").length;
+
+    // Say which of them it is. "Ordered or bought in" left the operator to
+    // guess between three different screens, and the counts are the difference
+    // between "hide this" and "go and delete that one row".
+    const blockers = [
+      orderItems > 0 ? `${orderItems} order line${orderItems === 1 ? "" : "s"}` : "",
+      receivedPos > 0 ? `${receivedPos} received purchase order${receivedPos === 1 ? "" : "s"}` : "",
+      warranties > 0 ? `${warranties} warrant${warranties === 1 ? "y" : "ies"}` : "",
+    ].filter(Boolean);
+    if (blockers.length > 0) {
       throw conflict(
-        "This product has been ordered or bought in — set it to Hidden instead of deleting",
+        `This product has ${blockers.join(", ")} behind it — set it to Hidden instead of deleting`,
       );
     }
     // A campaign page is the admin's own row, not customer history, so this one
@@ -190,9 +200,12 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
     }
 
     await prisma.$transaction(async (tx) => {
-      // The ledger goes first — its foreign key is Restrict, so the delete
-      // below fails while a movement still points here.
+      // Both foreign keys are Restrict, so these go before the product or the
+      // delete below fails. Every PO still attached here is non-Received — the
+      // guard above refused otherwise — which is exactly the set the inventory
+      // screen lets an operator delete one at a time.
       await tx.stockMovement.deleteMany({ where: { productId: params.id } });
+      await tx.purchaseOrder.deleteMany({ where: { productId: params.id } });
       await tx.product.delete({ where: { id: params.id } });
       // Deleted products leave the featured row automatically (§4.7).
       const config = await tx.siteConfig.findUniqueOrThrow({ where: { id: 1 } });
