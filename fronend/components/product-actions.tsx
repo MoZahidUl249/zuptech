@@ -36,7 +36,6 @@ export function ProductActions({
   // a discount. The offer ladder below reads `qty` to show which tiers this
   // quantity has reached — it still shows no money; the charged amount comes
   // from the quote at checkout.
-  const hasSale = product.salePrice !== undefined && product.salePrice < product.price;
   const effectivePrice = product.salePrice ?? product.price;
 
   // Either zone having a fee means this product ships with installation.
@@ -114,56 +113,40 @@ export function ProductActions({
       {/* Live: rungs light up as the stepper crosses each threshold. */}
       <OfferLadder product={product} qty={qty} variant="panel" title={offersTitle} />
 
-      {/* Desktop buttons */}
-      <div className="hidden flex-col gap-2.5 md:flex">
+      {/*
+       * The buy buttons, in the page at every size.
+       *
+       * These used to be desktop-only, with mobile served by a bar fixed above
+       * the tab bar. That bar is gone: the product page now orders itself so
+       * the buttons come straight after the name, which is the same job the
+       * floating bar was doing — except in the flow, where it doesn't cover the
+       * page, doesn't need a spacer under the content to compensate, and
+       * doesn't sit a second price next to the one already on screen.
+       */}
+      {/* Side by side, each taking half the row. `min-w-0` lets them actually
+          divide the space — without it a long label sets the button's minimum
+          width and pushes its sibling off. */}
+      <div className="flex gap-2.5">
         <button
           type="button"
           onClick={addToCart}
-          className="rounded-full bg-zup-orange px-8 py-4 text-base font-semibold text-white shadow-[0_8px_24px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark"
+          className="min-w-0 flex-1 rounded-full bg-zup-orange px-4 py-4 text-base font-semibold text-white shadow-[0_8px_24px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark"
         >
-          Add to Cart — {formatBDT(effectivePrice)} each
+          {/* The unit price is worth saying where there is room for it, but at
+              half a phone's width it wraps the label onto three lines. The
+              price is stated directly above these buttons either way. */}
+          Add to Cart
+          <span className="hidden sm:inline"> — {formatBDT(effectivePrice)} each</span>
         </button>
         <button
           type="button"
           onClick={buyNow}
-          className="rounded-full bg-zup-red px-8 py-4 text-base font-bold text-white shadow-[0_8px_24px_rgba(198,40,40,.25)] transition-colors hover:bg-zup-red-dark"
+          className="min-w-0 flex-1 rounded-full bg-zup-red px-4 py-4 text-base font-bold text-white shadow-[0_8px_24px_rgba(198,40,40,.25)] transition-colors hover:bg-zup-red-dark"
         >
           {ctaLabel}
         </button>
       </div>
 
-      {/* Mobile sticky bar */}
-      <div className="fixed inset-x-0 bottom-16 z-70 border-t border-zup-body/7 bg-white/94 px-4 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl md:hidden">
-        <div className="mx-auto flex max-w-[560px] items-center gap-3.5">
-          <div className="flex flex-col leading-tight">
-            <span className="text-[11px] text-zup-soft">Price</span>
-            <span className="flex items-baseline gap-1.5">
-              <span className="whitespace-nowrap text-lg font-extrabold tracking-[-0.02em]">
-                {formatBDT(effectivePrice)}
-              </span>
-              {hasSale ? (
-                <span className="text-[12px] text-zup-soft line-through">
-                  {formatBDT(product.price)}
-                </span>
-              ) : null}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={addToCart}
-            className="min-h-13 flex-1 rounded-[2px] bg-zup-orange text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(232,83,32,.3)] active:scale-[.98]"
-          >
-            Add to Cart
-          </button>
-          <button
-            type="button"
-            onClick={buyNow}
-            className="min-h-13 flex-1 rounded-[2px] bg-zup-red text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(198,40,40,.3)] active:scale-[.98]"
-          >
-            Buy Now
-          </button>
-        </div>
-      </div>
     </>
   );
 }

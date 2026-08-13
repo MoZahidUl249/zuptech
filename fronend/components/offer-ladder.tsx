@@ -1,6 +1,5 @@
 import { Tag, TrendingDown, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBDT } from "@/lib/site";
 import type { Product } from "@/lib/products";
 import { nextRung, offerLadder, type OfferRung } from "@/lib/pricing-display";
 
@@ -13,14 +12,17 @@ import { nextRung, offerLadder, type OfferRung } from "@/lib/pricing-display";
  * POST /api/pricing/quote. Passing `qty` only changes which rungs are shown as
  * earned — it never derives a price.
  *
- * Three densities so the product page, the cart line and the landing page
+ * Two densities so the product page, the cart line and the landing page
  * describe the same offers in the same words:
- *   panel  — the full ladder, for a product page or landing page
- *   line   — a compact strip, for a cart line
- *   badges — inline pills. NO CONSUMER as of 2026-08-13: the product card was
- *            stripped back to image/name/price and these came off it. Kept
- *            because it is the only compact rendering we have, but it is
- *            currently write-only — delete it or use it.
+ *   panel — the full ladder, for a product page or landing page
+ *   line  — a compact strip, for a cart line
+ *
+ * There was a third, `badges`: inline pills for the product card. The card was
+ * stripped back to image/name/price on 2026-08-13, which left it with no
+ * consumer, and it was deleted rather than kept on spec. A surface that wants
+ * offers in a few square centimetres should add the density it needs against
+ * `offerLadder`, not revive a rendering shaped for a card that no longer
+ * exists.
  */
 
 const RUNG_ICONS = {
@@ -40,60 +42,15 @@ export function OfferLadder({
   /** Quantity in hand. Omit where none has been chosen — every rung then
    *  renders as an available offer rather than an earned one. */
   qty?: number;
-  variant?: "badges" | "panel" | "line";
+  variant?: "panel" | "line";
   title?: string;
   className?: string;
 }) {
   const rungs = offerLadder(product, qty);
   if (rungs.length === 0) return null;
 
-  if (variant === "badges") return <OfferBadges rungs={rungs} className={className} />;
   if (variant === "line") return <OfferLine rungs={rungs} className={className} />;
   return <OfferPanel rungs={rungs} title={title} qty={qty} className={className} />;
-}
-
-/* ===== badges — product card ===== */
-
-/** At most two pills plus a "+N more" counter: a card has room to say a
- *  product has offers, not to enumerate them. */
-function OfferBadges({ rungs, className }: { rungs: OfferRung[]; className?: string }) {
-  const shown = rungs.slice(0, 2);
-  const rest = rungs.length - shown.length;
-
-  return (
-    <span className={cn("flex flex-wrap items-center gap-1", className)}>
-      {shown.map((rung, i) => {
-        const Icon = RUNG_ICONS[rung.kind];
-        return (
-          <span
-            key={i}
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-[2px] text-[10.5px] font-bold",
-              rung.kind === "sale"
-                ? "bg-zup-orange/12 text-zup-orange-dark"
-                : "bg-zup-green/12 text-zup-green-dark",
-            )}
-          >
-            <Icon className="h-2.5 w-2.5" strokeWidth={2.4} aria-hidden />
-            {rung.kind === "sale" ? rung.label : `${rung.label} · ${shortDetail(rung)}`}
-          </span>
-        );
-      })}
-      {rest > 0 ? (
-        <span className="text-[10.5px] font-semibold text-zup-soft">+{rest} more</span>
-      ) : null}
-    </span>
-  );
-}
-
-/** "Save ৳500 per unit" → "৳500 off"; "Free delivery" → "free delivery". Badges
- *  have no room for the full sentence.
- *
- *  Reads the rung's own amount rather than parsing a number back out of the
- *  sentence it just built, which is what this used to do. */
-function shortDetail(rung: OfferRung): string {
-  if (rung.kind === "delivery") return rung.detail.toLowerCase();
-  return `${formatBDT(rung.amount)} off`;
 }
 
 /* ===== panel — product page + landing page ===== */

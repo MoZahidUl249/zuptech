@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
-import { getProductBySlug, getProductPage } from "@/lib/api";
+import {
+  getProductBySlug,
+  getProductPage,
+  getProductsByIds,
+  getSiteConfig,
+} from "@/lib/api";
+import type { Product } from "@/lib/products";
 import { formatBDT, site , jsonLd } from "@/lib/site";
 import { ProductActions } from "@/components/product-actions";
 import { ProductCard, ProductImagePlaceholder } from "@/components/product-card";
@@ -40,9 +46,10 @@ export default async function ProductPage({
   if (!product) notFound();
 
   /*
-   * Related products, asked for by category instead of filtered out of the
-   * whole shop.
+   * Recommended products: same category first, then topped up so the row is
+   * never empty.
    *
+   * Category is asked for by query rather than filtered out of the whole shop.
    * Two things were wrong with doing it client-side. It fetched all 500 catalog
    * rows to keep four, on the most-visited route on the site — most of why the
    * storefront ran out of memory under load. And it matched on `cat`, which
@@ -51,11 +58,47 @@ export default async function ProductPage({
    * "related" meant "any four products at all".
    *
    * Five, because the product itself comes back in its own category.
+   *
+   * The top-up exists because category alone leaves a dead end: a product that
+   * is the only one in its category — the toolset, today — rendered no row at
+   * all, so the page offered a visitor nothing to look at next. Featured comes
+   * before the general catalogue because it is the merchandising choice
+   * somebody actually made in the admin.
    */
-  const { products: sameCategory } = product.category
-    ? await getProductPage({ category: product.category, limit: 5 })
-    : { products: [] };
-  const related = sameCategory.filter((p) => p.id !== product.id).slice(0, 4);
+  const [{ products: sameCategory }, config] = await Promise.all([
+    product.category
+      ? getProductPage({ category: product.category, limit: 5 })
+      : Promise.resolve({ products: [], total: 0 }),
+    getSiteConfig(),
+  ]);
+
+  const RECOMMENDED = 4;
+  const picked: Product[] = [];
+  const seen = new Set([product.id]);
+  const take = (candidates: Product[]) => {
+    for (const p of candidates) {
+      if (picked.length >= RECOMMENDED) return;
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      picked.push(p);
+    }
+  };
+
+  take(sameCategory);
+  // `config` is null when the backend is unreachable — the row then falls
+  // through to the catalogue top-up below rather than failing the page.
+  const featuredIds = config?.featuredIds ?? [];
+  if (picked.length < RECOMMENDED && featuredIds.length > 0) {
+    take(await getProductsByIds(featuredIds));
+  }
+  if (picked.length < RECOMMENDED) {
+    // Deliberately a small page, not the catalogue: this is filler for a short
+    // row, and the whole reason the category query exists is to not pull 500
+    // rows into this route.
+    const { products: more } = await getProductPage({ limit: RECOMMENDED + 5 });
+    take(more);
+  }
+  const related = picked;
   const outOfStock = product.inStock === false;
   // salePrice is server-computed (PublicProductDto); never derived here.
   const onSale = product.salePrice !== undefined && product.salePrice < product.price;
@@ -327,7 +370,7 @@ export default async function ProductPage({
       {related.length > 0 && (
         <section className="pt-18" aria-labelledby="related-heading">
           <h2 id="related-heading" className="mb-4.5 text-[22px] font-bold tracking-[-0.02em]">
-            Related products
+            Recommended products
           </h2>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:gap-3">
             {related.map((p) => (
@@ -336,7 +379,12 @@ export default async function ProductPage({
           </div>
         </section>
       )}
-      <div className="h-[150px] md:h-20" />
+      {/* Clears the fixed mobile tab bar: its 64px, the 12px it floats above
+          the edge, the safe-area inset under that, and a little air. It used to
+          be a flat 150px because the buy bar floated above the tab bar and both
+          had to be cleared; with the buttons back in the flow only the bar is
+          left, and the figure now follows it rather than guessing past it. */}
+      <div className="h-[calc(84px+env(safe-area-inset-bottom))] md:h-20" />
     </main>
   );
 }
