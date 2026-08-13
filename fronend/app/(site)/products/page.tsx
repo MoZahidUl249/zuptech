@@ -1,26 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ShopBrowser } from "@/components/shop-browser";
+import { ProductsBrowser } from "@/components/products-browser";
 import { getProductPage } from "@/lib/api";
 import { site , jsonLd } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Shop Power Products — IPS, Solar, Stabilizers & Switchgear",
+  title: "Products — IPS, Solar, Stabilizers & Switchgear",
   description:
     "Buy power products in Bangladesh from ZUP TECH: IPS + battery combos, solar home systems, voltage stabilizers, transformers, switchgear panels and more. bKash, Nagad & Cash on Delivery. Professional setup available.",
-  alternates: { canonical: "/shop" },
+  alternates: { canonical: "/products" },
   openGraph: {
-    title: "Shop Power Products | ZUP TECH",
+    title: "Products | ZUP TECH",
     description:
       "IPS, solar systems, stabilizers, transformers and switchgear — engineered hardware with professional installation across Bangladesh.",
-    url: `${site.url}/shop`,
+    url: `${site.url}/products`,
   },
 };
 
 /** Products per page. Matches DEFAULT_PAGE_SIZE in the backend's rules.ts. */
 const PAGE_SIZE = 48;
 
-export default async function ShopPage({
+export default async function ProductsPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; page?: string }>;
@@ -46,7 +46,7 @@ export default async function ShopPage({
   });
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const href = (n: number) =>
-    `/shop?${new URLSearchParams({ ...(q ? { q } : {}), ...(n > 1 ? { page: String(n) } : {}) })}`;
+    `/products?${new URLSearchParams({ ...(q ? { q } : {}), ...(n > 1 ? { page: String(n) } : {}) })}`;
 
   const itemListJsonLd = {
     "@context": "https://schema.org",
@@ -70,17 +70,17 @@ export default async function ShopPage({
       {/*
         Keyed on the query so a new search from the header remounts the
         browser. `initialQuery` only seeds useState, so without this a visitor
-        already on /shop could search again, watch the URL change, and see the
+        already on /products could search again, watch the URL change, and see the
         same results — the state kept the first query forever. That was
         invisible while the page had its own search box; now that the header's
         is the only one on desktop, it is the search.
       */}
-      <ShopBrowser key={q ?? ""} products={products} initialQuery={q ?? ""} />
+      <ProductsBrowser key={q ?? ""} products={products} initialQuery={q ?? ""} />
 
       {/*
         Paging is plain links, not a button that fetches: each page is its own
         URL, so it is shareable, indexable and survives a back button. The
-        category chips inside ShopBrowser still filter within the page — moving
+        category chips inside ProductsBrowser still filter within the page — moving
         those to the server is the next step, and until it happens a shop with
         more than one page should lean on search rather than the chips.
       */}

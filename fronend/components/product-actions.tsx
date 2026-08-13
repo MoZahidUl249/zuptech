@@ -56,7 +56,7 @@ export function ProductActions({
 
   if (outOfStock) {
     return (
-      <div className="rounded-[14px] border border-zup-body/10 bg-white px-5 py-4 text-[14.5px] font-semibold text-zup-gray">
+      <div className="rounded-[2px] border border-zup-body/10 bg-white px-5 py-4 text-[14.5px] font-semibold text-zup-gray">
         This product is currently out of stock. Call us to reserve the next
         batch.
       </div>
@@ -102,7 +102,7 @@ export function ProductActions({
         depends on the zone and appears in the checkout total.
       */}
       {hasInstallation ? (
-        <p className="flex items-start gap-2 rounded-[14px] border border-zup-body/10 bg-white px-4 py-3 text-[13px] leading-relaxed text-zup-mid">
+        <p className="flex items-start gap-2 rounded-[2px] border border-zup-body/10 bg-white px-4 py-3 text-[13px] leading-relaxed text-zup-mid">
           <Wrench className="mt-0.5 h-4 w-4 flex-none text-zup-blue" strokeWidth={1.8} aria-hidden />
           <span>
             <strong className="font-bold">Installation included.</strong> Our engineer
@@ -151,14 +151,14 @@ export function ProductActions({
           <button
             type="button"
             onClick={addToCart}
-            className="min-h-13 flex-1 rounded-[14px] bg-zup-orange text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(232,83,32,.3)] active:scale-[.98]"
+            className="min-h-13 flex-1 rounded-[2px] bg-zup-orange text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(232,83,32,.3)] active:scale-[.98]"
           >
             Add to Cart
           </button>
           <button
             type="button"
             onClick={buyNow}
-            className="min-h-13 flex-1 rounded-[14px] bg-zup-red text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(198,40,40,.3)] active:scale-[.98]"
+            className="min-h-13 flex-1 rounded-[2px] bg-zup-red text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(198,40,40,.3)] active:scale-[.98]"
           >
             Buy Now
           </button>

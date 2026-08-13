@@ -20,7 +20,7 @@ export default function NotFound() {
           Go home
         </Link>
         <Link
-          href="/shop"
+          href="/products"
           className="rounded-full border border-zup-body/14 bg-white px-7 py-3.5 text-[15px] font-semibold text-zup-body transition-colors hover:bg-secondary"
         >
           Browse products

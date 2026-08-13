@@ -13,11 +13,14 @@ import { nextRung, offerLadder, type OfferRung } from "@/lib/pricing-display";
  * POST /api/pricing/quote. Passing `qty` only changes which rungs are shown as
  * earned — it never derives a price.
  *
- * Three densities so the card, the product page, the cart line and the landing
- * page describe the same offers in the same words:
- *   badges — inline pills, for a product card
+ * Three densities so the product page, the cart line and the landing page
+ * describe the same offers in the same words:
  *   panel  — the full ladder, for a product page or landing page
  *   line   — a compact strip, for a cart line
+ *   badges — inline pills. NO CONSUMER as of 2026-08-13: the product card was
+ *            stripped back to image/name/price and these came off it. Kept
+ *            because it is the only compact rendering we have, but it is
+ *            currently write-only — delete it or use it.
  */
 
 const RUNG_ICONS = {
@@ -112,7 +115,7 @@ function OfferPanel({
   return (
     <section
       className={cn(
-        "zup-fade-up overflow-hidden rounded-[16px] border border-zup-body/8 bg-white",
+        "zup-fade-up overflow-hidden rounded-[2px] border border-zup-body/8 bg-white",
         className,
       )}
       aria-label={title}

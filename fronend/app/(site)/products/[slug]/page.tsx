@@ -127,7 +127,7 @@ export default async function ProductPage({
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: site.url },
-      { "@type": "ListItem", position: 2, name: "Shop", item: `${site.url}/shop` },
+      { "@type": "ListItem", position: 2, name: "Products", item: `${site.url}/products` },
       {
         "@type": "ListItem",
         position: 3,
@@ -150,10 +150,10 @@ export default async function ProductPage({
 
       <nav aria-label="Breadcrumb" className="mb-1.5">
         <Link
-          href="/shop"
+          href="/products"
           className="px-1 py-1.5 text-sm font-semibold text-zup-blue transition-colors hover:text-zup-blue-dark"
         >
-          ← Shop
+          ← Products
         </Link>
       </nav>
 
@@ -172,12 +172,12 @@ export default async function ProductPage({
             <img
               src={product.photos[0]}
               alt={`${product.name} — main photo`}
-              className="w-full rounded-[20px] border border-zup-body/6 object-cover [aspect-ratio:1]"
+              className="w-full rounded-[2px] border border-zup-body/6 object-cover [aspect-ratio:1]"
             />
           ) : (
             <ProductImagePlaceholder
               label={`${product.imgHint} — main`}
-              className="rounded-[20px] border border-zup-body/6 [aspect-ratio:1]"
+              className="rounded-[2px] border border-zup-body/6 [aspect-ratio:1]"
             />
           )}
           <div className="mt-2.5 grid grid-cols-2 gap-2.5">
@@ -189,34 +189,41 @@ export default async function ProductPage({
                   key={url}
                   src={url}
                   alt={`${product.name} — photo ${i + 2}`}
-                  className="w-full rounded-[14px] border border-zup-body/6 object-cover [aspect-ratio:1]"
+                  className="w-full rounded-[2px] border border-zup-body/6 object-cover [aspect-ratio:1]"
                 />
               ))
             ) : (
               <>
                 <ProductImagePlaceholder
                   label={`${product.imgHint} — detail`}
-                  className="rounded-[14px] border border-zup-body/6 [aspect-ratio:1]"
+                  className="rounded-[2px] border border-zup-body/6 [aspect-ratio:1]"
                 />
                 <ProductImagePlaceholder
                   label="in-situ install photo"
-                  className="rounded-[14px] border border-zup-body/6 [aspect-ratio:1]"
+                  className="rounded-[2px] border border-zup-body/6 [aspect-ratio:1]"
                 />
               </>
             )}
           </div>
-          <div className="mt-5 rounded-2xl border border-zup-body/6 bg-white px-5.5 py-5">
-            <h2 className="mb-2 text-[15px] font-bold tracking-[-0.01em]">
-              Product description
-            </h2>
-            <p className="text-sm leading-relaxed text-zup-gray">
-              {product.description}
-            </p>
-          </div>
         </div>
 
+        {/*
+         * Source order here IS the mobile order: name, buttons, specs. Burying
+         * "Buy Now" under a dozen feature lines meant a scroll to reach the
+         * only action on the page.
+         *
+         * Desktop is the one that reorders, via `md:order-*`, back to
+         * specs-then-buttons — both are on screen together there anyway. It is
+         * this way round on purpose: `order` moves things visually but not for
+         * a keyboard or a screen reader, which follow source order. Putting the
+         * divergence on desktop keeps the phone — the layout this was asked
+         * for, and where the two are far apart on screen — honest.
+         *
+         * `order-*` rather than a second copy of the markup: duplicating it
+         * would render ProductActions twice, and it holds quantity state.
+         */}
         <div className="flex flex-col gap-4">
-          <div>
+          <div className="md:order-1">
             <span className="text-xs font-semibold uppercase tracking-[0.06em] text-zup-soft">
               {product.category ?? product.cat}
             </span>
@@ -267,7 +274,11 @@ export default async function ProductPage({
             )}
           </div>
 
-          <ul className="flex flex-col gap-[9px]">
+          <div className="md:order-3">
+            <ProductActions product={product} />
+          </div>
+
+          <ul className="flex flex-col gap-[9px] md:order-2">
             {product.specs.map((spec) => (
               <li
                 key={spec}
@@ -280,9 +291,37 @@ export default async function ProductPage({
               </li>
             ))}
           </ul>
-
-          <ProductActions product={product} />
         </div>
+
+        {/*
+         * The description, now a disclosure and now its own grid child.
+         *
+         * It used to sit inside the photo column, which on a phone put a wall
+         * of copy between the gallery and the name — the two things a visitor
+         * is actually looking for. As a third child it falls after the buy
+         * column on mobile and back under the photos on desktop (grid flow
+         * puts it in column 1, row 2), which is where it already was.
+         *
+         * Native <details>, not React state: this page is a server component,
+         * and making it a client one for a show/hide would ship the whole page
+         * to the browser for a toggle that HTML already does — and does before
+         * hydration. It is collapsed at every size; the copy is long enough
+         * that the desktop layout reads better for it too.
+         */}
+        <details className="group border border-zup-body/6 bg-white px-5.5 py-5">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+            <h2 className="text-[15px] font-bold tracking-[-0.01em]">
+              Product description
+            </h2>
+            <span className="flex-none text-[13px] font-semibold text-zup-blue">
+              <span className="group-open:hidden">More</span>
+              <span className="hidden group-open:inline">Less</span>
+            </span>
+          </summary>
+          <p className="mt-3 text-sm leading-relaxed text-zup-gray">
+            {product.description}
+          </p>
+        </details>
       </div>
 
       {related.length > 0 && (
@@ -292,7 +331,7 @@ export default async function ProductPage({
           </h2>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:gap-3">
             {related.map((p) => (
-              <ProductCard key={p.id} product={p} showCategory={false} />
+              <ProductCard key={p.id} product={p} />
             ))}
           </div>
         </section>

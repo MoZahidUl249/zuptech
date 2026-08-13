@@ -79,7 +79,7 @@ export interface ProductPage {
  * One page of the catalog, newest first.
  *
  * Paged because the shop outgrew a single response: rendering the whole
- * catalog server-side cost 1.4 MB of HTML per request and made /shop the
+ * catalog server-side cost 1.4 MB of HTML per request and made /products the
  * throughput ceiling for the entire site. `total` comes back in the
  * `x-total-count` header so the response body stays a plain array.
  */

@@ -26,7 +26,7 @@ export function TeamStrip({ members }: { members: TeamMember[] }) {
           {members.map((m) => (
             <article
               key={m.id}
-              className="flex gap-4 rounded-[20px] border border-zup-body/6 bg-white p-4 sm:p-5"
+              className="flex gap-4 rounded-[2px] border border-zup-body/6 bg-white p-4 sm:p-5"
             >
               {/* Fixed square, so a row of people lines up regardless of what
                   aspect ratio each photo was uploaded at. */}

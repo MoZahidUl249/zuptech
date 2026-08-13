@@ -41,7 +41,7 @@ import {
 
 /* ===== Home page (hero banner slides — image + CTA, as the store renders) ===== */
 
-const CTA_TARGETS = ["/shop", "/services", "/industrial", "/contact"];
+const CTA_TARGETS = ["/products", "/services", "/industrial", "/contact"];
 
 /** Mirrors uploadSlideImageDto's maxSize ("8m") in content.dto.ts. */
 const MAX_SLIDE_BYTES = 8_000_000;
@@ -93,7 +93,7 @@ export function BannerSlidesCard({ page = "home" }: { page?: HeroPage }) {
         id: tempId("slide"),
         image: null,
         cta: "Shop Now",
-        href: "/shop",
+        href: "/products",
         // Active on creation: you add a banner because you want it shown, and
         // the old default of `false` meant every new slide silently did nothing
         // until someone found the toggle.
@@ -422,7 +422,7 @@ function SlideHrefField({
           }}
           className={selectCls}
         >
-          <option value="/shop">Shop (/shop)</option>
+          <option value="/products">Products (/products)</option>
           <option value="/services">Services (/services)</option>
           <option value="/industrial">Industrial (/industrial)</option>
           <option value="/contact">Contact (/contact)</option>

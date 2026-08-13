@@ -1,9 +1,7 @@
 import Link from "next/link";
-import { PiggyBank } from "lucide-react";
 import { formatBDT } from "@/lib/site";
 import type { Product } from "@/lib/products";
 import { cn } from "@/lib/utils";
-import { OfferLadder } from "./offer-ladder";
 
 export function ProductImagePlaceholder({
   label,
@@ -28,24 +26,31 @@ export function ProductImagePlaceholder({
   );
 }
 
+/**
+ * A product card, deliberately plain.
+ *
+ * It used to carry a category line, a floating "save ৳X" stamp, an orange
+ * Now/Was/Save panel, a rating-and-sold line and up to three offer badges —
+ * seven competing things around a photo the card is actually selling. All of
+ * it is gone. What remains is the image, the name, the price and, when it
+ * applies, the one fact that stops a click being wasted: that it is out of
+ * stock.
+ *
+ * The offers still exist and are still shown — on the product page, through
+ * `OfferLadder`'s `panel` variant, where there is room to read them.
+ */
 export function ProductCard({
   product,
-  showCategory = true,
   className,
 }: {
   product: Product;
-  showCategory?: boolean;
   className?: string;
 }) {
-  // salePrice is server-computed (PublicProductDto) — never derived here.
+  // salePrice is server-computed (PublicProductDto) — never derived here. The
+  // card shows both numbers and does no arithmetic on them at all now: the
+  // saving it used to calculate was the only sum on this component.
   const hasSale =
     product.salePrice !== undefined && product.salePrice < product.price;
-  // Display-only arithmetic over two server-given numbers: the gap between
-  // them. No charged amount is derived here (cal-bk.md) — the card only names
-  // the difference between the two prices it was handed. This used to also
-  // recompute that gap as a percentage, with its own rounding that matched
-  // neither the server's nor the admin's.
-  const saving = hasSale ? product.price - product.salePrice! : 0;
 
   return (
     <Link
@@ -55,75 +60,41 @@ export function ProductCard({
         className,
       )}
     >
-      <div className="relative">
-        {product.photos?.[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={product.photos[0]}
-            alt={product.name}
-            className="aspect-square w-full object-cover"
-          />
-        ) : (
-          <ProductImagePlaceholder label={product.imgHint} className="aspect-square" />
-        )}
-        {product.inStock === false && (
-          <span className="absolute left-2.5 top-2.5 rounded-full bg-zup-body/80 px-2.5 py-1 text-[11px] font-bold text-white">
-            Out of stock
-          </span>
-        )}
-        {/* Gated on hasSale, same as the price block below — so the stamp and
-            the prices can never tell two different stories. */}
-        {hasSale && saving > 0 && (
-          <span className="absolute right-2 top-2 flex flex-col items-center rounded-xl bg-zup-orange px-2 py-1 text-white shadow-[0_4px_12px_rgba(232,83,32,.35)]">
-            <span className="text-[8.5px] font-bold uppercase tracking-[0.12em]">save</span>
-            <span className="text-[14px] font-extrabold leading-none">{formatBDT(saving)}</span>
-          </span>
-        )}
-      </div>
-      <div className="flex flex-col gap-[5px] px-3.5 pb-3.5 pt-3">
-        {showCategory && (
-          <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-zup-soft">
-            {product.category ?? product.cat}
-          </span>
-        )}
+      {/* `object-contain`, not `object-cover`: the catalogue is hardware of
+          wildly different shapes — a tall battery cabinet, a wide switchgear
+          panel — and cropping to a square was cutting the ends off the things
+          people are trying to recognise. The square box stays so the grid rows
+          stay level; the image now fits inside it. */}
+      {product.photos?.[0] ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={product.photos[0]}
+          alt={product.name}
+          className="aspect-square w-full bg-white object-contain"
+        />
+      ) : (
+        <ProductImagePlaceholder label={product.imgHint} className="aspect-square" />
+      )}
+      <div className="flex flex-col gap-1.5 px-3.5 pb-3.5 pt-3">
         <h3 className="min-h-9 text-sm font-semibold leading-tight text-zup-body">
           {product.name}
         </h3>
-        {/* The three facts of a deal, in the order they're asked: what it costs
-            now, what it cost before, what you keep. Each is labelled in words —
-            a struck-through number on its own asks the reader to infer both
-            that there is a discount and what it's worth. */}
-        {hasSale ? (
-          <div className="mt-0.5 rounded-xl bg-zup-orange/8 px-2.5 py-2 ring-1 ring-zup-orange/15">
-            <span className="flex items-baseline gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-[0.07em] text-zup-orange-dark">
-                Now
-              </span>
-              <span className="text-[19px] font-extrabold leading-none tracking-[-0.01em] text-zup-orange-dark">
-                {formatBDT(product.salePrice!)}
-              </span>
+        {/* Old price struck through, then what it costs — no panel, no badge,
+            no computed saving. Both numbers come from the server as-is. */}
+        <span className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+          {hasSale && (
+            <span className="text-[12.5px] text-zup-soft line-through">
+              {formatBDT(product.price)}
             </span>
-            <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-              <span className="text-[11px] text-zup-soft">
-                Was <span className="line-through">{formatBDT(product.price)}</span>
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-zup-green px-1.5 py-[2px] text-[10.5px] font-bold text-white">
-                <PiggyBank className="h-3 w-3" strokeWidth={2.2} aria-hidden />
-                Save {formatBDT(saving)}
-              </span>
-            </span>
-          </div>
-        ) : (
+          )}
           <span className="text-[16px] font-bold text-zup-body">
-            {formatBDT(product.price)}
+            {formatBDT(hasSale ? product.salePrice! : product.price)}
           </span>
-        )}
-        <span className="text-[11.5px] text-zup-soft">
-          ★ {product.rating} · {product.sold} sold
         </span>
-        {/* No qty here — the card advertises what's available, it doesn't
-            claim anything is applied. */}
-        <OfferLadder product={product} variant="badges" />
+        {/* Plain bold text where a floating pill used to sit over the photo. */}
+        {product.inStock === false && (
+          <span className="text-[12.5px] font-bold text-zup-body">Out of stock</span>
+        )}
       </div>
     </Link>
   );

@@ -25,7 +25,7 @@ export const DEFAULT_SLIDES: HeroSlide[] = [
     id: "sl1",
     image: "/images/banner-power-solutions.png",
     cta: "Shop Products",
-    href: "/shop",
+    href: "/products",
     active: true,
     fit: "cover",
     bg: "linear-gradient(115deg,#0B4FE0 0%,#083A9E 100%)",
