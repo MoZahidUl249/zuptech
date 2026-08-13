@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Roll the stack forward on the VPS: get images, migrate the database, start.
 #
-#   bash scripts/deploy.sh            # pull prebuilt images from the registry
-#   bash scripts/deploy.sh --build    # build the images on this box instead
-#   bash scripts/deploy.sh --seed     # also seed, if the database is empty
+#   bash scripts/deploy.sh                 # pull prebuilt images from the registry
+#   bash scripts/deploy.sh --build         # build the images on this box instead
+#   bash scripts/deploy.sh --seed          # also seed, if the database is empty
+#   bash scripts/deploy.sh --external-db   # the database is not in this stack
 #
 # This exists because nothing in docker-compose.yml applies the migration on
 # its own. `docker compose up -d` alone therefore starts the backend against
@@ -25,15 +26,38 @@ ENV_FILE="${ENV_FILE:-$APP_DIR/.env.production}"
 
 MODE=pull
 SEED=false
+
+# --external-db: this stack has no `db` service — the database lives somewhere
+# else and is not this deploy's to manage. Set by scripts/live-stack.sh, which
+# runs the production stack on a workstation against the LIVE database through
+# an SSH tunnel.
+#
+# It suppresses exactly two steps, and the first one is the reason it exists:
+# `prisma migrate deploy` below would otherwise apply pending migrations to
+# whatever DATABASE_URL points at — which, for that local stack, is production.
+# A developer testing an unreleased change would silently migrate the live
+# database from their laptop, ahead of the code that needs it. The seeded-check
+# goes too, since it shells into a `db` container that is not there.
+#
+# Never pass this on the VPS. The real deploy must migrate.
+EXTERNAL_DB=false
+
 for arg in "$@"; do
   case "$arg" in
     --build) MODE=build ;;
     --pull)  MODE=pull ;;
     --seed)  SEED=true ;;
-    -h|--help) sed -n '2,6p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+    --external-db) EXTERNAL_DB=true ;;
+    -h|--help) sed -n '2,7p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
 done
+
+if [ "$EXTERNAL_DB" = true ] && [ "$SEED" = true ]; then
+  echo "--seed and --external-db together would seed demo data into a database this" >&2
+  echo "stack does not own. Refusing." >&2
+  exit 2
+fi
 
 log()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31m==> %s\033[0m\n' "$*" >&2; exit 1; }
@@ -76,8 +100,12 @@ fi
 # ---------- Migrations ----------
 # Before the new code serves, never after. `prisma migrate deploy` only applies
 # committed migrations and never prompts.
-log "Migrating backend database (zuptech)"
-compose run --rm backend bunx --bun prisma migrate deploy
+if [ "$EXTERNAL_DB" = true ]; then
+  log "Skipping migration — --external-db (this stack does not own the database)"
+else
+  log "Migrating backend database (zuptech)"
+  compose run --rm backend bunx --bun prisma migrate deploy
+fi
 
 # ---------- Start ----------
 log "Starting services"
@@ -88,6 +116,10 @@ compose up -d --remove-orphans
 # reads with findUniqueOrThrow. A migrated-but-unseeded database therefore
 # passes every check above and still 500s on every page, which is exactly the
 # failure this script exists to make impossible to reach silently.
+if [ "$EXTERNAL_DB" = true ]; then
+  log "Skipping the seeded-check — --external-db (there is no db container here)"
+  seeded=skip
+else
 log "Checking the database is seeded"
 
 # Read the password out of the env file rather than sourcing it: `source`
@@ -95,8 +127,11 @@ log "Checking the database is seeded"
 pg_pass="$(sed -n 's/^ZUPTECH_DB_PASSWORD=//p' "$ENV_FILE" | head -1 | tr -d '\r')"
 seeded=$(compose exec -T -e PGPASSWORD="$pg_pass" db \
   psql -U zuptech -d zuptech -tAc 'SELECT count(*) FROM "SiteConfig" WHERE id = 1' 2>/dev/null || echo "?")
+fi
 
-if [ "$seeded" = "1" ]; then
+if [ "$seeded" = "skip" ]; then
+  :
+elif [ "$seeded" = "1" ]; then
   echo "    SiteConfig row present"
 elif [ "$seeded" = "?" ]; then
   echo "    could not query the database — check by hand:"

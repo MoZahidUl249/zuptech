@@ -1,0 +1,84 @@
+# The production stack, on a workstation, against the LIVE database.
+#
+#   bash scripts/live-tunnel.sh up      # first — nothing here works without it
+#   bash scripts/live-stack.sh up
+#
+# Sibling of deploy/rehearsal.override.yml and the same idea: run the real
+# stack a second time without disturbing the one that is already running. The
+# difference is where the data comes from. The rehearsal runs against an empty
+# throwaway database and proves a *deploy* works; this runs against production
+# data and proves a *change* looks right against the real catalogue.
+#
+# Everything that makes the stack the stack — images, nginx and its real
+# template, two storefront containers, memory limits, the health checks in
+# scripts/deploy.sh — is inherited untouched. Only three things move: where the
+# database is, the fact that there isn't a local one to wait for, and the
+# published ports.
+#
+# READ deploy/live-readonly-role.sql FIRST. In its default mode the tunnel
+# connects as `zuptech_ro` and the stack can only read: sign-in, checkout and
+# admin will fail, because Better Auth writes a Session row on every login.
+services:
+  # Keep the local Postgres from ever starting. A profile is the compose-native
+  # way to do it: a service that declares one is skipped by `up` unless that
+  # profile is explicitly enabled, and nothing here enables it.
+  #
+  # This matters more than it looks. `scripts/deploy.sh` runs a blanket
+  # `compose up -d`, so without this the stack would start its own empty
+  # database beside the tunnel — and the backend would connect to whichever the
+  # DATABASE_URL happened to name while a second, pointless Postgres sat there
+  # holding a volume and 768 MB.
+  db:
+    profiles: ["never-start-this-locally"]
+
+  # No `db` service runs here at all — see above.
+  # But the base file makes the backend wait for it to be healthy
+  # (docker-compose.yml, `depends_on: db: condition: service_healthy`), and a
+  # dependency on a service that will never start is a hang, not an error.
+  #
+  # `!override` rather than a plain value: compose MERGES mappings across
+  # files, so assigning an empty map here would leave the inherited condition
+  # in place. Same tag, same reason, as the ports list in rehearsal.override.yml.
+  backend:
+    depends_on: !override []
+    environment:
+      # The one line that differs from production: host `livedb` instead of
+      # `db`. That name is a network alias on the tunnel container, so this is
+      # an ordinary container-to-container connection — the same shape as
+      # production, just terminating in an SSH forward instead of Postgres.
+      #
+      # NOT host.docker.internal. The tunnel's published port is bound to
+      # 127.0.0.1, which no container can reach, and publishing it on 0.0.0.0
+      # to make that work would put an open socket to the production database
+      # on every interface of the machine.
+      #
+      # Composed by scripts/live-stack.sh into LIVE_DATABASE_URL so the role
+      # and password follow whichever mode the tunnel was opened in — read
+      # (zuptech_ro) or write (zuptech).
+      DATABASE_URL: ${LIVE_DATABASE_URL:?run scripts/live-tunnel.sh first, then use scripts/live-stack.sh}
+    networks:
+      - default
+      - livedb
+
+  # frontend/frontend2 need no database, but they DO need the same treatment
+  # for their `depends_on: backend` chain to start cleanly — inherited as-is,
+  # which is correct: the backend really is a dependency here.
+
+  nginx:
+    # Two nginx containers cannot both hold 80/443, and the workstation may
+    # well have something on 8080 already. 8081/8444 match the rehearsal
+    # override's choice so the two local stacks stay predictable, and neither
+    # collides with Portainer on 9000/9443.
+    ports: !override
+      - "8081:80"
+      - "8444:443"
+
+# `external: true` — scripts/live-tunnel.sh creates this network and owns its
+# lifetime, because the tunnel has to exist before the stack that reads through
+# it. Compose therefore attaches to it and, importantly, does not delete it on
+# `down`, which would otherwise tear the network out from under a tunnel that
+# is still running.
+networks:
+  livedb:
+    external: true
+    name: zuptech-livedb
