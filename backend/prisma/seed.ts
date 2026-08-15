@@ -4,6 +4,11 @@
  *
  * Idempotent: safe to re-run — rows are upserted, staff auth users are only
  * created when missing. Run with `bun run db:seed`.
+ *
+ * One thing here is deliberately NOT public: the demo campaign page is created
+ * as a draft, and re-running never changes whether a campaign is published.
+ * See `landingPages` below — a seed may not put a page on the internet, and
+ * must not take a live one down either.
  */
 import { randomBytes } from "node:crypto";
 import { auth } from "../src/lib/auth";
@@ -389,6 +394,160 @@ const industrialServices = [
   },
 ];
 
+/*
+ * One worked campaign page, so /lp and its editor have something real to show.
+ *
+ * Written against ips1000 and agreeing with it on purpose: the offer price is
+ * the product's actual selling price (৳38,250), so the editor's "checkout will
+ * charge X" warning stays quiet, and the "১০% ছাড়" badge is the product's own
+ * salePct rather than a number invented for the copy. A demo that contradicts
+ * its own product teaches the wrong thing about which fields are advertising
+ * and which are money.
+ *
+ * The bundle block leans on that product's real quantity offers (৳2,125 off
+ * from 3 units), so the savings the page advertises are the savings the cart
+ * applies — the whole reason bundle prices are not stored here.
+ *
+ * Phone numbers are the placeholders from `siteConfig` above, not invented
+ * ones: a plausible-looking number in seed data is somebody's real phone.
+ * Reviewer names are the demo customers already seeded for the same reason.
+ *
+ * The palette is deliberately NOT the column defaults. Those are the reference
+ * design's greens, so a demo wearing them would look identical whether the
+ * theme worked or not; these are the storefront's own navy and orange, which
+ * makes it obvious at a glance that the per-campaign colours are applied.
+ */
+const landingPages = [
+  {
+    slug: "ips-1000va-offer",
+    // Internal only — never rendered. The public <h1> is `headline`.
+    title: "IPS 1000VA — demo campaign",
+    productId: "ips1000",
+    headline: "লোডশেডিংয়ে ঘর থাকুক আলোয়",
+    subheadline:
+      "১০০০VA পিওর সাইন ওয়েভ IPS আর ১০০Ah টিউবুলার ব্যাটারি একসাথে। ফ্যান, লাইট আর ওয়াই-ফাই চলবে টানা ৬–৮ ঘণ্টা।",
+    offerPrice: 38250,
+    compareAtPrice: 42500,
+    priceCompareLabel: "আগের দাম",
+    priceOfferLabel: "অফার প্রাইস",
+    discountBadge: "১০% ছাড়",
+    ribbonText: "সীমিত সময়ের অফার",
+    buttonLabel: "এখনই অর্ডার করুন",
+    heroCtaNote: "ফর্ম পূরণ করুন — পণ্য হাতে পেয়ে টাকা দিন।",
+    imageHint: "IPS ইউনিট ও ব্যাটারির ছবি",
+    gtmId: "",
+
+    hotlineLabel: "হটলাইন (সকাল ১০টা – রাত ১০টা)",
+    hotlineNumber: "09612-345678",
+    headerCtaLabel: "অর্ডার করুন",
+    trustBadges: [
+      "১০০% অরিজিনাল পণ্য",
+      "১ বছরের সার্ভিস ওয়ারেন্টি",
+      "ক্যাশ অন ডেলিভারি",
+      "ঢাকা জুড়ে ইনস্টলেশন সার্ভিস",
+    ],
+
+    brandStripTitle: "যেভাবে পেমেন্ট করতে পারবেন",
+    // The payment methods actually configured in this seed, plus how it ships.
+    // Not a list of partner brands — that would be a claim, not demo copy.
+    brandLogos: ["bKash", "Nagad", "ক্যাশ অন ডেলিভারি", "কুরিয়ার সার্ভিস"],
+
+    videoTitle: "পণ্যটি দেখে নিন",
+    // The same placeholder URL the product row already carries. Replace it
+    // with a real one and the section starts working; blank it and the whole
+    // section disappears.
+    videoUrl: "https://www.youtube.com/watch?v=ips1000demo",
+
+    featuresTitle: "কেন এই আইপিএসটি নেবেন",
+    features: [
+      { title: "পিওর সাইন ওয়েভ আউটপুট", body: "ফ্রিজ, টিভি আর রাউটারের জন্য নিরাপদ — শব্দ বা ঝুঁকি নেই।" },
+      { title: "১০০Ah টিউবুলার ব্যাটারি", body: "গভীর ডিসচার্জ সহ্য করে, তাই ঘন ঘন লোডশেডিংয়েও আয়ু কমে না।" },
+      { title: "৬–৮ ঘণ্টা ব্যাকআপ", body: "ফ্যান, লাইট আর ওয়াই-ফাই — সারা রাতের লোডশেডিং সামলে নেয়।" },
+      { title: "ইনস্টলেশন ও সার্ভিস", body: "আমাদের ইঞ্জিনিয়ার বাসায় গিয়ে বসিয়ে দেন, ১ বছরের সার্ভিস ওয়ারেন্টি সহ।" },
+    ],
+
+    specTitle: "টেকনিক্যাল স্পেসিফিকেশন",
+    specMeta: "ZT-IPS-1000 · REV 1.2",
+    specs: [
+      { value: "১০০০VA / ৮০০W", label: "আউটপুট" },
+      { value: "১০০Ah", label: "টিউবুলার ব্যাটারি" },
+      { value: "৬–৮ ঘণ্টা", label: "ব্যাকআপ টাইম" },
+      { value: "১ বছর", label: "সার্ভিস ওয়ারেন্টি" },
+    ],
+
+    bundlesTitle: "একসাথে বেশি নিলে বেশি সাশ্রয়",
+    bundlesSubtitle: "প্রতিটি সেটের দাম কমে যায় — দামগুলো ক্যাশে যা কাটা হবে ঠিক তাই।",
+    bundleUnitLabel: "সেট",
+    bundleMaxQty: 3,
+
+    qcTitle: "আসল পণ্য চিনে নিন",
+    qcBody:
+      "বাজারে একই দেখতে নকল ইউনিট আছে, যেগুলোতে ব্যাটারি দ্রুত নষ্ট হয়। প্রতিটি ডেলিভারির সময় নিচের বিষয়গুলো মিলিয়ে নিন।",
+    qcPoints: [
+      "বক্সে ZUP TECH হলোগ্রাম স্টিকার আছে কি না দেখুন",
+      "ইউনিটের সিরিয়াল নম্বর ওয়ারেন্টি কার্ডের সাথে মিলিয়ে নিন",
+      "ইনস্টলেশনের সময় ইঞ্জিনিয়ারের কাছ থেকে সার্ভিস কার্ড বুঝে নিন",
+      "যেকোনো সন্দেহে ডেলিভারির আগেই হটলাইনে কল করুন",
+    ],
+    qcImageHint: "হলোগ্রাম ও ওয়ারেন্টি কার্ডের ছবি",
+
+    countdownTitle: "অফার শেষ হতে বাকি",
+    countdownNote: "নির্ধারিত সময়ের পর দাম আগের জায়গায় ফিরে যাবে।",
+    countdownCtaLabel: "অর্ডার করুন",
+    countdownAssurance: "অগ্রিম টাকা লাগবে না — পণ্য হাতে পেয়ে পেমেন্ট।",
+
+    testimonialsTitle: "যাঁরা ব্যবহার করছেন",
+    // The demo customers seeded above, so no new names are invented.
+    testimonials: [
+      { quote: "রাতে লোডশেডিং হলেও ফ্যান আর ওয়াই-ফাই চলতেই থাকে।", name: "করিম উদ্দিন", location: "মিরপুর, ঢাকা" },
+      { quote: "ইঞ্জিনিয়ার এসে বসিয়ে দিয়ে গেছেন, কিছুই করতে হয়নি।", name: "সালমা আক্তার", location: "চট্টগ্রাম" },
+      { quote: "ছয় মাস হলো, ব্যাকআপ প্রথম দিনের মতোই আছে।", name: "হাসান মিয়া", location: "রাজশাহী" },
+    ],
+
+    formTitle: "অর্ডারের তথ্য দিন",
+    formIntro: "নিচের তথ্যগুলো দিন, আমরা কল করে অর্ডারটি নিশ্চিত করব।",
+    formLabels: {
+      name: "আপনার নাম",
+      phone: "মোবাইল নম্বর",
+      address: "সম্পূর্ণ ঠিকানা",
+      packageLabel: "প্যাকেজ",
+      deliveryLabel: "ডেলিভারি চার্জ",
+      totalLabel: "সর্বমোট",
+      submit: "অর্ডার কনফার্ম করুন",
+      namePlaceholder: "যেমন: করিম উদ্দিন",
+      phonePlaceholder: "০১XXXXXXXXX",
+      addressPlaceholder: "বাসা/রোড, এলাকা, থানা, জেলা",
+      successMessage: "ধন্যবাদ! আপনার অর্ডারটি পেয়েছি — আমরা শীঘ্রই কল করব।",
+    },
+
+    footerTagline: "MAKES LIFE SIMPLE",
+    footerAbout:
+      "ZUP TECH — পাওয়ার সলিউশন ও সার্ভিস। আইপিএস, সোলার, স্ট্যাবিলাইজার ও ইন্ডাস্ট্রিয়াল ইলেকট্রিক্যাল কাজ।",
+    footerLines: ["হটলাইন: 09612-345678", "ইমেইল: hello@zuptech.com.bd", "ঢাকা, বাংলাদেশ"],
+    footerNote: "© ZUP TECH — সব পণ্য ১০০% অরিজিনাল।",
+
+    // The storefront's navy/orange rather than the column defaults, so it is
+    // visible at a glance that a campaign carries its own palette.
+    colorHeroBg: "#0E2A47",
+    colorHeroText: "#FFFFFF",
+    colorBandBg: "#17427A",
+    colorBandText: "#FFFFFF",
+    colorTintBg: "#F1F5FA",
+    colorPageBg: "#FFFFFF",
+    colorPageText: "#15181E",
+    colorAccent: "#0E2A47",
+    colorHighlight: "#FFD400",
+    colorCtaBg: "#E85320",
+    colorCtaText: "#FFFFFF",
+
+    // The row across the top. Visible products only — a hidden one would
+    // resolve to nothing and quietly shorten the row.
+    productRowIds: ["solar500", "vprot", "stab30"],
+
+    benefitBullets: [],
+  },
+];
+
 const siteConfig = {
   featuredIds: ["ips1000", "solar500", "trafo200", "vprot", "stab30", "solar10k", "flood100", "mccb400"],
   // The home page's second row, above the booking forms. Deliberately a
@@ -522,6 +681,25 @@ async function main() {
         pay: "Cash on Delivery",
         items: { create: [{ productId, qty, unitPrice: price }] },
       },
+    });
+  }
+
+  /*
+   * Campaign pages. Created as DRAFTS: publishing is an operator decision and
+   * a seed must not put a page on the public internet, nor take a live one
+   * down — so `published` is set on create and deliberately left alone on
+   * update. Everything else converges, which is what makes a re-seed useful.
+   *
+   * The deadline is relative to the run rather than a fixed date: a hardcoded
+   * one is in the past by the time anyone looks, and an expired countdown
+   * reads as a broken page rather than a demonstrated feature.
+   */
+  const countdownEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  for (const page of landingPages) {
+    await prisma.landingPage.upsert({
+      where: { slug: page.slug },
+      create: { ...page, countdownEndsAt, published: false },
+      update: { ...page, countdownEndsAt },
     });
   }
 
