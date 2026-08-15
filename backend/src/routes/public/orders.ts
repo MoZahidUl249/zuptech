@@ -132,12 +132,46 @@ export const publicOrders = new Elysia({ name: "routes/public/orders", detail: {
           include: { items: true },
         });
 
-        // Reserve the units for this order.
+        /*
+         * Reserve the units — and re-check availability while doing it.
+         *
+         * priceCart() enforced stock, but it ran BEFORE this transaction
+         * opened, so its answer is only as fresh as the moment it read. An
+         * unconditional increment here trusts that stale answer: two
+         * checkouts for the last unit both passed the check, both reached
+         * this loop, and both reserved. Measured on a running stack — eight
+         * concurrent orders against one unit of stock produced eight 201s
+         * and left reserved=8 against stock=1. Every one of those is a
+         * customer who will not get their item.
+         *
+         * The guard is the `stock - reserved >= qty` in the WHERE clause:
+         * Postgres evaluates it against the row as it stands at the moment
+         * of the write, holding the row lock, so concurrent increments
+         * serialise and the loser matches no rows. Raw SQL because the two
+         * columns are compared against each other, which Prisma's `where`
+         * cannot express.
+         *
+         * Zero rows updated means someone took the units in between, so the
+         * whole transaction rolls back and the customer is told, rather than
+         * being sold something that is gone.
+         */
         for (const line of cart.lines) {
-          await tx.product.update({
-            where: { id: line.product.id },
-            data: { reserved: { increment: line.qty } },
-          });
+          const claimed = await tx.$executeRaw`
+            UPDATE "Product"
+               SET reserved = reserved + ${line.qty}
+             WHERE id = ${line.product.id}
+               AND stock - reserved >= ${line.qty}
+          `;
+          if (claimed === 0) {
+            const now = await tx.product.findUnique({
+              where: { id: line.product.id },
+              select: { stock: true, reserved: true },
+            });
+            const left = Math.max((now?.stock ?? 0) - (now?.reserved ?? 0), 0);
+            throw badRequest(
+              `Only ${left} of "${line.product.name}" left — someone ordered the rest while you were checking out`,
+            );
+          }
         }
 
         // Open the audit trail the admin panel reads, so every order's history

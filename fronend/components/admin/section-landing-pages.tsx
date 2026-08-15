@@ -540,6 +540,20 @@ function LandingPageEditor({
                 onChange={(e) => set("slug", e.target.value)}
                 className="font-mono"
               />
+              {/*
+                The slug IS the ad's destination. Editing it on a published
+                campaign retires the old URL the moment it saves, and every
+                ad, post and message already pointing there starts 404ing —
+                money still being spent, traffic landing nowhere, and nothing
+                anywhere to say so.
+              */}
+              {draft.published && draft.slug !== page.slug ? (
+                <p className="mt-1 text-ui-micro font-semibold leading-snug text-warn-fg">
+                  This campaign is live. Saving this breaks the old link
+                  (/lp/{page.slug}) — any ad pointing at it will 404. Duplicate
+                  the page instead if the old link must keep working.
+                </p>
+              ) : null}
             </Field>
             <Field label="Product">
               <select
