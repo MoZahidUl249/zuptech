@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Wrench } from "lucide-react";
 import { useCart } from "@/lib/cart";
-import { type Product } from "@/lib/products";
+import { isUnavailable, type Product } from "@/lib/products";
 import { formatBDT } from "@/lib/site";
 import { OfferLadder } from "./offer-ladder";
 
@@ -27,7 +27,8 @@ export function ProductActions({
   const { add } = useCart();
   const router = useRouter();
 
-  const outOfStock = product.inStock === false;
+  // Shared with the product page — see isUnavailable in lib/products.
+  const outOfStock = isUnavailable(product);
   // Cap the order at what the backend says is available (stock − reserved).
   const maxQty =
     typeof product.available === "number" ? Math.min(99, Math.max(1, product.available)) : 99;
@@ -55,10 +56,35 @@ export function ProductActions({
 
   if (outOfStock) {
     return (
-      <div className="rounded-[2px] border border-zup-body/10 bg-white px-5 py-4 text-[14.5px] font-semibold text-zup-gray">
-        This product is currently out of stock. Call us to reserve the next
-        batch.
-      </div>
+      <>
+        <div className="rounded-[2px] border border-zup-body/10 bg-white px-5 py-4 text-[14.5px] font-semibold text-zup-gray">
+          This product is currently out of stock. Call us to reserve the next
+          batch.
+        </div>
+
+        {/*
+         * The mobile bar still renders, disabled.
+         *
+         * MobileTabBar stands down on every /products/:slug route on the
+         * assumption that something replaces it here. This branch used to
+         * return before reaching the bar, so an out-of-stock product on a
+         * phone had NO bottom control at all — no tab bar and no buy bar — and
+         * the visitor lost the site's whole bottom navigation on that page.
+         *
+         * A disabled bar says why the action is unavailable, which an absent
+         * one cannot. It also keeps the two components' assumptions in step:
+         * whenever the tab bar hides, this renders.
+         */}
+        <div className="fixed inset-x-0 bottom-0 z-70 flex gap-2.5 border-t border-zup-body/8 bg-white/95 px-4 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl md:hidden">
+          <button
+            type="button"
+            disabled
+            className="min-h-13 w-full cursor-not-allowed rounded-[2px] bg-zup-body/15 text-[15px] font-bold text-zup-gray"
+          >
+            Out of stock
+          </button>
+        </div>
+      </>
     );
   }
 

@@ -320,3 +320,24 @@ export const featuredProducts: Product[] = [
   products[8],
   products[9],
 ];
+
+/**
+ * Whether this product may be bought.
+ *
+ * Two facts make a product unbuyable and they arrive on different fields:
+ * `inStock` (derived from stock − reserved) and a `stockTag` the admin has
+ * pinned to "Sold out" for a line that is finished for good. A pinned product
+ * can still report `inStock: true` — there may be units on the shelf that are
+ * deliberately not for sale — so a check on `inStock` alone keeps selling it.
+ *
+ * This lives here because the rule had drifted: the product page honoured the
+ * pin in its status line while ProductActions, deriving the same fact from
+ * `inStock` alone, went on rendering Buy Now beneath the words "Sold out".
+ * Every reader must ask this function, not the fields.
+ *
+ * "Incoming" deliberately still sells — stock is on the way, and taking the
+ * order is the point of saying so.
+ */
+export function isUnavailable(p: Pick<Product, "inStock" | "stockTag">): boolean {
+  return p.inStock === false || p.stockTag === "Sold out";
+}

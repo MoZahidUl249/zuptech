@@ -255,6 +255,24 @@ describe("salePriceFrom — the one place a percentage becomes money", () => {
     expect(salePriceFrom(1000, 140)).toBe(0);
     expect(salePriceFrom(1000, -20)).toBe(0);
   });
+  test("a backfilled percentage does NOT reproduce an unclean sale price", () => {
+    /*
+     * The reason the admin PATCH compares against the stored row rather than
+     * recomputing whenever the fields are present.
+     *
+     * Migration 20260813180000 backfills a whole percentage from an existing
+     * sale price and deliberately leaves that price alone. Where the original
+     * was not a clean percentage the two do not agree, so recomputing on an
+     * unrelated save silently reprices the product — measured at 777 -> 780 on
+     * a running stack before the fix.
+     */
+    const price = 1000;
+    const storedSalePrice = 777;
+    const backfilledPct = Math.round(((price - storedSalePrice) * 100) / price); // 22
+    expect(backfilledPct).toBe(22);
+    expect(salePriceFrom(price, backfilledPct)).toBe(780);
+    expect(salePriceFrom(price, backfilledPct)).not.toBe(storedSalePrice);
+  });
   test("round-trips the values the migration backfills", () => {
     // The backfill derives a percentage from an existing sale price; feeding
     // it back must reproduce that price, or deploying the migration would

@@ -71,8 +71,9 @@ export function ProductEditor({
    * It is display-only regardless: what gets stored is whatever the server
    * computes on save, never this.
    */
+  const previewSalePct = Math.min(100, Math.max(0, Math.round(p.salePct)));
   const previewSalePrice =
-    p.salePct > 0 ? Math.round((p.price * (100 - p.salePct)) / 100) : 0;
+    previewSalePct > 0 ? Math.round((p.price * (100 - previewSalePct)) / 100) : 0;
   const onSale = p.onSale && previewSalePrice > 0 && previewSalePrice < p.price;
   const sellingPrice = onSale ? previewSalePrice : p.price;
   const saleSaving = onSale ? p.price - previewSalePrice : 0;

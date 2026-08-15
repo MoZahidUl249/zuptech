@@ -447,19 +447,25 @@ export const putPaymentMethod = (id: string, body: Partial<PaymentMethod>) =>
  * the 1251 that `t.Integer` accepts. Without it the DTO answers 422 with a
  * schema dump and the product cannot be saved at all.
  */
+/** 0–100, whole. Both percentage fields are capped server-side, and
+ *  `numberInput` deliberately lets you type freely — so without this a pasted
+ *  "150" leaves the form and comes back as a 422 with nothing pointing at the
+ *  field that caused it. Clamped here, at the one place the payload is built. */
+const pct = (n: number) => Math.min(100, Math.max(0, whole(n)));
+
 function productBody(p: AdminProduct) {
   return {
     name: p.name,
     slug: p.slug,
     categoryId: p.categoryId,
     price: whole(p.price),
-    minDepositPct: whole(p.minDepositPct),
+    minDepositPct: pct(p.minDepositPct),
     recommendedIds: p.recommendedIds,
     onSale: p.onSale,
     // The percentage, not the price: the server derives salePrice from this.
     // Sending both would let the two disagree, which is the failure the
     // percentage design exists to prevent.
-    salePct: whole(p.salePct),
+    salePct: pct(p.salePct),
     stockTag: p.stockTagOverride,
     deliveryFeeInsideDhaka: whole(p.deliveryFeeInsideDhaka),
     deliveryFeeOutsideDhaka: whole(p.deliveryFeeOutsideDhaka),

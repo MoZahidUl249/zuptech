@@ -132,18 +132,27 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
           await tx.freeDeliveryOffer.deleteMany({ where: { productId: params.id } });
         }
         /*
-         * Recompute the sale price whenever EITHER input moves.
+         * Recompute the sale price only when an input actually CHANGES.
          *
-         * PATCH is partial, so a request may carry a new price, a new
-         * percentage, or one of them alone. Recomputing only when `salePct`
-         * arrives would leave a price edit quietly contradicting the
-         * advertised discount — "-20% off" on a product whose price changed
-         * and whose salePrice did not. Both fall back to the stored row, so a
-         * request touching neither leaves the pair exactly as it was.
+         * Not "was sent" — changed. The admin form PATCHes the whole product
+         * body on every save, so a presence check made `priceChanging` true
+         * for an edit to the description, and the stored sale price was
+         * rewritten from the rounded whole percentage every time.
+         *
+         * That silently repriced anything the migration backfilled. A live row
+         * at 1000 with a 777 sale price backfills to 22%, deliberately keeping
+         * 777; under a presence check the next unrelated save turned it into
+         * salePriceFrom(1000, 22) = 780 — three taka more, from editing a
+         * description. Measured, not theorised.
+         *
+         * Comparing against the stored row means the backfilled pair survives
+         * until someone genuinely edits the price or the percentage, and then
+         * the two are recomputed together and agree.
          */
-        const priceChanging = fields.price !== undefined || fields.salePct !== undefined;
         const nextPrice = fields.price ?? existing.price;
         const nextPct = fields.salePct ?? existing.salePct;
+        const priceChanging =
+          nextPrice !== existing.price || nextPct !== existing.salePct;
 
         return tx.product.update({
           where: { id: params.id },

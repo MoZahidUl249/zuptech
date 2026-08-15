@@ -279,8 +279,20 @@ cmd_down() {
 }
 
 cmd_status() {
-  if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
+  # Three states, not two. `up` refuses while the container merely EXISTS, so
+  # reporting only running/absent left a stopped tunnel described as "down"
+  # and simultaneously impossible to start — the ssh drops when a laptop
+  # sleeps, the container exits (`--restart no`), and the operator is told
+  # nothing is running while `up` answers "already exists". Name the state and
+  # say what clears it.
+  if ! docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER"; then
     echo "tunnel: down"
+    return 0
+  fi
+  if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
+    echo "tunnel: stopped — the container exists but its ssh exited"
+    echo "        clear it first:  bash scripts/live-tunnel.sh down"
+    docker logs --tail 3 "$CONTAINER" 2>&1 | sed 's/^/        /'
     return 0
   fi
   local mode

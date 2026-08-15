@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
 import { getProductBySlug, getProductsByIds } from "@/lib/api";
-import type { Product } from "@/lib/products";
+import { isUnavailable, type Product } from "@/lib/products";
 import { formatBDT, site , jsonLd } from "@/lib/site";
 import { ProductActions } from "@/components/product-actions";
 import { ProductCard, ProductImagePlaceholder } from "@/components/product-card";
@@ -61,7 +61,16 @@ export default async function ProductPage({
   const related = recommendedIds
     .map((id) => resolved.find((p) => p.id === id))
     .filter((p): p is Product => Boolean(p) && p!.id !== product.id);
-  const outOfStock = product.inStock === false;
+  /*
+   * Unbuyable, not merely empty — and asked of `isUnavailable` rather than
+   * spelled out here, because ProductActions must reach the same verdict.
+   *
+   * It didn't: this page honoured the pin in the status line while the buttons
+   * beneath it read `inStock` alone, so a product reading "Sold out" still had
+   * a working Buy Now. The rule now lives in lib/products.
+   */
+  const pinnedUnavailable = product.stockTag === "Sold out";
+  const outOfStock = isUnavailable(product);
   // salePrice is server-computed (PublicProductDto); never derived here.
   const onSale = product.salePrice !== undefined && product.salePrice < product.price;
   const video = parseProductVideo(product.video);
@@ -260,7 +269,9 @@ export default async function ProductPage({
                   : "mt-2 text-[13.5px] font-semibold text-zup-green-dark"
               }
             >
-              {outOfStock
+              {pinnedUnavailable
+                ? "Sold out"
+                : outOfStock
                 ? "Out of stock — call us for availability"
                 : typeof product.available === "number"
                   ? `In stock · ${product.available} available`

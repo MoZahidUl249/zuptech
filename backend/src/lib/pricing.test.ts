@@ -18,6 +18,7 @@ interface FakeProduct {
   deliveryFeeOutsideDhaka: number;
   installationFeeInsideDhaka: number;
   installationFeeOutsideDhaka: number;
+  stockTag: string;
   quantityOffers: { minQty: number; amount: number }[];
   freeDeliveryOffers: { minQty: number; amount: number }[];
 }
@@ -36,8 +37,28 @@ const CATALOG: FakeProduct[] = [
     deliveryFeeOutsideDhaka: 200,
     installationFeeInsideDhaka: 50,
     installationFeeOutsideDhaka: 80,
+    stockTag: "",
     // 10+ units take ৳200 off the unit price.
     quantityOffers: [{ minQty: 10, amount: 200 }],
+    freeDeliveryOffers: [],
+  },
+  {
+    // Stock on the shelf, but the line is retired. The pin is the only thing
+    // that makes this unbuyable — availableStock() says 4.
+    id: "retired",
+    name: "Discontinued UPS",
+    price: 500,
+    onSale: false,
+    salePrice: 0,
+    stock: 4,
+    reserved: 0,
+    reorderAt: 1,
+    deliveryFeeInsideDhaka: 100,
+    deliveryFeeOutsideDhaka: 200,
+    installationFeeInsideDhaka: 0,
+    installationFeeOutsideDhaka: 0,
+    stockTag: "Sold out",
+    quantityOffers: [],
     freeDeliveryOffers: [],
   },
 ];
@@ -89,6 +110,24 @@ describe("priceCart", () => {
         { enforceStock: true },
       ),
     ).rejects.toThrow(/Only 5 .* in stock/);
+  });
+
+  /*
+   * The cart lives in the browser, so pinning a product "Sold out" does not
+   * empty anyone's cart. Without this the storefront refused the purchase
+   * while the API accepted it from whoever already had the item.
+   */
+  test("refuses a product pinned Sold out, even with stock on the shelf", async () => {
+    await expect(
+      priceCart([{ productId: "retired", qty: 1 }], true, { enforceStock: true }),
+    ).rejects.toThrow(/sold out/i);
+  });
+
+  test("a display quote still prices a pinned product", async () => {
+    // enforceStock is off for quotes: a stale cart keeps showing its prices,
+    // it just cannot become an order.
+    const cart = await priceCart([{ productId: "retired", qty: 1 }], true);
+    expect(cart.subtotal).toBe(500);
   });
 
   test("merged lines collapse into one order line", async () => {

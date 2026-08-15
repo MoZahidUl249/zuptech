@@ -82,6 +82,21 @@ export async function priceCart(
       throw badRequest(`At most ${MAX_QTY_PER_PRODUCT} of "${product.name}" per order`);
     }
     if (enforceStock) {
+      /*
+       * A pinned "Sold out" retires the line regardless of what is on the
+       * shelf — units may remain that are deliberately not for sale, so this
+       * cannot be expressed by zeroing stock, and `availableStock` below would
+       * happily let them through.
+       *
+       * It has to be enforced here rather than left to the storefront: the
+       * cart lives in the browser, so anyone holding the product from before
+       * the pin still reaches checkout with it. Under `enforceStock` only,
+       * which keeps display quotes working — a stale cart can still show its
+       * prices, it just cannot become an order.
+       */
+      if (product.stockTag === "Sold out") {
+        throw badRequest(`"${product.name}" is sold out`);
+      }
       const available = availableStock(product);
       if (qty > available) throw badRequest(`Only ${available} of "${product.name}" in stock`);
     }

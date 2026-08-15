@@ -100,7 +100,14 @@ export function ProductCard({
             {product.stockTag}
           </span>
         ) : null}
-        {product.salePct ? (
+        {/* Gated on `hasSale`, NOT on salePct alone.
+            `salePct` is the raw column and survives the sale being switched
+            off, so a product left at 10% with `onSale` false comes back from
+            the API as salePct=10 with salePrice === price. Keying the badge on
+            the percentage alone advertised a discount the cart would not
+            honour — the exact mismatch this whole design exists to prevent.
+            The badge and the struck-through price now answer to one condition. */}
+        {hasSale && product.salePct ? (
           <span
             className="absolute right-2.5 top-2.5 text-[12.5px] font-bold text-zup-orange-dark"
             style={{ textShadow: "0 0 4px #fff, 0 0 8px #fff" }}
