@@ -464,6 +464,7 @@ function campaignContent(lp: LandingPageRow) {
     heroCtaNote: lp.heroCtaNote,
     brandStripTitle: lp.brandStripTitle,
     brandLogos: lp.brandLogos,
+    heroVideoUrl: lp.heroVideoUrl,
     videoTitle: lp.videoTitle,
     videoUrl: lp.videoUrl,
     featuresTitle: lp.featuresTitle,

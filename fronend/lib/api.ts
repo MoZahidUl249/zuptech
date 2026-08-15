@@ -479,6 +479,8 @@ export interface PublicLandingPage {
   heroCtaNote: string;
   brandStripTitle: string;
   brandLogos: string[];
+  /** Shown in the hero in place of the pack shot. "" keeps the photo. */
+  heroVideoUrl: string;
   videoTitle: string;
   videoUrl: string;
   featuresTitle: string;

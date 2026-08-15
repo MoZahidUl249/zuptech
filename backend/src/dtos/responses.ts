@@ -326,6 +326,7 @@ export interface CampaignContentDto {
   heroCtaNote: string;
   brandStripTitle: string;
   brandLogos: string[];
+  heroVideoUrl: string;
   videoTitle: string;
   videoUrl: string;
   featuresTitle: string;

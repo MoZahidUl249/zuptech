@@ -50,6 +50,8 @@ export interface LandingPage {
   heroCtaNote: string;
   brandStripTitle: string;
   brandLogos: string[];
+  /** Shown in the hero in place of the pack shot. "" keeps the photo. */
+  heroVideoUrl: string;
   videoTitle: string;
   videoUrl: string;
   featuresTitle: string;
@@ -140,7 +142,7 @@ type CampaignKey =
   | "hotlineLabel" | "hotlineNumber" | "headerCtaLabel"
   | "trustBadges" | "subheadline" | "discountBadge" | "heroCtaNote"
   | "brandStripTitle" | "brandLogos"
-  | "videoTitle" | "videoUrl"
+  | "heroVideoUrl" | "videoTitle" | "videoUrl"
   | "featuresTitle" | "features"
   | "specTitle" | "specMeta" | "specs"
   | "bundlesTitle" | "bundlesSubtitle" | "bundleUnitLabel" | "bundleMaxQty"

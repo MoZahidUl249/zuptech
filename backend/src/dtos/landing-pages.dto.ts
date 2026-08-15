@@ -90,6 +90,10 @@ const campaignFields = {
   brandStripTitle: t.String({ maxLength: 160 }),
   brandLogos: t.Array(t.String({ maxLength: 80 }), { maxItems: 10 }),
 
+  /* In the hero, in place of the pack shot. Blank keeps the photo. Same URL
+     rule as `videoUrl` below — the renderer parses it and shows nothing when
+     it is unusable, rather than embedding something that 404s. */
+  heroVideoUrl: t.String({ maxLength: 500, pattern: "^$|^https?://\\S+$" }),
   videoTitle: t.String({ maxLength: 200 }),
   videoUrl: t.String({ maxLength: 500, pattern: "^$|^https?://\\S+$" }),
 

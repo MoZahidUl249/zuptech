@@ -430,6 +430,18 @@ model LandingPage {
   videoTitle String @default("")
   videoUrl   String @default("")
 
+  /// A video in the hero, in place of the pack shot. Blank falls back to the
+  /// product photo, so a campaign without one looks exactly as it did.
+  ///
+  /// Separate from `videoUrl` above rather than a flag on it: the two answer
+  /// different questions. The hero video is the thing that sells above the
+  /// fold, and the section below is the longer demo — a campaign can run
+  /// either, both, or neither. Same accepted forms as `Product.video`
+  /// (YouTube link or an uploaded file URL); parsing is the frontend's
+  /// `parseProductVideo`, so an unusable URL renders nothing rather than a
+  /// broken embed.
+  heroVideoUrl String @default("")
+
   /// Numbered feature list: [{ title, body }]
   featuresTitle String @default("")
   features      Json   @default("[]")

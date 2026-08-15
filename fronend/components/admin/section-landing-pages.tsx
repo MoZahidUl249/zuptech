@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProductPicker } from "./products/product-picker";
+import { OfferTierEditor } from "./products/offer-tier-editor";
 import { ConfirmDialog } from "./confirm-dialog";
 
 function shareUrl(slug: string): string {
@@ -212,8 +213,41 @@ function LandingPageEditor({
   onBack: () => void;
   onChanged: () => Promise<void>;
 }) {
+  const { state, update } = useAdmin();
   const [draft, setDraft] = useState<LandingPage>(page);
   const [bulletsText, setBulletsText] = useState(page.benefitBullets.join("\n"));
+
+  /*
+   * The product this campaign sells, read live from the store rather than
+   * from the `products` prop — the tier editor below writes to it, and the
+   * rows have to come back changed for the count and the preview to move.
+   */
+  const campaignProduct = state.products.find((p) => p.id === draft.productId) ?? null;
+
+  /*
+   * Bundle tiers belong to the PRODUCT, not to this campaign, and editing
+   * them here edits them everywhere the product is sold.
+   *
+   * That is the point rather than a compromise. The page's bundle prices are
+   * computed from these tiers at render time precisely so a campaign cannot
+   * advertise a total the cart will not charge; a per-campaign copy of them
+   * would be the one way back to that bug. Adding the control here means the
+   * ladder can be built without leaving the campaign, while the numbers stay
+   * derived from the single source that checkout also reads.
+   *
+   * It saves through the admin's own diff engine (Rule A in lib/admin.tsx),
+   * not this screen's Save button — the note under the editor says so,
+   * because a control that saves on a different schedule to the one above it
+   * is otherwise a trap.
+   */
+  const setTiers = (quantityOffers: AdminProduct["quantityOffers"]) => {
+    if (!campaignProduct) return;
+    update({
+      products: state.products.map((p) =>
+        p.id === campaignProduct.id ? { ...p, quantityOffers } : p,
+      ),
+    });
+  };
   /* Campaign list fields are edited as one-per-line text — a repeater widget
      per list would be five widgets for what is, in practice, typing. */
   const [lists, setLists] = useState(() => linesOf(page));
@@ -273,6 +307,7 @@ function LandingPageEditor({
       heroCtaNote: draft.heroCtaNote,
       brandStripTitle: draft.brandStripTitle,
       brandLogos: toLines(lists.brandLogos),
+      heroVideoUrl: draft.heroVideoUrl,
       videoTitle: draft.videoTitle,
       videoUrl: draft.videoUrl,
       featuresTitle: draft.featuresTitle,
@@ -631,6 +666,19 @@ function LandingPageEditor({
                 onChange={(e) => set("heroCtaNote", e.target.value)} />
             </Field>
           </div>
+          <Field label="Hero video (blank = show the product photo)">
+            <Input
+              value={draft.heroVideoUrl ?? ""}
+              disabled={readOnly}
+              onChange={(e) => set("heroVideoUrl", e.target.value)}
+              placeholder="https://youtube.com/watch?v=…"
+            />
+            <p className="mt-1 text-ui-micro leading-snug text-zup-soft">
+              Replaces the photo at the top of the page. It loads as a
+              thumbnail and only plays when tapped. The longer video in step 7
+              is separate — a campaign can use either, both or neither.
+            </p>
+          </Field>
           <Field label="Image placeholder hint">
             <Input
               value={draft.imageHint}
@@ -777,11 +825,44 @@ function LandingPageEditor({
                 disabled={readOnly}
                 onChange={(e) => set("bundleMaxQty", numberInput(e.target.value))} />
               <p className="mt-1 text-ui-micro text-zup-soft">
-                Prices come from the product&apos;s quantity offers, so what the page
-                advertises is always what checkout charges.
+                How many rows to draw, from 1 up. Prices are never typed here —
+                they come from the offers below.
               </p>
             </Field>
           </div>
+
+          {campaignProduct ? (
+            <div className="rounded-lg border border-zup-line bg-secondary/40 p-3.5">
+              <OfferTierEditor
+                label={`Bundle offers — ${campaignProduct.name}`}
+                hint="Add a tier for each quantity worth rewarding. Only the highest tier the order reaches applies; tiers never stack, and the customer always gets whichever is cheaper — this or the sale price."
+                unitLabel="৳ off each unit"
+                tiers={campaignProduct.quantityOffers}
+                onChange={setTiers}
+              />
+              <p className="mt-2.5 text-ui-micro leading-snug text-warn-fg">
+                These belong to the product, so they change it everywhere it is
+                sold — and they save on their own, not with the button at the
+                bottom of this page.
+              </p>
+              {/* The trap this page can otherwise walk an admin into: a sale
+                  deeper than every tier makes the whole ladder show no saving,
+                  because the customer already has the better price. Worth
+                  saying here, where the tiers are typed. */}
+              {campaignProduct.onSale &&
+              campaignProduct.quantityOffers.length > 0 &&
+              campaignProduct.quantityOffers.every(
+                (t) => t.amount <= campaignProduct.price - campaignProduct.salePrice,
+              ) ? (
+                <p className="mt-2 text-ui-micro font-semibold leading-snug text-warn-fg">
+                  Every tier here is smaller than this product&apos;s sale
+                  discount ({taka(campaignProduct.price - campaignProduct.salePrice)} off),
+                  so the bundle rows will all show no extra saving. Raise a tier
+                  above that to make the ladder do anything.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </Group>
 
         <Group step={11} title="Quality / anti-counterfeit" hint="The reassurance block with the photo.">

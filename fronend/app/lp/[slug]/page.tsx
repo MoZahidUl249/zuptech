@@ -7,6 +7,8 @@ import { formatBDTBangla as formatBDT, toBanglaDigits } from "@/lib/site";
 import { LandingPageGtm } from "@/components/marketing/landing-page-gtm";
 import { ProductCard } from "@/components/product-card";
 import { CampaignOrderForm } from "@/components/marketing/campaign-order-form";
+import { ProductVideo } from "@/components/product-video";
+import { parseProductVideo } from "@/lib/video";
 import { CampaignCountdown } from "@/components/marketing/campaign-countdown";
 
 export async function generateMetadata({
@@ -138,6 +140,8 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
   /* The row above the page body — resolved and re-sorted into the admin's
    * order, dropping ids that no longer resolve, exactly as the home rows and a
    * product's recommendations do. */
+  // Parsed, not just non-empty: an unusable URL must fall back to the photo.
+  const heroVideo = parseProductVideo(pub.heroVideoUrl);
   const rowIds = pub.productRowIds ?? [];
   const rowFetched = rowIds.length > 0 ? await getProductsByIds(rowIds) : [];
   const productRow = rowIds
@@ -219,8 +223,32 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             <p className="mt-3 text-[clamp(15px,3.4vw,19px)] leading-relaxed opacity-90">{pub.subheadline}</p>
           ) : null}
 
-          {/* Pack shot. imageHint is the admin's description of the art that
-              belongs here; until a photo exists it stands in for one. */}
+          {/*
+            The hero slot: a video when the campaign has one, otherwise the
+            pack shot.
+
+            Video wins because a campaign that bothers to set one is selling
+            with it, and stacking both puts the fold's most valuable space
+            under two competing things. The longer demo section further down
+            is unaffected — a campaign can run either, both, or neither.
+
+            ProductVideo renders a thumbnail and only swaps in the iframe on
+            click, so a hero video costs no YouTube script, connection or
+            cookie for the visitors who never press play.
+
+            Blank is the only thing that brings the photo back. A non-YouTube
+            URL is treated as a direct file and rendered in a <video> — the
+            same behaviour as the product page's own video field, and the
+            same responsibility on whoever pastes it. The check below is on
+            the parsed value rather than the raw string only because
+            `parseProductVideo` also rejects a non-http URL outright, and a
+            null there must not leave an empty frame in the hero.
+          */}
+          {heroVideo ? (
+            <div className="relative mt-6 overflow-hidden rounded-[2px] border border-white/15">
+              <ProductVideo url={pub.heroVideoUrl} />
+            </div>
+          ) : (
           <div className="relative mt-6 overflow-hidden rounded-[2px] border border-white/15">
             {product.photos?.[0] ? (
               <Image
@@ -247,6 +275,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
               </span>
             ) : null}
           </div>
+          )}
 
           <div className="mt-5 flex flex-wrap items-baseline gap-3">
             <span className="text-[34px] font-bold leading-none">{formatBDT(one?.total ?? 0)}</span>
@@ -308,22 +337,6 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             {pub.buttonLabel || "Order now"}
           </a>
         </ColourBand>
-      ) : null}
-
-      {/* ── 2c. Product row ───────────────────────────────────────────────
-          Other products above the page body. Hidden entirely when the admin
-          has picked none, so a campaign stays single-product by default —
-          which is the point of a landing page. */}
-      {productRow.length > 0 ? (
-        <Section bg={theme.tintBg}>
-          <div className="mx-auto w-full max-w-[1120px]">
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:gap-3">
-              {productRow.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
-          </div>
-        </Section>
       ) : null}
 
       {/* ── 3. Brand strip ──────────────────────────────────────────────── */}
@@ -569,6 +582,27 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
           />
         </Inner>
       </Section>
+
+      {/* ── 11b. Product row ──────────────────────────────────────────────
+          Other products, after the order form and above the footer.
+
+          It sat above the page body until now, which put a rack of exits
+          between the visitor and the offer they had just clicked an ad for.
+          Down here it catches the people who scrolled the whole page without
+          ordering, instead of competing with the hero for the ones who would
+          have. Hidden entirely when the admin has picked none, so a campaign
+          stays single-product by default — which is the point of one. */}
+      {productRow.length > 0 ? (
+        <Section bg={theme.tintBg}>
+          <div className="mx-auto w-full max-w-[1120px]">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:gap-3">
+              {productRow.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
+            </div>
+          </div>
+        </Section>
+      ) : null}
 
       {/* ── 12. Footer ──────────────────────────────────────────────────── */}
       <footer className="bg-zup-ink px-5 py-10 text-white">
