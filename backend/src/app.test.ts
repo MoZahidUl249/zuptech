@@ -28,6 +28,13 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 /** What `auth.api.getSession` will return for the next request. */
 let session: { user: { id: string } } | null = null;
 
+/* The campaign a /duplicate call copies from, and the create Prisma was
+ * asked to run. Both null by default so every other landingPage lookup in
+ * this file keeps answering "not found". */
+let landingSource: Record<string, unknown> | null = null;
+let capturedLandingCreate: Record<string, unknown> | null = null;
+let capturedLandingUpdate: Record<string, unknown> | null = null;
+
 /** The Staff row behind that session — null models a *customer* session. */
 let staffRow: {
   id: string;
@@ -196,7 +203,29 @@ mock.module("./lib/db", () => ({
       update: async () => ({ featuredIds: [] }),
     },
     teamMember: { findMany: async () => [] },
-    landingPage: { findUnique: async () => null },
+    landingPage: {
+      // The duplicate route looks the source up by id, then probes by slug
+      // until it finds a free one — so the slug probe must answer null or the
+      // collision loop never ends.
+      findUnique: async ({ where }: { where?: { id?: string; slug?: string } } = {}) =>
+        where?.slug !== undefined ? null : landingSource,
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        capturedLandingUpdate = data;
+        return { ...landingSource, ...data, product: CATALOG[0] };
+      },
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        capturedLandingCreate = data;
+        return {
+          ...data,
+          id: "lp-copy",
+          viewCount: 0,
+          orderCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          product: CATALOG[0],
+        };
+      },
+    },
     paymentMethod: { findFirst: async () => null },
   },
 }));
@@ -243,6 +272,9 @@ function signInAs(permissions: Record<string, string>, { isSystem = false } = {}
 beforeEach(() => {
   session = null;
   staffRow = null;
+  landingSource = null;
+  capturedLandingCreate = null;
+  capturedLandingUpdate = null;
 });
 
 /* ========================================================================
@@ -358,6 +390,188 @@ describe("admin routes enforce per-module permissions", () => {
  * Deleting a product
  * ==================================================================== */
 
+
+/* ========================================================================
+ * Duplicating a campaign
+ * ==================================================================== */
+
+/* A representative row: the columns the model started with, one from each
+   block of campaign copy added since, the theme, and the product row. */
+const SOURCE = {
+  id: "lp1",
+  title: "Winter push",
+  headline: "শীতের অফার",
+  slug: "winter",
+  productId: "ips1000",
+  offerPrice: 1990,
+  compareAtPrice: 2990,
+  ribbonText: "আজই শেষ",
+  buttonLabel: "অর্ডার করুন",
+  footerNote: "note",
+  benefitBullets: ["a"],
+  imageHint: "hint",
+  gtmId: "GTM-1",
+  hotlineLabel: "হটলাইন",
+  hotlineNumber: "০৯৬",
+  headerCtaLabel: "অর্ডার",
+  trustBadges: ["১০০% অরিজিনাল"],
+  subheadline: "sub",
+  discountBadge: "৩৩% ছাড়",
+  heroCtaNote: "note",
+  brandStripTitle: "পার্টনার",
+  brandLogos: ["bKash"],
+  videoTitle: "ভিডিও",
+  videoUrl: "https://example.test/v",
+  featuresTitle: "ফিচার",
+  features: [{ title: "t", body: "b" }],
+  specTitle: "স্পেক",
+  specMeta: "REV 2",
+  specs: [{ value: "20000", label: "mAh" }],
+  bundlesTitle: "বান্ডেল",
+  bundlesSubtitle: "sub",
+  bundleUnitLabel: "পিস",
+  bundleMaxQty: 3,
+  qcTitle: "মান",
+  qcBody: "body",
+  qcPoints: ["p"],
+  qcImageHint: "hint",
+  countdownTitle: "শেষ",
+  countdownNote: "note",
+  countdownEndsAt: null,
+  countdownCtaLabel: "কিনুন",
+  countdownAssurance: "নিশ্চিন্তে",
+  testimonialsTitle: "রিভিউ",
+  testimonials: [{ quote: "q", name: "n", location: "l" }],
+  formTitle: "অর্ডার",
+  formIntro: "intro",
+  formLabels: { name: "নাম" },
+  footerTagline: "MAKES LIFE SIMPLE",
+  footerAbout: "about",
+  footerLines: ["line"],
+  colorHeroBg: "#2B1B5E",
+  colorHeroText: "#FFFFFF",
+  colorBandBg: "#C62828",
+  colorBandText: "#FFFFFF",
+  colorTintBg: "#F6F1FF",
+  colorPageBg: "#FFFFFF",
+  colorPageText: "#15181E",
+  colorAccent: "#2B1B5E",
+  colorHighlight: "#FFD400",
+  colorCtaBg: "#E85320",
+  colorCtaText: "#FFFFFF",
+  productRowIds: ["solar500", "vprot"],
+  priceCompareLabel: "পূর্বের দাম",
+  priceOfferLabel: "অফার প্রাইস",
+  published: true,
+  viewCount: 900,
+  orderCount: 40,
+  createdAt: new Date("2026-01-01"),
+  updatedAt: new Date("2026-02-01"),
+};
+
+describe("POST /admin/api/landing-pages/:id/duplicate", () => {
+  /** What a copy must NOT inherit. Everything else has to come across. */
+  const RESET = ["id", "slug", "title", "published", "viewCount", "orderCount", "createdAt", "updatedAt"];
+
+  /*
+   * The regression this exists for. The handler used to name the columns it
+   * copied, and the list was written when the model had eleven of them. By
+   * the time the campaign template was rebuilt it carried 18 of 70 — so
+   * duplicating a finished campaign silently produced a blank page with a
+   * price on it, and the copy did not even keep its headline.
+   *
+   * Asserting "nothing is missing" rather than checking a handful of fields
+   * is the point: a field-by-field test would have been written against the
+   * same eleven columns and would have passed throughout.
+   */
+  test("carries every campaign column across, not a list someone has to maintain", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    const { status } = await call("POST", "/admin/api/landing-pages/lp1/duplicate");
+    expect(status).toBe(201);
+
+    const data = capturedLandingCreate ?? {};
+    const missing = Object.keys(SOURCE).filter((k) => !RESET.includes(k) && !(k in data));
+    expect(missing).toEqual([]);
+    // Spot-check the two that made the failure invisible: copy read as an
+    // empty campaign, and the palette silently reverted to the default green.
+    expect(data.headline).toBe(SOURCE.headline);
+    expect(data.colorHeroBg).toBe("#2B1B5E");
+    expect(data.productRowIds).toEqual(["solar500", "vprot"]);
+  });
+
+  test("but resets the things that belong to the original", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    await call("POST", "/admin/api/landing-pages/lp1/duplicate");
+    const data = capturedLandingCreate ?? {};
+
+    // A copy is a draft, on its own URL, with its own reporting.
+    expect(data.published).toBe(false);
+    expect(data.slug).toBe("winter-copy");
+    expect(data.title).toBe("Winter push (copy)");
+    expect(data.id).toBeUndefined();
+    expect(data.viewCount).toBeUndefined();
+    expect(data.orderCount).toBeUndefined();
+  });
+
+  test("refuses a staff member who may only look at campaigns", async () => {
+    signInAs({ landingpages: "view" });
+    landingSource = SOURCE;
+    const { status } = await call("POST", "/admin/api/landing-pages/lp1/duplicate");
+    expect(status).toBe(403);
+  });
+});
+
+describe("PATCH /admin/api/landing-pages/:id", () => {
+  /*
+   * The urgency block is optional and "" is how the editor says "no deadline"
+   * — and toLandingPage emits "" for a null column, so it comes straight back
+   * on the next save. Prisma refuses it (the column is DateTime?), so the
+   * write threw and the route answered 500. Every campaign saved without a
+   * deadline hit it, which is the default for a new page.
+   */
+  test("an empty countdown deadline stores null instead of throwing", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    const { status } = await call("PATCH", "/admin/api/landing-pages/lp1", {
+      countdownEndsAt: "",
+    });
+
+    expect(status).toBe(200);
+    expect(capturedLandingUpdate?.countdownEndsAt).toBeNull();
+  });
+
+  test("a real deadline is stored as a date", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    const { status } = await call("PATCH", "/admin/api/landing-pages/lp1", {
+      countdownEndsAt: "2026-09-01T12:00:00.000Z",
+    });
+
+    expect(status).toBe(200);
+    expect(capturedLandingUpdate?.countdownEndsAt).toBeInstanceOf(Date);
+    expect((capturedLandingUpdate?.countdownEndsAt as Date).toISOString()).toBe(
+      "2026-09-01T12:00:00.000Z",
+    );
+  });
+
+  test("a malformed deadline is a 400 that names the field, not a 500", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    const { status, body } = await call("PATCH", "/admin/api/landing-pages/lp1", {
+      countdownEndsAt: "next tuesday",
+    });
+
+    expect(status).toBe(400);
+    expect(String(body?.error)).toContain("countdownEndsAt");
+  });
+});
 describe("deleting a product refuses what the database would refuse", () => {
   const counts = (over: Partial<typeof productCounts>) => {
     productCounts = { orderItems: 0, movements: 0, warranties: 0, landingPages: 0, ...over };

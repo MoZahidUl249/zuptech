@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { Prisma } from "../../generated/client";
 import {
   createLandingPageDto,
   listLandingPagesQueryDto,
@@ -20,6 +21,36 @@ import { staffGuard } from "./guard";
  * last one closes checkout for it again, which is why unpublish and delete
  * are ordinary operations here rather than anything special-cased.
  */
+
+/**
+ * The `countdownEndsAt` a write should actually store, or `{}` to leave it.
+ *
+ * The urgency block is optional, and "" is how the admin says "no deadline" —
+ * `toLandingPage` emits exactly that for a null column, so it comes straight
+ * back on the next save. Prisma refuses it: the column is `DateTime?` and an
+ * empty string is not an ISO-8601 timestamp, so the write threw
+ * PrismaClientValidationError and the route answered 500. It hit every
+ * campaign saved without a deadline — the default for a new page, and the
+ * majority of real ones.
+ *
+ * A malformed date gets a 400 naming the field rather than the same 500;
+ * `new Date("nonsense")` is an Invalid Date, which Prisma would reject too.
+ *
+ * Typed against a loose record on purpose: `createLandingPageDto` builds its
+ * optional half through `Object.fromEntries`, which erases those keys from the
+ * static type, so the create body has no `countdownEndsAt` for TypeScript to
+ * match on even though the schema validates one at runtime.
+ */
+function countdownData(body: Record<string, unknown>): { countdownEndsAt?: Date | null } {
+  const raw = body.countdownEndsAt;
+  if (raw === undefined) return {};
+  if (raw === "") return { countdownEndsAt: null };
+  const at = new Date(String(raw));
+  if (Number.isNaN(at.getTime())) {
+    throw badRequest(`countdownEndsAt is not a valid date: "${String(raw)}"`);
+  }
+  return { countdownEndsAt: at };
+}
 
 /** Slugs are the public URL — a collision would silently hijack a live
  *  campaign's traffic, so it 409s rather than letting the unique index 500. */
@@ -70,7 +101,7 @@ export const adminLandingPages = new Elysia({
       await assertSlugFree(body.slug);
 
       const page = await prisma.landingPage.create({
-        data: body,
+        data: { ...body, ...countdownData(body) },
         include: landingPageInclude,
       });
       set.status = 201;
@@ -94,7 +125,7 @@ export const adminLandingPages = new Elysia({
 
       const page = await prisma.landingPage.update({
         where: { id: params.id },
-        data: body,
+        data: { ...body, ...countdownData(body) },
         include: landingPageInclude,
       });
       return toLandingPage(page);
@@ -154,19 +185,60 @@ export const adminLandingPages = new Elysia({
       slug = `${base}-${n}`;
     }
 
+    /*
+     * Copy everything, then override what a copy must not inherit.
+     *
+     * This was an explicit list of the eleven columns the model had when it
+     * was written, and it was never revisited. By the time the campaign
+     * template was rebuilt it dropped 52 of 70 fields: every line of campaign
+     * copy, the whole palette, the product row — and `headline`, so a
+     * duplicated page lost even its <h1>. Duplicating a finished Bengali
+     * campaign produced a blank page with a price on it, which is the
+     * opposite of the one thing the button is for.
+     *
+     * An allow-list fails silently and gets no louder as the model grows.
+     * Listing the exclusions instead means a new column is carried by
+     * default, and the worst a future omission can do is copy something it
+     * should have reset — visible, and not a lost campaign.
+     */
+    const {
+      id: _id,
+      slug: _slug,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      // Counters belong to the page that earned them; inheriting them would
+      // corrupt both pages' reporting.
+      viewCount: _viewCount,
+      orderCount: _orderCount,
+      // A copy is a draft for the next campaign, never live on creation.
+      published: _published,
+      title,
+      /*
+       * The Json columns are pulled out and put back with a cast below.
+       *
+       * Prisma reads them as `JsonValue`, which includes `null`, and refuses
+       * that same `null` in a create input. All four are non-nullable with
+       * defaults, so the null arm is unreachable — but the types cannot see
+       * that. Naming them here is deliberate: a new Json column becomes a
+       * compile error rather than a silent omission, which is exactly the
+       * failure this rewrite exists to remove.
+       */
+      features,
+      specs,
+      testimonials,
+      formLabels,
+      ...copyable
+    } = source;
+
     const page = await prisma.landingPage.create({
       data: {
-        title: `${source.title} (copy)`,
+        ...copyable,
+        features: features as Prisma.InputJsonValue,
+        specs: specs as Prisma.InputJsonValue,
+        testimonials: testimonials as Prisma.InputJsonValue,
+        formLabels: formLabels as Prisma.InputJsonValue,
+        title: `${title} (copy)`,
         slug,
-        productId: source.productId,
-        offerPrice: source.offerPrice,
-        compareAtPrice: source.compareAtPrice,
-        ribbonText: source.ribbonText,
-        buttonLabel: source.buttonLabel,
-        footerNote: source.footerNote,
-        benefitBullets: source.benefitBullets,
-        imageHint: source.imageHint,
-        gtmId: source.gtmId,
         published: false,
       },
       include: landingPageInclude,

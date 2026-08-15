@@ -202,7 +202,73 @@ function campaignNumbers<T extends Partial<LandingPageDraft>>(body: T): T {
   for (const key of ["offerPrice", "compareAtPrice", "bundleMaxQty"] as const) {
     if (typeof out[key] === "number") out[key] = whole(out[key]) as T[typeof key];
   }
+  // The one number with an upper bound. Clamping is safe where truncating a
+  // list is not: there is no wording to lose, and "10 rows" is plainly what
+  // was meant by "25 rows" once the server has refused it anyway.
+  if (typeof out.bundleMaxQty === "number") {
+    out.bundleMaxQty = Math.min(
+      BUNDLE_MAX_ROWS,
+      Math.max(1, out.bundleMaxQty),
+    ) as T["bundleMaxQty"];
+  }
   return out;
+}
+
+/**
+ * The server's list caps, mirrored.
+ *
+ * Every one of these answers 422 with a schema dump naming nothing a person
+ * would recognise — on a screen holding a page of unsaved ad copy. The editor
+ * checks them first so the message can name the section and the number, and
+ * so the copy stays on screen to be fixed.
+ *
+ * Truncating instead would be worse: the lines past the cap are wording
+ * someone wrote, and dropping them silently is indistinguishable from a bug.
+ *
+ * Keep in step with backend/src/dtos/landing-pages.dto.ts.
+ */
+export const CAMPAIGN_LIMITS: { key: keyof LandingPage; label: string; max: number }[] = [
+  { key: "trustBadges", label: "Trust badges", max: 6 },
+  { key: "brandLogos", label: "Brand names", max: 10 },
+  { key: "features", label: "Features", max: 12 },
+  { key: "specs", label: "Specs", max: 10 },
+  { key: "qcPoints", label: "Quality points", max: 8 },
+  { key: "testimonials", label: "Testimonials", max: 12 },
+  { key: "footerLines", label: "Footer contact lines", max: 8 },
+  { key: "productRowIds", label: "Product row", max: 12 },
+  { key: "benefitBullets", label: "Benefit bullets", max: 10 },
+];
+
+export const BUNDLE_MAX_ROWS = 10;
+
+/**
+ * What the server would reject, said in words the person typing can act on.
+ *
+ * Returns one line per problem, empty when the body will be accepted. It only
+ * covers the rules the editor can actually violate — a slug collision is the
+ * server's to detect, and 409s with a sentence of its own.
+ */
+export function campaignProblems(body: Partial<LandingPageDraft>): string[] {
+  const problems: string[] = [];
+
+  for (const { key, label, max } of CAMPAIGN_LIMITS) {
+    const value = body[key as keyof typeof body];
+    if (Array.isArray(value) && value.length > max) {
+      problems.push(`${label}: ${value.length} entered, at most ${max} allowed.`);
+    }
+  }
+
+  if (typeof body.title === "string" && body.title.trim().length < 2) {
+    problems.push("Internal title needs at least 2 characters.");
+  }
+  if (typeof body.slug === "string" && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(body.slug)) {
+    problems.push("Link slug: lowercase letters, numbers and single hyphens only.");
+  }
+  if (typeof body.gtmId === "string" && !/^$|^GTM-[A-Z0-9]+$/.test(body.gtmId)) {
+    problems.push("GTM container id must look like GTM-XXXXXXX, or be empty.");
+  }
+
+  return problems;
 }
 
 /**

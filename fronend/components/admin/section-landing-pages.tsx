@@ -12,6 +12,8 @@ import {
   publishLandingPage,
   unpublishLandingPage,
   duplicateLandingPage,
+  campaignProblems,
+  BUNDLE_MAX_ROWS,
   type ColorKey,
   type LandingPage,
   type LandingPageDraft,
@@ -317,6 +319,22 @@ function LandingPageEditor({
       priceCompareLabel: draft.priceCompareLabel,
       priceOfferLabel: draft.priceOfferLabel,
     };
+    /*
+     * Catch what the server would reject, while the copy is still on screen.
+     *
+     * Every one of these rules answers 422 with a schema dump — it names the
+     * field as the DTO spells it and says nothing about the limit. On a page
+     * of unsaved ad copy that is the worst possible moment to be unhelpful,
+     * so the same rules are checked here, reported in words, and nothing is
+     * sent until they pass.
+     */
+    const problems = campaignProblems(patch);
+    if (problems.length > 0) {
+      setSaving(false);
+      toast.error(problems.join(" "));
+      return;
+    }
+
     try {
       await patchLandingPage(page.id, patch);
       await onChanged();
@@ -586,6 +604,7 @@ function LandingPageEditor({
             <Textarea value={lists.trustBadges} disabled={readOnly} rows={3}
               onChange={(e) => setLists({ ...lists, trustBadges: e.target.value })}
               placeholder={"১০০% অরিজিনাল\n০৬ মাস ওয়ারেন্টি\nক্যাশ অন ডেলিভারি"} />
+            <LimitNote count={toLines(lists.trustBadges).length} max={6} />
           </Field>
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Discount badge (on the photo)">
@@ -682,6 +701,7 @@ function LandingPageEditor({
               <Textarea value={lists.brandLogos} disabled={readOnly} rows={3}
                 onChange={(e) => setLists({ ...lists, brandLogos: e.target.value })}
                 placeholder={"bKash\nNagad\nSteadFast"} />
+              <LimitNote count={toLines(lists.brandLogos).length} max={10} />
             </Field>
           </div>
         </Group>
@@ -709,6 +729,7 @@ function LandingPageEditor({
             <Textarea value={blocks.features} disabled={readOnly} rows={5}
               onChange={(e) => setBlocks({ ...blocks, features: e.target.value })}
               placeholder={"২২.৫ W সুপার ফাস্ট চার্জ | ৩০ মিনিটে ফোনে ৬০% চার্জ"} />
+            <LimitNote count={toLines(blocks.features).length} max={12} />
           </Field>
         </Group>
 
@@ -728,6 +749,7 @@ function LandingPageEditor({
             <Textarea value={blocks.specs} disabled={readOnly} rows={5}
               onChange={(e) => setBlocks({ ...blocks, specs: e.target.value })}
               placeholder={"২০,০০০ mAh | ক্যাপাসিটি"} />
+            <LimitNote count={toLines(blocks.specs).length} max={10} />
           </Field>
         </Group>
 
@@ -751,7 +773,8 @@ function LandingPageEditor({
                 placeholder="পিস" />
             </Field>
             <Field label="How many bundle rows">
-              <Input type="number" value={draft.bundleMaxQty ?? 3} disabled={readOnly}
+              <Input type="number" min={1} max={BUNDLE_MAX_ROWS} value={draft.bundleMaxQty ?? 3}
+                disabled={readOnly}
                 onChange={(e) => set("bundleMaxQty", numberInput(e.target.value))} />
               <p className="mt-1 text-ui-micro text-zup-soft">
                 Prices come from the product&apos;s quantity offers, so what the page
@@ -779,6 +802,7 @@ function LandingPageEditor({
           <Field label="Quality points (one per line)">
             <Textarea value={lists.qcPoints} disabled={readOnly} rows={4}
               onChange={(e) => setLists({ ...lists, qcPoints: e.target.value })} />
+            <LimitNote count={toLines(lists.qcPoints).length} max={8} />
           </Field>
         </Group>
 
@@ -820,6 +844,7 @@ function LandingPageEditor({
             <Textarea value={blocks.testimonials} disabled={readOnly} rows={5}
               onChange={(e) => setBlocks({ ...blocks, testimonials: e.target.value })}
               placeholder={"লোডশেডিংয়ের সময়ু ফোন চলে | সাইফুল ইসলাম | রাজশাহী"} />
+            <LimitNote count={toLines(blocks.testimonials).length} max={12} />
           </Field>
         </Group>
 
@@ -875,6 +900,7 @@ function LandingPageEditor({
             <Field label="Footer contact lines (one per line)">
               <Textarea value={lists.footerLines} disabled={readOnly} rows={3}
                 onChange={(e) => setLists({ ...lists, footerLines: e.target.value })} />
+              <LimitNote count={toLines(lists.footerLines).length} max={8} />
             </Field>
           </div>
           <Field label="Footer about">
@@ -941,6 +967,19 @@ function LandingPageEditor({
         </Card>
       ) : null}
     </div>
+  );
+}
+
+/** "3 of 6" under a list, turning red once the server would refuse it. */
+function LimitNote({ count, max }: { count: number; max: number }) {
+  const over = count > max;
+  return (
+    <p
+      className={`mt-1 text-ui-micro leading-snug ${over ? "font-semibold text-warn-fg" : "text-zup-soft"}`}
+    >
+      {count} of {max}
+      {over ? " — remove some, or the save is refused." : ""}
+    </p>
   );
 }
 
