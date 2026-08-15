@@ -75,7 +75,9 @@ import {
   PAYMENT_ENVIRONMENTS,
   PAYMENT_KINDS,
   PO_STATUSES,
+  salePriceFrom,
   sellingPrice,
+  stockTagFor,
   SERVICE_BULLET_STYLES,
   SERVICE_IMAGE_SIDES,
   WARRANTY_STATUSES,
@@ -96,6 +98,23 @@ export const productInclude = {
   quantityOffers: { orderBy: { minQty: "asc" as const } },
   freeDeliveryOffers: { orderBy: { minQty: "asc" as const } },
   category: { include: { section: true } },
+  /*
+   * A yes/no: does this product have stock on the way?
+   *
+   * Feeds the "Incoming" status tag (`stockTagFor` in lib/rules.ts). Written
+   * as narrowly as the question allows — `take: 1` and `select: id`, filtered
+   * in the database — because this rides along with GET /api/products, and the
+   * index comment on Product records what an unbounded query costs on that
+   * route. Backed by PurchaseOrder(productId, status).
+   *
+   * Note it deliberately does NOT return the purchase orders themselves: they
+   * are inventory internals and must never reach the public DTO.
+   */
+  purchaseOrders: {
+    where: { status: "In transit" },
+    select: { id: true },
+    take: 1,
+  },
 };
 
 /** A product row with `productInclude` applied. */
@@ -103,6 +122,8 @@ export type ProductWithRelations = Product & {
   quantityOffers: QuantityOffer[];
   freeDeliveryOffers: FreeDeliveryOffer[];
   category: Category & { section: Section };
+  /** At most one row — the "is anything on the way" probe, not a history. */
+  purchaseOrders: { id: string }[];
 };
 
 /** Storefront view — no cost/stock internals, just what the shop renders. */
@@ -116,7 +137,7 @@ export function toPublicProduct(p: ProductWithRelations): PublicProductDto {
     categoryLogo: p.category.svgLogo,
     section: p.category.section.name,
     price: p.price,
-    minDeposit: p.minDeposit,
+    minDepositPct: p.minDepositPct,
     onSale: p.onSale,
     salePrice: sellingPrice(p),
     quantityOffers: p.quantityOffers.map((o) => ({ minQty: o.minQty, amount: o.amount })),
@@ -135,6 +156,12 @@ export function toPublicProduct(p: ProductWithRelations): PublicProductDto {
     description: p.description,
     video: p.video,
     photos: p.photos,
+    recommendedIds: p.recommendedIds,
+    salePct: p.salePct,
+    // Resolved here, not on the client: the manual override and the stock
+    // derivation are both server facts, and the card should only ever print
+    // the answer.
+    stockTag: stockTagFor(p, p.purchaseOrders.length > 0),
     available: availableStock(p),
     inStock: availableStock(p) > 0,
   };
@@ -147,6 +174,7 @@ export function toAdminProduct(
 ): AdminProductDto {
   return {
     ...toPublicProduct(p),
+    stockTagOverride: p.stockTag,
     sku: p.sku,
     cost: p.cost,
     stock: p.stock,
@@ -411,6 +439,22 @@ function campaignContent(lp: LandingPageRow) {
   const labels = (lp.formLabels ?? {}) as Record<string, unknown>;
 
   return {
+    // The whole palette, on both the admin and the public payload — the admin
+    // previews the page with the same values it renders with.
+    colorHeroBg: lp.colorHeroBg,
+    colorHeroText: lp.colorHeroText,
+    colorBandBg: lp.colorBandBg,
+    colorBandText: lp.colorBandText,
+    colorTintBg: lp.colorTintBg,
+    colorPageBg: lp.colorPageBg,
+    colorPageText: lp.colorPageText,
+    colorAccent: lp.colorAccent,
+    colorHighlight: lp.colorHighlight,
+    colorCtaBg: lp.colorCtaBg,
+    colorCtaText: lp.colorCtaText,
+    productRowIds: lp.productRowIds,
+    priceCompareLabel: lp.priceCompareLabel,
+    priceOfferLabel: lp.priceOfferLabel,
     hotlineLabel: lp.hotlineLabel,
     hotlineNumber: lp.hotlineNumber,
     headerCtaLabel: lp.headerCtaLabel,
@@ -420,6 +464,7 @@ function campaignContent(lp: LandingPageRow) {
     heroCtaNote: lp.heroCtaNote,
     brandStripTitle: lp.brandStripTitle,
     brandLogos: lp.brandLogos,
+    heroVideoUrl: lp.heroVideoUrl,
     videoTitle: lp.videoTitle,
     videoUrl: lp.videoUrl,
     featuresTitle: lp.featuresTitle,
@@ -465,7 +510,25 @@ function campaignContent(lp: LandingPageRow) {
   };
 }
 
-export function toLandingPage(lp: LandingPageRow): LandingPageDto {
+/**
+ * Orders attributed to a campaign, counted from the Order rows themselves.
+ *
+ * Passed in rather than read here because the admin list resolves them for
+ * every campaign in one groupBy — a per-row query would be one round trip per
+ * campaign on a screen whose whole job is comparing campaigns.
+ *
+ * Absent means "not measured on this call" and shows as zero, which is honest:
+ * the single-campaign GET does not run the aggregate.
+ */
+export interface LandingPageStats {
+  orderCount: number;
+  revenue: number;
+}
+
+export function toLandingPage(
+  lp: LandingPageRow,
+  stats: LandingPageStats = { orderCount: 0, revenue: 0 },
+): LandingPageDto {
   return {
     id: lp.id,
     title: lp.title,
@@ -489,7 +552,9 @@ export function toLandingPage(lp: LandingPageRow): LandingPageDto {
     published: lp.published,
     ...campaignContent(lp),
     viewCount: lp.viewCount,
-    orderCount: lp.orderCount,
+    orderCount: stats.orderCount,
+    /** BDT actually ordered through this campaign — order totals, summed. */
+    revenue: stats.revenue,
     createdAt: lp.createdAt.toISOString(),
     updatedAt: lp.updatedAt.toISOString(),
   };

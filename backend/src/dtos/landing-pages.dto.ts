@@ -9,6 +9,17 @@ import { slugDto } from "./common";
  * on — checkout still reprices from the catalog through priceCart(), so a
  * campaign can advertise a number without being able to move it.
  */
+/**
+ * A hex colour, 3- or 6-digit.
+ *
+ * The pattern is load-bearing, not tidiness: these values are interpolated
+ * straight into `style` on the rendered campaign page, so this is the boundary
+ * that decides what may reach it. The renderer trusts whatever gets through.
+ *
+ * Optional so a PATCH changing one colour need not resend the other ten.
+ */
+const hexColor = t.Optional(t.String({ pattern: "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$" }));
+
 const landingPageFields = {
   title: t.String({ minLength: 2, maxLength: 200 }),
   // "" = fall back to the product name.
@@ -25,6 +36,34 @@ const landingPageFields = {
   // Its own container so campaign spend is tracked apart from the main site.
   // "" clears it; otherwise it must look like a real GTM id.
   gtmId: t.String({ maxLength: 40, pattern: "^$|^GTM-[A-Z0-9]+$" }),
+
+  /*
+   * Theme colours, one per role.
+   *
+   * Pattern-validated as 3- or 6-digit hex. That matters more than it looks:
+   * these are interpolated straight into `style` on the rendered page, so an
+   * unvalidated string is a place to put things that are not colours. The
+   * pattern is the boundary — the renderer trusts what it is handed.
+   *
+   * Optional so a PATCH of one colour does not require sending all eleven.
+   */
+  colorHeroBg: hexColor,
+  colorHeroText: hexColor,
+  colorBandBg: hexColor,
+  colorBandText: hexColor,
+  colorTintBg: hexColor,
+  colorPageBg: hexColor,
+  colorPageText: hexColor,
+  colorAccent: hexColor,
+  colorHighlight: hexColor,
+  colorCtaBg: hexColor,
+  colorCtaText: hexColor,
+
+  /** Ordered product ids for the row above the page. Empty hides it. */
+  priceCompareLabel: t.Optional(t.String({ maxLength: 80 })),
+  priceOfferLabel: t.Optional(t.String({ maxLength: 80 })),
+  productRowIds: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 50 }), { maxItems: 12 })),
+
   published: t.Boolean(),
 };
 
@@ -51,6 +90,10 @@ const campaignFields = {
   brandStripTitle: t.String({ maxLength: 160 }),
   brandLogos: t.Array(t.String({ maxLength: 80 }), { maxItems: 10 }),
 
+  /* In the hero, in place of the pack shot. Blank keeps the photo. Same URL
+     rule as `videoUrl` below — the renderer parses it and shows nothing when
+     it is unusable, rather than embedding something that 404s. */
+  heroVideoUrl: t.String({ maxLength: 500, pattern: "^$|^https?://\\S+$" }),
   videoTitle: t.String({ maxLength: 200 }),
   videoUrl: t.String({ maxLength: 500, pattern: "^$|^https?://\\S+$" }),
 

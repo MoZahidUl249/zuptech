@@ -1183,10 +1183,10 @@ export function AccountView({ productNames }: { productNames: Record<string, str
               delivery tracking.
             </p>
             <Link
-              href="/shop"
+              href="/products"
               className="inline-flex items-center gap-1.5 rounded-full bg-zup-blue px-6 py-3 text-sm font-semibold text-white transition-colors duration-200 hover:bg-zup-blue-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zup-blue"
             >
-              Shop products
+              Browse products
               <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
             </Link>
           </div>

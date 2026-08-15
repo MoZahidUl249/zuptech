@@ -66,10 +66,25 @@ Use `bun` (not npm/node) everywhere; run Prisma CLI as `bunx --bun prisma …`.
   different ways — the server floored it, the admin preview rounded it, the
   product card rounded again off a different base — so a ৳999 product at 33%
   off showed ৳669 in the admin and charged ৳670. `Product.salePrice` is what
-  the customer pays (admin-entered, not derived); `minDeposit` is the deposit
-  itself. Subtraction has nothing to round. A tier may exceed the price or the
-  fee: `effectiveUnitPrice` and `discountedDeliveryFee` clamp at zero, and an
-  amount at or above the zone fee is how "free delivery" is expressed.
+  the customer pays (admin-entered, not derived). Subtraction has nothing to
+  round. A tier may exceed the price or the fee: `effectiveUnitPrice` and
+  `discountedDeliveryFee` clamp at zero, and an amount at or above the zone fee
+  is how "free delivery" is expressed.
+- **`Product.minDepositPct` is the one percentage, and it is display-only.** It
+  was `minDeposit` in BDT until 2026-08-13. Nothing in pricing, order creation
+  or checkout reads it — the storefront just prints "20% minimum down payment".
+  That is the only reason a percentage is tolerable here. If checkout ever
+  takes deposits, resolve it to taka **once**, server-side, and store that
+  number on the order; do not recompute the percentage in two places, which is
+  exactly what the paragraph above is about.
+- `Product.recommendedIds` and `SiteConfig.featuredIds`/`homeRowIds` are all
+  ordered arrays of product ids, not relations. An id that stops resolving is
+  dropped silently (`getProductsByIds` on the storefront, and the admin picker
+  filters the catalogue), so a deleted product costs one missing card rather
+  than a broken page. The two SiteConfig rows are validated on write against
+  the catalogue (`assertKnownProducts`); a product's own recommendations are
+  not, because rejecting a product save over an unrelated deletion is worse
+  than one absent card.
 - Admin routes `.use(staffGuard)` (session → `staffCtx`) and call
   `assertCan(staffCtx, module, "view"|"manage")` at the top of every handler.
 - Request/response contracts are DTOs: every route body/query schema lives in

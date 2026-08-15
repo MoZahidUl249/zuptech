@@ -7,7 +7,7 @@ import {
   uploadProductVideoDto,
 } from "../../dtos/products.dto";
 import { prisma } from "../../lib/db";
-import { LIST_CAP } from "../../lib/rules";
+import { LIST_CAP, salePriceFrom } from "../../lib/rules";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { productInclude, toAdminProduct } from "../../lib/serialize";
@@ -16,6 +16,27 @@ import { staffGuard } from "./guard";
 
 /** Gallery cap — first photo is the cover; matches products.dto.ts's maxItems. */
 const MAX_PRODUCT_PHOTOS = 12;
+
+/**
+ * Reject ids that aren't in the catalogue, naming them.
+ *
+ * Shared by the two ordered-row endpoints: both write a list of product ids
+ * into SiteConfig, and a typo'd id there is a permanently blank slot on the
+ * home page that nothing surfaces. Note this is deliberately NOT applied to a
+ * product's own `recommendedIds` — see the DTO comment there.
+ */
+async function assertKnownProducts(ids: string[], verb: string): Promise<void> {
+  if (ids.length === 0) return;
+  const products = await prisma.product.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  const known = new Set(products.map((p) => p.id));
+  const missing = ids.filter((id) => !known.has(id));
+  if (missing.length > 0) {
+    throw badRequest(`Only catalog products can be ${verb} — unknown: ${missing.join(", ")}`);
+  }
+}
 
 async function featuredIds(): Promise<string[]> {
   const config = await prisma.siteConfig.findUniqueOrThrow({ where: { id: 1 } });
@@ -71,6 +92,8 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
       const product = await prisma.product.create({
         data: {
           ...fields,
+          // The percentage is the input; the taka is stored. See salePriceFrom.
+          salePrice: salePriceFrom(fields.price, fields.salePct),
           id,
           ...(quantityOffers ? { quantityOffers: { create: quantityOffers } } : {}),
           ...(freeDeliveryOffers ? { freeDeliveryOffers: { create: freeDeliveryOffers } } : {}),
@@ -108,10 +131,34 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
         if (freeDeliveryOffers) {
           await tx.freeDeliveryOffer.deleteMany({ where: { productId: params.id } });
         }
+        /*
+         * Recompute the sale price only when an input actually CHANGES.
+         *
+         * Not "was sent" — changed. The admin form PATCHes the whole product
+         * body on every save, so a presence check made `priceChanging` true
+         * for an edit to the description, and the stored sale price was
+         * rewritten from the rounded whole percentage every time.
+         *
+         * That silently repriced anything the migration backfilled. A live row
+         * at 1000 with a 777 sale price backfills to 22%, deliberately keeping
+         * 777; under a presence check the next unrelated save turned it into
+         * salePriceFrom(1000, 22) = 780 — three taka more, from editing a
+         * description. Measured, not theorised.
+         *
+         * Comparing against the stored row means the backfilled pair survives
+         * until someone genuinely edits the price or the percentage, and then
+         * the two are recomputed together and agree.
+         */
+        const nextPrice = fields.price ?? existing.price;
+        const nextPct = fields.salePct ?? existing.salePct;
+        const priceChanging =
+          nextPrice !== existing.price || nextPct !== existing.salePct;
+
         return tx.product.update({
           where: { id: params.id },
           data: {
             ...fields,
+            ...(priceChanging ? { salePrice: salePriceFrom(nextPrice, nextPct) } : {}),
             ...(quantityOffers ? { quantityOffers: { create: quantityOffers } } : {}),
             ...(freeDeliveryOffers ? { freeDeliveryOffers: { create: freeDeliveryOffers } } : {}),
           },
@@ -320,19 +367,24 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
     "/admin/api/products/featured",
     async ({ body, staffCtx }) => {
       assertCan(staffCtx, "homepage", "manage");
-
-      const products = await prisma.product.findMany({
-        where: { id: { in: body.ids } },
-        select: { id: true },
-      });
-      const known = new Set(products.map((p) => p.id));
-      const missing = body.ids.filter((id) => !known.has(id));
-      if (missing.length > 0) {
-        throw badRequest(`Only catalog products can be featured — unknown: ${missing.join(", ")}`);
-      }
-
+      await assertKnownProducts(body.ids, "featured");
       await prisma.siteConfig.update({ where: { id: 1 }, data: { featuredIds: body.ids } });
       return { featuredIds: body.ids };
+    },
+    { body: updateFeaturedDto },
+  )
+
+  /**
+   * The home page's second product row. Same contract as /featured above —
+   * same guard, same ordering rule, different column.
+   */
+  .patch(
+    "/admin/api/products/home-row",
+    async ({ body, staffCtx }) => {
+      assertCan(staffCtx, "homepage", "manage");
+      await assertKnownProducts(body.ids, "put in the home row");
+      await prisma.siteConfig.update({ where: { id: 1 }, data: { homeRowIds: body.ids } });
+      return { homeRowIds: body.ids };
     },
     { body: updateFeaturedDto },
   );

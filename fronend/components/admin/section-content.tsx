@@ -3,17 +3,17 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import {
   useAdmin,
   GTM_ID_RE,
-  type AdminProduct,
   type HeroSlide,
   type SiteCopy,
   type SiteContact,
   tempId,
 } from "@/lib/admin";
 import { uploadSlideImage } from "@/lib/admin-api";
+import { ProductPicker } from "@/components/admin/products/product-picker";
 import { DEFAULT_COPY } from "@/lib/site-copy";
 import { HERO_PAGE_LABELS, type HeroPage } from "@/lib/admin";
 import {
@@ -41,7 +41,7 @@ import {
 
 /* ===== Home page (hero banner slides — image + CTA, as the store renders) ===== */
 
-const CTA_TARGETS = ["/shop", "/services", "/industrial", "/contact"];
+const CTA_TARGETS = ["/products", "/services", "/industrial", "/contact"];
 
 /** Mirrors uploadSlideImageDto's maxSize ("8m") in content.dto.ts. */
 const MAX_SLIDE_BYTES = 8_000_000;
@@ -93,7 +93,7 @@ export function BannerSlidesCard({ page = "home" }: { page?: HeroPage }) {
         id: tempId("slide"),
         image: null,
         cta: "Shop Now",
-        href: "/shop",
+        href: "/products",
         // Active on creation: you add a banner because you want it shown, and
         // the old default of `false` meant every new slide silently did nothing
         // until someone found the toggle.
@@ -280,117 +280,43 @@ export function FeaturedRowEditor() {
   const { state, update, can } = useAdmin();
   const readOnly = can("homepage") !== "manage";
 
-  // Resolve against the catalog, dropping ids whose product no longer exists
-  // (deleted product, or one hidden since it was featured).
-  const featured = state.featuredIds
-    .map((id) => state.products.find((p) => p.id === id))
-    .filter((p): p is AdminProduct => Boolean(p));
-
-  const available = state.products
-    .filter((p) => !state.featuredIds.includes(p.id))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const setIds = (ids: string[]) => update({ featuredIds: ids });
-
-  const move = (index: number, dir: -1 | 1) => {
-    const next = [...state.featuredIds];
-    const target = index + dir;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target]!, next[index]!];
-    setIds(next);
-  };
-
   return (
-    <Card className="px-5 py-5 sm:px-6">
-      <h2 className="text-ui-base font-bold">Featured products</h2>
-      <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">
-        The row under the hero banner, shown left to right in the order below.
-        Starring a product on the Products screen adds it to the end — reorder
-        it here.
-      </p>
-
-      {featured.length === 0 ? (
-        <p className="mt-4 text-ui-sm text-zup-soft">
-          Nothing featured yet — the home page hides the row.
+    <>
+      <Card className="px-5 py-5 sm:px-6">
+        <h2 className="text-ui-base font-bold">Featured products</h2>
+        <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">
+          The row under the hero banner, shown left to right in the order below.
+          Starring a product on the Products screen adds it to the end — reorder
+          it here.
         </p>
-      ) : (
-        <ol className="mt-4 flex flex-col gap-2">
-          {featured.map((p, i) => (
-            <li
-              key={p.id}
-              className="flex flex-wrap items-center gap-3 rounded-xl border border-zup-body/8 px-3.5 py-2.5"
-            >
-              <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-zup-body/6 text-ui-xs font-bold text-zup-gray">
-                {i + 1}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-ui-base font-bold">{p.name}</span>
-                <span className="block text-ui-micro text-zup-soft">
-                  {p.category || "—"}
-                  {p.visible ? "" : " · hidden from the storefront"}
-                </span>
-              </span>
-              {readOnly ? null : (
-                <span className="flex items-center gap-1">
-                  <BtnGhost
-                    aria-label={`Move ${p.name} earlier`}
-                    disabled={i === 0}
-                    onClick={() => move(i, -1)}
-                  >
-                    <ArrowUp className="h-3.5 w-3.5" aria-hidden />
-                  </BtnGhost>
-                  <BtnGhost
-                    aria-label={`Move ${p.name} later`}
-                    disabled={i === featured.length - 1}
-                    onClick={() => move(i, 1)}
-                  >
-                    <ArrowDown className="h-3.5 w-3.5" aria-hidden />
-                  </BtnGhost>
-                  <BtnGhost
-                    aria-label={`Remove ${p.name} from featured`}
-                    onClick={() => {
-                      setIds(state.featuredIds.filter((id) => id !== p.id));
-                      toast(`${p.name} removed from Featured products`);
-                    }}
-                  >
-                    <X className="h-3.5 w-3.5 text-destructive" aria-hidden />
-                  </BtnGhost>
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
+        <ProductPicker
+          selectId="feat-add"
+          label="Featured products"
+          emptyNote="Nothing featured yet — the home page hides the row."
+          ids={state.featuredIds}
+          onChange={(ids) => update({ featuredIds: ids })}
+          readOnly={readOnly}
+        />
+      </Card>
 
-      {readOnly ? null : (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <label htmlFor="feat-add" className="text-ui-sm font-semibold text-zup-gray">
-            Add a product
-          </label>
-          <select
-            id="feat-add"
-            // Stays on the placeholder so the same control can be used
-            // repeatedly without first resetting it.
-            value=""
-            onChange={(e) => {
-              if (!e.target.value) return;
-              const picked = state.products.find((p) => p.id === e.target.value);
-              setIds([...state.featuredIds, e.target.value]);
-              if (picked) toast(`${picked.name} added to Featured products`);
-            }}
-            className={selectCls}
-          >
-            <option value="">Select…</option>
-            {available.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-                {p.visible ? "" : " (hidden)"}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-    </Card>
+      <Card className="px-5 py-5 sm:px-6">
+        <h2 className="text-ui-base font-bold">Second product row</h2>
+        <p className="mt-0.5 max-w-prose text-ui-sm text-zup-gray">
+          A second row further down the home page, just above the two booking
+          forms. It is a separate list from Featured products on purpose — put
+          different things here, or the same eight products appear twice on one
+          page. Empty hides the row.
+        </p>
+        <ProductPicker
+          selectId="homerow-add"
+          label="the second row"
+          emptyNote="Nothing here yet — the home page hides this row."
+          ids={state.homeRowIds}
+          onChange={(ids) => update({ homeRowIds: ids })}
+          readOnly={readOnly}
+        />
+      </Card>
+    </>
   );
 }
 
@@ -422,7 +348,7 @@ function SlideHrefField({
           }}
           className={selectCls}
         >
-          <option value="/shop">Shop (/shop)</option>
+          <option value="/products">Products (/products)</option>
           <option value="/services">Services (/services)</option>
           <option value="/industrial">Industrial (/industrial)</option>
           <option value="/contact">Contact (/contact)</option>

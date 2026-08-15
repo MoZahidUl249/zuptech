@@ -266,7 +266,7 @@ export function Donut({
         {segments.map((s, i) => (
           <li key={s.label} className="flex items-center gap-2.5 text-sm">
             <span
-              className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+              className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
               style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }}
             />
             <span className="truncate text-zup-mid">{s.label}</span>

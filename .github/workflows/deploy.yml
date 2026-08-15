@@ -75,6 +75,25 @@ jobs:
 
   deploy:
     needs: publish
+    # PUBLISHING IS AUTOMATIC; THE ROLLOUT IS NOT.
+    #
+    # A push to main runs CI and pushes SHA-tagged images to GHCR, then stops.
+    # Putting them on the VPS is a deliberate act: Actions -> Deploy -> Run
+    # workflow. That is the "publish, then push live" split — it exists so a
+    # change can be tested against the live database from a workstation
+    # (scripts/live-stack.sh) in between the two.
+    #
+    # An `if:` rather than GitHub's environment required-reviewers, which would
+    # give a nicer approval prompt but needs a paid plan on a private repo.
+    # This works on any plan. If the repo is ever on Team/Pro, adding reviewers
+    # to the `production` environment below stacks on top of this fine.
+    #
+    # Note what a dispatch actually deploys: the VPS step does
+    # `git reset --hard origin/main`, so the checkout is always origin/main's
+    # tip, while TAG below is the SHA of whatever ref you dispatched. Dispatch
+    # from main and they agree. Dispatch from another branch and the box runs
+    # main's compose file against that branch's images — don't.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: production
     # The VPS logs in to GHCR with this job's GITHUB_TOKEN to pull the images
@@ -90,7 +109,13 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          script_stop: true
+          # NOTE: no `script_stop`. appleboy/ssh-action@v1 dropped that input,
+          # and an unrecognised input is a hard failure — the step dies on
+          # validation before it ever opens a connection. That is what broke
+          # every deploy between 2026-08-09 and 2026-08-10: five consecutive
+          # runs failed with "Unexpected input(s) 'script_stop'" while the
+          # images published fine, so the box silently stayed on old code.
+          # `set -euo pipefail` below already does what the flag did.
           script: |
             set -euo pipefail
             # Wherever the checkout actually is. It was hardcoded to
@@ -133,7 +158,8 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          script_stop: true
+          # See the note on the rollout step above — `script_stop` is not a
+          # valid input any more and fails the step outright.
           script: |
             set -euo pipefail
             cd "${APP_DIR:-$HOME/zup/zuptech}"

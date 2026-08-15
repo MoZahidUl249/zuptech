@@ -4,6 +4,11 @@
  *
  * Idempotent: safe to re-run — rows are upserted, staff auth users are only
  * created when missing. Run with `bun run db:seed`.
+ *
+ * One thing here is deliberately NOT public: the demo campaign page is created
+ * as a draft, and re-running never changes whether a campaign is published.
+ * See `landingPages` below — a seed may not put a page on the internet, and
+ * must not take a live one down either.
  */
 import { randomBytes } from "node:crypto";
 import { auth } from "../src/lib/auth";
@@ -102,16 +107,16 @@ const categories = [
 // the seed doesn't depend on cuids that differ between environments.
 // prettier-ignore
 const products = [
-  { id: "ips1000", slug: "1000va-ips-battery-combo", name: "1000VA IPS + Battery Combo", category: "Backup", price: 42500, minDeposit: 8500, rating: 4.7, sold: 312, imgHint: "IPS unit photo", specs: ["1000VA / 800W pure sine-wave output", "Includes 100Ah tubular battery", "6–8 hr backup for fans, lights & Wi-Fi", "1-year service warranty, Dhaka-wide install"], description: "A complete home backup package: a 1000VA pure sine-wave IPS paired with a 100Ah tubular battery, sized to run fans, lights and Wi-Fi for 6–8 hours per outage. Installed Dhaka-wide with a 1-year service warranty.", video: "https://www.youtube.com/watch?v=ips1000demo", sku: "ZT-IPS-1000", cost: 34000, stock: 14, reserved: 2, reorderAt: 5, visible: true, deliveryFeeInsideDhaka: 150, deliveryFeeOutsideDhaka: 350, installationFeeInsideDhaka: 500, installationFeeOutsideDhaka: 800, warrantyMonths: 12 },
-  { id: "solar500", slug: "solar-home-system-500w", name: "Solar Home System 500W", category: "Solar", price: 55000, minDeposit: 13750, rating: 4.8, sold: 189, imgHint: "solar panel kit photo", specs: ["500W mono panels + hybrid inverter", "Runs TV, lights, fans daytime free", "Net-metering ready", "Installed by certified engineers"], description: "A 500W monocrystalline solar home system with hybrid inverter — run your TV, lights and fans on free daytime power. Net-metering ready and installed end-to-end by certified ZUP TECH engineers.", sku: "ZT-SHS-500", cost: 45000, stock: 8, reserved: 1, reorderAt: 4, visible: true, deliveryFeeInsideDhaka: 300, deliveryFeeOutsideDhaka: 600, installationFeeInsideDhaka: 1500, installationFeeOutsideDhaka: 2500, warrantyMonths: 60 },
-  { id: "stab30", slug: "3-phase-voltage-stabilizer-30kva", name: "3-Phase Voltage Stabilizer 30 kVA", category: "Protection", price: 92000, minDeposit: 27600, rating: 4.6, sold: 74, imgHint: "stabilizer photo", specs: ["Servo type, 30 kVA, 3-phase", "Input range 280–460V", "Protects CNC, compressors, chillers", "On-site commissioning included"], description: "Servo-type 30 kVA three-phase voltage stabilizer with a wide 280–460V input range. Protects sensitive industrial machinery — CNC machines, compressors and chillers — with on-site commissioning included.", sku: "ZT-STB-30K", cost: 76000, stock: 3, reserved: 0, reorderAt: 3, visible: true, deliveryFeeInsideDhaka: 800, deliveryFeeOutsideDhaka: 1800, installationFeeInsideDhaka: 3000, installationFeeOutsideDhaka: 5000, warrantyMonths: 24 },
-  { id: "trafo200", slug: "200kva-distribution-transformer", name: "200 kVA Distribution Transformer", category: "Switchgear", price: 485000, minDeposit: 194000, rating: 4.9, sold: 41, imgHint: "transformer photo", specs: ["11/0.415 kV, 200 kVA, ONAN", "BSTI & REB spec compliant", "Copper wound, low-loss core", "Delivery + crane placement included"], description: "An 11/0.415 kV, 200 kVA ONAN distribution transformer built to BSTI and REB specifications. Copper wound with a low-loss core — delivery and crane placement are included in the price.", sku: "ZT-TRF-200", cost: 410000, stock: 2, reserved: 1, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 3000, deliveryFeeOutsideDhaka: 8000, installationFeeInsideDhaka: 10000, installationFeeOutsideDhaka: 18000, warrantyMonths: 60 },
-  { id: "panelLT", slug: "lt-switchgear-panel-custom", name: "LT Switchgear Panel (Custom)", category: "Switchgear", price: 145000, minDeposit: 50750, rating: 4.7, sold: 58, imgHint: "LT panel photo", specs: ["Custom-built to your load schedule", "Reputed-brand breakers & meters", "Powder-coated IP54 enclosure", "Drawings approved before build"], description: "A low-tension switchgear panel custom-built to your exact load schedule, using reputed-brand breakers and meters in a powder-coated IP54 enclosure. You approve the drawings before we build.", sku: "ZT-PNL-LT", cost: 112000, stock: 5, reserved: 0, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 1000, deliveryFeeOutsideDhaka: 2500, installationFeeInsideDhaka: 4000, installationFeeOutsideDhaka: 7000, warrantyMonths: 24 },
-  { id: "solar10k", slug: "industrial-solar-kit-10kw", name: "Industrial Solar Kit 10 kW", category: "Solar", price: 620000, minDeposit: 248000, rating: 4.8, sold: 23, imgHint: "rooftop solar photo", specs: ["10 kW on-grid, tier-1 panels", "Payback typically under 4 years", "Full EPC: design → commissioning", "Generation monitoring app"], description: "A 10 kW on-grid industrial solar kit with tier-1 panels and full EPC delivery — design through commissioning — plus a generation monitoring app. Payback is typically under 4 years.", sku: "ZT-SOL-10K", cost: 520000, stock: 4, reserved: 1, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 2000, deliveryFeeOutsideDhaka: 5000, installationFeeInsideDhaka: 15000, installationFeeOutsideDhaka: 25000, warrantyMonths: 60 },
-  { id: "ats63", slug: "automatic-transfer-switch-63a", name: "Automatic Transfer Switch 63A", category: "Backup", price: 12800, minDeposit: 1280, rating: 4.5, sold: 146, imgHint: "ATS photo", specs: ["Seamless mains ↔ generator switching", "63A, 2-pole, DIN mount", "Under 20ms transfer time", "Installation service available"], description: "A 63A two-pole automatic transfer switch for seamless switching between mains and generator power, with under-20ms transfer time. DIN-mount design; professional installation available.", sku: "ZT-ATS-63", cost: 10500, stock: 0, reserved: 0, reorderAt: 6, visible: false, deliveryFeeInsideDhaka: 100, deliveryFeeOutsideDhaka: 250, installationFeeInsideDhaka: 300, installationFeeOutsideDhaka: 500, warrantyMonths: 12 },
-  { id: "vprot", slug: "voltage-protector-220v-40a", name: "Voltage Protector 220V 40A", category: "Protection", price: 1650, minDeposit: 165, rating: 4.6, sold: 921, imgHint: "voltage protector photo", specs: ["Cuts off on high/low voltage", "Protects fridge, AC, TV", "Auto-reconnect with delay", "Plug-and-play install"], description: "A 220V 40A voltage protector that cuts power instantly on dangerous high or low voltage, protecting your fridge, AC and TV. Auto-reconnects with a safe delay — plug-and-play installation.", sku: "ZT-VPR-40", cost: 1100, stock: 230, reserved: 12, reorderAt: 50, visible: true, deliveryFeeInsideDhaka: 60, deliveryFeeOutsideDhaka: 150, installationFeeInsideDhaka: 0, installationFeeOutsideDhaka: 0, warrantyMonths: 12 },
-  { id: "flood100", slug: "led-flood-light-100w-ip66", name: "LED Flood Light 100W IP66", category: "Lighting", price: 2400, minDeposit: 240, rating: 4.4, sold: 534, imgHint: "flood light photo", specs: ["100W, 10,000 lumen, 6500K", "IP66 weatherproof", "50,000 hr lifespan", "2-year replacement warranty"], description: "A 100W LED flood light delivering 10,000 lumens at 6500K in an IP66 weatherproof housing. Rated for 50,000 hours and backed by a 2-year replacement warranty.", sku: "ZT-FLD-100", cost: 1700, stock: 96, reserved: 4, reorderAt: 30, visible: true, deliveryFeeInsideDhaka: 80, deliveryFeeOutsideDhaka: 200, installationFeeInsideDhaka: 100, installationFeeOutsideDhaka: 200, warrantyMonths: 24 },
-  { id: "mccb400", slug: "mccb-breaker-400a-3-pole", name: "MCCB Breaker 400A 3-Pole", category: "Protection", price: 18500, minDeposit: 2775, rating: 4.7, sold: 203, imgHint: "MCCB photo", specs: ["400A frame, 36kA breaking capacity", "Adjustable thermal-magnetic trip", "Panel or DIN mounting", "Genuine, with test certificate"], description: "A genuine 400A three-pole MCCB with 36kA breaking capacity and adjustable thermal-magnetic trip. Suitable for panel or DIN mounting, supplied with test certificate.", sku: "ZT-MCB-400", cost: 14200, stock: 41, reserved: 0, reorderAt: 10, visible: true, deliveryFeeInsideDhaka: 150, deliveryFeeOutsideDhaka: 400, installationFeeInsideDhaka: 400, installationFeeOutsideDhaka: 700, warrantyMonths: 12 },
+  { id: "ips1000", slug: "1000va-ips-battery-combo", name: "1000VA IPS + Battery Combo", category: "Backup", price: 42500, minDepositPct: 20, rating: 4.7, sold: 312, imgHint: "IPS unit photo", specs: ["1000VA / 800W pure sine-wave output", "Includes 100Ah tubular battery", "6–8 hr backup for fans, lights & Wi-Fi", "1-year service warranty, Dhaka-wide install"], description: "A complete home backup package: a 1000VA pure sine-wave IPS paired with a 100Ah tubular battery, sized to run fans, lights and Wi-Fi for 6–8 hours per outage. Installed Dhaka-wide with a 1-year service warranty.", video: "https://www.youtube.com/watch?v=ips1000demo", sku: "ZT-IPS-1000", cost: 34000, stock: 14, reserved: 2, reorderAt: 5, visible: true, deliveryFeeInsideDhaka: 150, deliveryFeeOutsideDhaka: 350, installationFeeInsideDhaka: 500, installationFeeOutsideDhaka: 800, recommendedIds: ["ats63", "solar500", "vprot"], onSale: true, salePct: 10, salePrice: 38250, warrantyMonths: 12 },
+  { id: "solar500", slug: "solar-home-system-500w", name: "Solar Home System 500W", category: "Solar", price: 55000, minDepositPct: 25, rating: 4.8, sold: 189, imgHint: "solar panel kit photo", specs: ["500W mono panels + hybrid inverter", "Runs TV, lights, fans daytime free", "Net-metering ready", "Installed by certified engineers"], description: "A 500W monocrystalline solar home system with hybrid inverter — run your TV, lights and fans on free daytime power. Net-metering ready and installed end-to-end by certified ZUP TECH engineers.", sku: "ZT-SHS-500", cost: 45000, stock: 8, reserved: 1, reorderAt: 4, visible: true, deliveryFeeInsideDhaka: 300, deliveryFeeOutsideDhaka: 600, installationFeeInsideDhaka: 1500, installationFeeOutsideDhaka: 2500, recommendedIds: ["solar10k", "ips1000", "flood100"], onSale: true, salePct: 20, salePrice: 44000, warrantyMonths: 60 },
+  { id: "stab30", slug: "3-phase-voltage-stabilizer-30kva", name: "3-Phase Voltage Stabilizer 30 kVA", category: "Protection", price: 92000, minDepositPct: 30, rating: 4.6, sold: 74, imgHint: "stabilizer photo", specs: ["Servo type, 30 kVA, 3-phase", "Input range 280–460V", "Protects CNC, compressors, chillers", "On-site commissioning included"], description: "Servo-type 30 kVA three-phase voltage stabilizer with a wide 280–460V input range. Protects sensitive industrial machinery — CNC machines, compressors and chillers — with on-site commissioning included.", sku: "ZT-STB-30K", cost: 76000, stock: 3, reserved: 0, reorderAt: 3, visible: true, deliveryFeeInsideDhaka: 800, deliveryFeeOutsideDhaka: 1800, installationFeeInsideDhaka: 3000, installationFeeOutsideDhaka: 5000, recommendedIds: ["vprot", "mccb400", "panelLT"], warrantyMonths: 24 },
+  { id: "trafo200", slug: "200kva-distribution-transformer", name: "200 kVA Distribution Transformer", category: "Switchgear", price: 485000, minDepositPct: 40, rating: 4.9, sold: 41, imgHint: "transformer photo", specs: ["11/0.415 kV, 200 kVA, ONAN", "BSTI & REB spec compliant", "Copper wound, low-loss core", "Delivery + crane placement included"], description: "An 11/0.415 kV, 200 kVA ONAN distribution transformer built to BSTI and REB specifications. Copper wound with a low-loss core — delivery and crane placement are included in the price.", sku: "ZT-TRF-200", cost: 410000, stock: 2, reserved: 1, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 3000, deliveryFeeOutsideDhaka: 8000, installationFeeInsideDhaka: 10000, installationFeeOutsideDhaka: 18000, recommendedIds: ["panelLT", "mccb400", "stab30"], warrantyMonths: 60 },
+  { id: "panelLT", slug: "lt-switchgear-panel-custom", name: "LT Switchgear Panel (Custom)", category: "Switchgear", price: 145000, minDepositPct: 35, rating: 4.7, sold: 58, imgHint: "LT panel photo", specs: ["Custom-built to your load schedule", "Reputed-brand breakers & meters", "Powder-coated IP54 enclosure", "Drawings approved before build"], description: "A low-tension switchgear panel custom-built to your exact load schedule, using reputed-brand breakers and meters in a powder-coated IP54 enclosure. You approve the drawings before we build.", sku: "ZT-PNL-LT", cost: 112000, stock: 5, reserved: 0, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 1000, deliveryFeeOutsideDhaka: 2500, installationFeeInsideDhaka: 4000, installationFeeOutsideDhaka: 7000, recommendedIds: ["mccb400", "trafo200", "stab30"], warrantyMonths: 24 },
+  { id: "solar10k", slug: "industrial-solar-kit-10kw", name: "Industrial Solar Kit 10 kW", category: "Solar", price: 620000, minDepositPct: 40, rating: 4.8, sold: 23, imgHint: "rooftop solar photo", specs: ["10 kW on-grid, tier-1 panels", "Payback typically under 4 years", "Full EPC: design → commissioning", "Generation monitoring app"], description: "A 10 kW on-grid industrial solar kit with tier-1 panels and full EPC delivery — design through commissioning — plus a generation monitoring app. Payback is typically under 4 years.", sku: "ZT-SOL-10K", cost: 520000, stock: 4, reserved: 1, reorderAt: 2, visible: true, deliveryFeeInsideDhaka: 2000, deliveryFeeOutsideDhaka: 5000, installationFeeInsideDhaka: 15000, installationFeeOutsideDhaka: 25000, recommendedIds: ["solar500", "panelLT", "trafo200"], warrantyMonths: 60 },
+  { id: "ats63", slug: "automatic-transfer-switch-63a", name: "Automatic Transfer Switch 63A", category: "Backup", price: 12800, minDepositPct: 10, rating: 4.5, sold: 146, imgHint: "ATS photo", specs: ["Seamless mains ↔ generator switching", "63A, 2-pole, DIN mount", "Under 20ms transfer time", "Installation service available"], description: "A 63A two-pole automatic transfer switch for seamless switching between mains and generator power, with under-20ms transfer time. DIN-mount design; professional installation available.", sku: "ZT-ATS-63", cost: 10500, stock: 0, reserved: 0, reorderAt: 6, visible: false, deliveryFeeInsideDhaka: 100, deliveryFeeOutsideDhaka: 250, installationFeeInsideDhaka: 300, installationFeeOutsideDhaka: 500, recommendedIds: ["ips1000", "stab30", "vprot"], warrantyMonths: 12 },
+  { id: "vprot", slug: "voltage-protector-220v-40a", name: "Voltage Protector 220V 40A", category: "Protection", price: 1650, minDepositPct: 10, rating: 4.6, sold: 921, imgHint: "voltage protector photo", specs: ["Cuts off on high/low voltage", "Protects fridge, AC, TV", "Auto-reconnect with delay", "Plug-and-play install"], description: "A 220V 40A voltage protector that cuts power instantly on dangerous high or low voltage, protecting your fridge, AC and TV. Auto-reconnects with a safe delay — plug-and-play installation.", sku: "ZT-VPR-40", cost: 1100, stock: 230, reserved: 12, reorderAt: 50, visible: true, deliveryFeeInsideDhaka: 60, deliveryFeeOutsideDhaka: 150, installationFeeInsideDhaka: 0, installationFeeOutsideDhaka: 0, recommendedIds: ["mccb400", "flood100", "stab30"], warrantyMonths: 12 },
+  { id: "flood100", slug: "led-flood-light-100w-ip66", name: "LED Flood Light 100W IP66", category: "Lighting", price: 2400, minDepositPct: 10, rating: 4.4, sold: 534, imgHint: "flood light photo", specs: ["100W, 10,000 lumen, 6500K", "IP66 weatherproof", "50,000 hr lifespan", "2-year replacement warranty"], description: "A 100W LED flood light delivering 10,000 lumens at 6500K in an IP66 weatherproof housing. Rated for 50,000 hours and backed by a 2-year replacement warranty.", sku: "ZT-FLD-100", cost: 1700, stock: 96, reserved: 4, reorderAt: 30, visible: true, deliveryFeeInsideDhaka: 80, deliveryFeeOutsideDhaka: 200, installationFeeInsideDhaka: 100, installationFeeOutsideDhaka: 200, recommendedIds: ["vprot", "solar500", "ats63"], stockTag: "Sold out", warrantyMonths: 24 },
+  { id: "mccb400", slug: "mccb-breaker-400a-3-pole", name: "MCCB Breaker 400A 3-Pole", category: "Protection", price: 18500, minDepositPct: 15, rating: 4.7, sold: 203, imgHint: "MCCB photo", specs: ["400A frame, 36kA breaking capacity", "Adjustable thermal-magnetic trip", "Panel or DIN mounting", "Genuine, with test certificate"], description: "A genuine 400A three-pole MCCB with 36kA breaking capacity and adjustable thermal-magnetic trip. Suitable for panel or DIN mounting, supplied with test certificate.", sku: "ZT-MCB-400", cost: 14200, stock: 41, reserved: 0, reorderAt: 10, visible: true, deliveryFeeInsideDhaka: 150, deliveryFeeOutsideDhaka: 400, installationFeeInsideDhaka: 400, installationFeeOutsideDhaka: 700, recommendedIds: ["stab30", "panelLT", "vprot"], onSale: true, salePct: 15, salePrice: 15725, warrantyMonths: 12 },
 ];
 
 /* ===== Offer ladders =====
@@ -227,10 +232,23 @@ const movements = [
 /* ===== Payment methods ===== */
 
 // prettier-ignore
+/*
+ * Launch configuration: Cash on Delivery only.
+ *
+ * The gateways stay as rows so the admin can switch one on the day it is
+ * actually contracted — the machinery is untouched, and `enabled` is the
+ * single switch checkout obeys. They are seeded DISABLED rather than deleted
+ * because deleting them would also delete the provider/webhook fields someone
+ * has to fill in later, and because an order's `pay` is a stored name that
+ * should still resolve to a row if history is ever read back.
+ *
+ * The credentials below are placeholders. A gateway must not be enabled until
+ * its real keys are in, which is the other reason none of them ships on.
+ */
 const paymentMethods = [
-  { id: "bkash", name: "bKash", kind: "Mobile wallet", provider: "bKash Merchant API", providers: ["bKash Merchant API", "bKash PGW (Aggregator)"], enabled: true, environment: "Live", apiKey: "app_id: ZUP-9f3a12", apiSecret: "bk_live_7f31a92c44e8", webhookUrl: "https://api.zuptech.com/pay/bkash", isGateway: true, sort: 0 },
-  { id: "nagad", name: "Nagad", kind: "Mobile wallet", provider: "Nagad PGW", providers: ["Nagad PGW"], enabled: true, environment: "Live", apiKey: "MID: ZUP0192837", apiSecret: "ng_live_c210d84feaa1", webhookUrl: "https://api.zuptech.com/pay/nagad", isGateway: true, sort: 1 },
-  { id: "card", name: "Cards (Visa / Mastercard)", kind: "Card gateway", provider: "SSLCommerz", providers: ["SSLCommerz", "AamarPay", "Stripe"], enabled: true, environment: "Test", apiKey: "store_id: zuptechlive", apiSecret: "ssl_test_91b2ac0377", webhookUrl: "https://api.zuptech.com/pay/card", isGateway: true, sort: 2 },
+  { id: "bkash", name: "bKash", kind: "Mobile wallet", provider: "bKash Merchant API", providers: ["bKash Merchant API", "bKash PGW (Aggregator)"], enabled: false, environment: "Live", apiKey: "app_id: ZUP-9f3a12", apiSecret: "bk_live_7f31a92c44e8", webhookUrl: "https://api.zuptech.com/pay/bkash", isGateway: true, sort: 0 },
+  { id: "nagad", name: "Nagad", kind: "Mobile wallet", provider: "Nagad PGW", providers: ["Nagad PGW"], enabled: false, environment: "Live", apiKey: "MID: ZUP0192837", apiSecret: "ng_live_c210d84feaa1", webhookUrl: "https://api.zuptech.com/pay/nagad", isGateway: true, sort: 1 },
+  { id: "card", name: "Cards (Visa / Mastercard)", kind: "Card gateway", provider: "SSLCommerz", providers: ["SSLCommerz", "AamarPay", "Stripe"], enabled: false, environment: "Test", apiKey: "store_id: zuptechlive", apiSecret: "ssl_test_91b2ac0377", webhookUrl: "https://api.zuptech.com/pay/card", isGateway: true, sort: 2 },
   { id: "cod", name: "Cash on Delivery", kind: "Offline", provider: "Manual", providers: ["Manual"], enabled: true, environment: "Live", apiKey: "", apiSecret: "", webhookUrl: "", isGateway: false, sort: 3 },
   { id: "rocket", name: "Rocket", kind: "Mobile wallet", provider: "DBBL Rocket", providers: ["DBBL Rocket"], enabled: false, environment: "Test", apiKey: "", apiSecret: "", webhookUrl: "", isGateway: true, sort: 4 },
 ];
@@ -389,8 +407,166 @@ const industrialServices = [
   },
 ];
 
+/*
+ * One worked campaign page, so /lp and its editor have something real to show.
+ *
+ * Written against ips1000 and agreeing with it on purpose: the offer price is
+ * the product's actual selling price (৳38,250), so the editor's "checkout will
+ * charge X" warning stays quiet, and the "১০% ছাড়" badge is the product's own
+ * salePct rather than a number invented for the copy. A demo that contradicts
+ * its own product teaches the wrong thing about which fields are advertising
+ * and which are money.
+ *
+ * The bundle block leans on that product's real quantity offers (৳2,125 off
+ * from 3 units), so the savings the page advertises are the savings the cart
+ * applies — the whole reason bundle prices are not stored here.
+ *
+ * Phone numbers are the placeholders from `siteConfig` above, not invented
+ * ones: a plausible-looking number in seed data is somebody's real phone.
+ * Reviewer names are the demo customers already seeded for the same reason.
+ *
+ * The palette is deliberately NOT the column defaults. Those are the reference
+ * design's greens, so a demo wearing them would look identical whether the
+ * theme worked or not; these are the storefront's own navy and orange, which
+ * makes it obvious at a glance that the per-campaign colours are applied.
+ */
+const landingPages = [
+  {
+    slug: "ips-1000va-offer",
+    // Internal only — never rendered. The public <h1> is `headline`.
+    title: "IPS 1000VA — demo campaign",
+    productId: "ips1000",
+    headline: "লোডশেডিংয়ে ঘর থাকুক আলোয়",
+    subheadline:
+      "১০০০VA পিওর সাইন ওয়েভ IPS আর ১০০Ah টিউবুলার ব্যাটারি একসাথে। ফ্যান, লাইট আর ওয়াই-ফাই চলবে টানা ৬–৮ ঘণ্টা।",
+    offerPrice: 38250,
+    compareAtPrice: 42500,
+    priceCompareLabel: "আগের দাম",
+    priceOfferLabel: "অফার প্রাইস",
+    discountBadge: "১০% ছাড়",
+    ribbonText: "সীমিত সময়ের অফার",
+    buttonLabel: "এখনই অর্ডার করুন",
+    heroCtaNote: "ফর্ম পূরণ করুন — পণ্য হাতে পেয়ে টাকা দিন।",
+    imageHint: "IPS ইউনিট ও ব্যাটারির ছবি",
+    gtmId: "",
+
+    hotlineLabel: "হটলাইন (সকাল ১০টা – রাত ১০টা)",
+    hotlineNumber: "09612-345678",
+    headerCtaLabel: "অর্ডার করুন",
+    trustBadges: [
+      "১০০% অরিজিনাল পণ্য",
+      "১ বছরের সার্ভিস ওয়ারেন্টি",
+      "ক্যাশ অন ডেলিভারি",
+      "ঢাকা জুড়ে ইনস্টলেশন সার্ভিস",
+    ],
+
+    brandStripTitle: "যেভাবে পেমেন্ট করতে পারবেন",
+    // The payment methods actually configured in this seed, plus how it ships.
+    // Not a list of partner brands — that would be a claim, not demo copy.
+    brandLogos: ["bKash", "Nagad", "ক্যাশ অন ডেলিভারি", "কুরিয়ার সার্ভিস"],
+
+    videoTitle: "পণ্যটি দেখে নিন",
+    // The same placeholder URL the product row already carries. Replace it
+    // with a real one and the section starts working; blank it and the whole
+    // section disappears.
+    videoUrl: "https://www.youtube.com/watch?v=ips1000demo",
+
+    featuresTitle: "কেন এই আইপিএসটি নেবেন",
+    features: [
+      { title: "পিওর সাইন ওয়েভ আউটপুট", body: "ফ্রিজ, টিভি আর রাউটারের জন্য নিরাপদ — শব্দ বা ঝুঁকি নেই।" },
+      { title: "১০০Ah টিউবুলার ব্যাটারি", body: "গভীর ডিসচার্জ সহ্য করে, তাই ঘন ঘন লোডশেডিংয়েও আয়ু কমে না।" },
+      { title: "৬–৮ ঘণ্টা ব্যাকআপ", body: "ফ্যান, লাইট আর ওয়াই-ফাই — সারা রাতের লোডশেডিং সামলে নেয়।" },
+      { title: "ইনস্টলেশন ও সার্ভিস", body: "আমাদের ইঞ্জিনিয়ার বাসায় গিয়ে বসিয়ে দেন, ১ বছরের সার্ভিস ওয়ারেন্টি সহ।" },
+    ],
+
+    specTitle: "টেকনিক্যাল স্পেসিফিকেশন",
+    specMeta: "ZT-IPS-1000 · REV 1.2",
+    specs: [
+      { value: "১০০০VA / ৮০০W", label: "আউটপুট" },
+      { value: "১০০Ah", label: "টিউবুলার ব্যাটারি" },
+      { value: "৬–৮ ঘণ্টা", label: "ব্যাকআপ টাইম" },
+      { value: "১ বছর", label: "সার্ভিস ওয়ারেন্টি" },
+    ],
+
+    bundlesTitle: "একসাথে বেশি নিলে বেশি সাশ্রয়",
+    bundlesSubtitle: "প্রতিটি সেটের দাম কমে যায় — দামগুলো ক্যাশে যা কাটা হবে ঠিক তাই।",
+    bundleUnitLabel: "সেট",
+    bundleMaxQty: 3,
+
+    qcTitle: "আসল পণ্য চিনে নিন",
+    qcBody:
+      "বাজারে একই দেখতে নকল ইউনিট আছে, যেগুলোতে ব্যাটারি দ্রুত নষ্ট হয়। প্রতিটি ডেলিভারির সময় নিচের বিষয়গুলো মিলিয়ে নিন।",
+    qcPoints: [
+      "বক্সে ZUP TECH হলোগ্রাম স্টিকার আছে কি না দেখুন",
+      "ইউনিটের সিরিয়াল নম্বর ওয়ারেন্টি কার্ডের সাথে মিলিয়ে নিন",
+      "ইনস্টলেশনের সময় ইঞ্জিনিয়ারের কাছ থেকে সার্ভিস কার্ড বুঝে নিন",
+      "যেকোনো সন্দেহে ডেলিভারির আগেই হটলাইনে কল করুন",
+    ],
+    qcImageHint: "হলোগ্রাম ও ওয়ারেন্টি কার্ডের ছবি",
+
+    countdownTitle: "অফার শেষ হতে বাকি",
+    countdownNote: "নির্ধারিত সময়ের পর দাম আগের জায়গায় ফিরে যাবে।",
+    countdownCtaLabel: "অর্ডার করুন",
+    countdownAssurance: "অগ্রিম টাকা লাগবে না — পণ্য হাতে পেয়ে পেমেন্ট।",
+
+    testimonialsTitle: "যাঁরা ব্যবহার করছেন",
+    // The demo customers seeded above, so no new names are invented.
+    testimonials: [
+      { quote: "রাতে লোডশেডিং হলেও ফ্যান আর ওয়াই-ফাই চলতেই থাকে।", name: "করিম উদ্দিন", location: "মিরপুর, ঢাকা" },
+      { quote: "ইঞ্জিনিয়ার এসে বসিয়ে দিয়ে গেছেন, কিছুই করতে হয়নি।", name: "সালমা আক্তার", location: "চট্টগ্রাম" },
+      { quote: "ছয় মাস হলো, ব্যাকআপ প্রথম দিনের মতোই আছে।", name: "হাসান মিয়া", location: "রাজশাহী" },
+    ],
+
+    formTitle: "অর্ডারের তথ্য দিন",
+    formIntro: "নিচের তথ্যগুলো দিন, আমরা কল করে অর্ডারটি নিশ্চিত করব।",
+    formLabels: {
+      name: "আপনার নাম",
+      phone: "মোবাইল নম্বর",
+      address: "সম্পূর্ণ ঠিকানা",
+      packageLabel: "প্যাকেজ",
+      deliveryLabel: "ডেলিভারি চার্জ",
+      totalLabel: "সর্বমোট",
+      submit: "অর্ডার কনফার্ম করুন",
+      namePlaceholder: "যেমন: করিম উদ্দিন",
+      phonePlaceholder: "০১XXXXXXXXX",
+      addressPlaceholder: "বাসা/রোড, এলাকা, থানা, জেলা",
+      successMessage: "ধন্যবাদ! আপনার অর্ডারটি পেয়েছি — আমরা শীঘ্রই কল করব।",
+    },
+
+    footerTagline: "MAKES LIFE SIMPLE",
+    footerAbout:
+      "ZUP TECH — পাওয়ার সলিউশন ও সার্ভিস। আইপিএস, সোলার, স্ট্যাবিলাইজার ও ইন্ডাস্ট্রিয়াল ইলেকট্রিক্যাল কাজ।",
+    footerLines: ["হটলাইন: 09612-345678", "ইমেইল: hello@zuptech.com.bd", "ঢাকা, বাংলাদেশ"],
+    footerNote: "© ZUP TECH — সব পণ্য ১০০% অরিজিনাল।",
+
+    // The storefront's navy/orange rather than the column defaults, so it is
+    // visible at a glance that a campaign carries its own palette.
+    colorHeroBg: "#0E2A47",
+    colorHeroText: "#FFFFFF",
+    colorBandBg: "#17427A",
+    colorBandText: "#FFFFFF",
+    colorTintBg: "#F1F5FA",
+    colorPageBg: "#FFFFFF",
+    colorPageText: "#15181E",
+    colorAccent: "#0E2A47",
+    colorHighlight: "#FFD400",
+    colorCtaBg: "#E85320",
+    colorCtaText: "#FFFFFF",
+
+    // The row across the top. Visible products only — a hidden one would
+    // resolve to nothing and quietly shorten the row.
+    productRowIds: ["solar500", "vprot", "stab30"],
+
+    benefitBullets: [],
+  },
+];
+
 const siteConfig = {
   featuredIds: ["ips1000", "solar500", "trafo200", "vprot", "stab30", "solar10k", "flood100", "mccb400"],
+  // The home page's second row, above the booking forms. Deliberately a
+  // different set from `featuredIds` above — two rows showing the same eight
+  // products is the thing a separate list exists to avoid.
+  homeRowIds: ["ats63", "panelLT", "flood100", "mccb400"],
   footerDescription: "Power solutions & services company. Makes life simple.",
   phone: "+8801700000000",
   phoneDisplay: "+880 17 0000 0000",
@@ -518,6 +694,25 @@ async function main() {
         pay: "Cash on Delivery",
         items: { create: [{ productId, qty, unitPrice: price }] },
       },
+    });
+  }
+
+  /*
+   * Campaign pages. Created as DRAFTS: publishing is an operator decision and
+   * a seed must not put a page on the public internet, nor take a live one
+   * down — so `published` is set on create and deliberately left alone on
+   * update. Everything else converges, which is what makes a re-seed useful.
+   *
+   * The deadline is relative to the run rather than a fixed date: a hardcoded
+   * one is in the past by the time anyone looks, and an expired countdown
+   * reads as a broken page rather than a demonstrated feature.
+   */
+  const countdownEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  for (const page of landingPages) {
+    await prisma.landingPage.upsert({
+      where: { slug: page.slug },
+      create: { ...page, countdownEndsAt, published: false },
+      update: { ...page, countdownEndsAt },
     });
   }
 

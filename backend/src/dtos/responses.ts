@@ -48,8 +48,11 @@ export interface PublicProductDto {
   categoryLogo: string; // Category.svgLogo, "" = none
   section: string; // Section.name — the storefront's top-level filter
   price: number;
-  minDeposit: number; // BDT, display-only
+  minDepositPct: number; // whole percent of price (0–100), display-only
   onSale: boolean;
+  /** The admin-typed discount, 0–100. A LABEL for the card — `salePrice` is
+   *  the money, and is what this percentage was already resolved into. */
+  salePct: number;
   salePrice: number; // what the customer pays; equals price when not on sale
   quantityOffers: QuantityOfferDto[]; // "buy N+, save X%" tiers, ordered by minQty ascending
   deliveryFeeInsideDhaka: number; // BDT, per unit
@@ -64,11 +67,27 @@ export interface PublicProductDto {
   description: string;
   video: string;
   photos: string[];
+  // Curated products shown under this one, in this order. Ids only — the
+  // storefront resolves them in one request rather than this endpoint
+  // embedding whole products and recursing into their recommendations.
+  recommendedIds: string[];
+  /** Resolved status label: "" | "Out of stock" | "Incoming" | "Sold out".
+   *  Already accounts for the manual override — the client just prints it. */
+  stockTag: string;
   available: number;
   inStock: boolean;
 }
 
 export interface AdminProductDto extends PublicProductDto {
+  /**
+   * The RAW override column, as opposed to the resolved `stockTag` above.
+   *
+   * The admin needs both: "" here with "Out of stock" resolved means the
+   * derivation produced it, and the editor should show "Auto". Sending only
+   * the resolved value would make those two states indistinguishable, and
+   * saving the form would silently pin a tag nobody chose.
+   */
+  stockTagOverride: string;
   sku: string;
   cost: number;
   stock: number;
@@ -280,6 +299,24 @@ export interface LeadDto {
  * money.
  */
 export interface CampaignContentDto {
+  /** Theme — every colour the campaign page paints with. Hex, validated on
+   *  write; the renderer interpolates these into `style` and trusts them. */
+  colorHeroBg: string;
+  colorHeroText: string;
+  colorBandBg: string;
+  colorBandText: string;
+  colorTintBg: string;
+  colorPageBg: string;
+  colorPageText: string;
+  colorAccent: string;
+  colorHighlight: string;
+  colorCtaBg: string;
+  colorCtaText: string;
+  /** Ordered product ids for the row above the page body. */
+  productRowIds: string[];
+  /** Price-band labels; blank falls back to English in the renderer. */
+  priceCompareLabel: string;
+  priceOfferLabel: string;
   hotlineLabel: string;
   hotlineNumber: string;
   headerCtaLabel: string;
@@ -289,6 +326,7 @@ export interface CampaignContentDto {
   heroCtaNote: string;
   brandStripTitle: string;
   brandLogos: string[];
+  heroVideoUrl: string;
   videoTitle: string;
   videoUrl: string;
   featuresTitle: string;
@@ -377,6 +415,7 @@ export interface LandingPageDto extends CampaignContentDto {
   published: boolean;
   viewCount: number;
   orderCount: number;
+  revenue: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -79,7 +79,7 @@ export interface ProductPage {
  * One page of the catalog, newest first.
  *
  * Paged because the shop outgrew a single response: rendering the whole
- * catalog server-side cost 1.4 MB of HTML per request and made /shop the
+ * catalog server-side cost 1.4 MB of HTML per request and made /products the
  * throughput ceiling for the entire site. `total` comes back in the
  * `x-total-count` header so the response body stays a plain array.
  */
@@ -258,6 +258,9 @@ export interface PaymentOption {
 
 export interface SiteConfig {
   featuredIds: string[];
+  /** The home page's second product row, above the booking forms. Optional so
+   *  a backend that predates it degrades to an empty row, not a crash. */
+  homeRowIds?: string[];
   slides: HeroSlide[];
   copy: SiteCopy;
   contact: SiteContact;
@@ -476,6 +479,8 @@ export interface PublicLandingPage {
   heroCtaNote: string;
   brandStripTitle: string;
   brandLogos: string[];
+  /** Shown in the hero in place of the pack shot. "" keeps the photo. */
+  heroVideoUrl: string;
   videoTitle: string;
   videoUrl: string;
   featuresTitle: string;
@@ -501,6 +506,25 @@ export interface PublicLandingPage {
   testimonials: { quote: string; name: string; location: string }[];
   formTitle: string;
   formIntro: string;
+  /* Theme — every colour the campaign paints with. Optional so a payload from
+   * a backend predating these columns degrades to the renderer's fallbacks
+   * rather than painting `undefined` into a style attribute. */
+  colorHeroBg?: string;
+  colorHeroText?: string;
+  colorBandBg?: string;
+  colorBandText?: string;
+  colorTintBg?: string;
+  colorPageBg?: string;
+  colorPageText?: string;
+  colorAccent?: string;
+  colorHighlight?: string;
+  colorCtaBg?: string;
+  colorCtaText?: string;
+  /** Ordered product ids for the row above the page body. */
+  productRowIds?: string[];
+  /** Price-band labels; blank falls back to English. */
+  priceCompareLabel?: string;
+  priceOfferLabel?: string;
   formLabels: CampaignFormLabels;
   footerTagline: string;
   footerAbout: string;

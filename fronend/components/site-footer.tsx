@@ -57,10 +57,10 @@ export function SiteFooter() {
             Company
           </span>
           <Link
-            href="/shop"
+            href="/products"
             className="text-sm text-[#D5D8DD] transition-colors hover:text-white"
           >
-            Shop
+            Products
           </Link>
           <Link
             href="/services"

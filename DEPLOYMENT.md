@@ -225,8 +225,13 @@ end to end.
 
 ## 7. Day-to-day
 
-Edit locally → `bun run dev` → commit → push to `main`. That is the whole
-loop; CI gates it and the deploy runs itself.
+Edit → test it locally against the live database (§7.1) → push to `main`,
+which builds and publishes images → **Run workflow** to actually roll out.
+
+Publishing and rolling out are two separate acts. A push to `main` runs CI and
+pushes SHA-tagged images to GHCR and then stops; the VPS is only touched when
+you trigger **Actions → Deploy → Run workflow**. The gate is the `if:` on the
+`deploy` job in `.github/workflows/deploy.yml`.
 
 ```bash
 # logs. Use --since, not --tail: --tail replays history, so a problem you
@@ -256,6 +261,73 @@ and the resulting failure names something other than its cause: the backend
 `/health` still reports healthy. `scripts/deploy.sh` runs the migration first,
 then refuses to finish quietly against an unseeded database. It is
 idempotent — re-running against an up-to-date box is a no-op.
+
+### 7.1 Testing against live from a workstation
+
+Runs the production stack — real images, real nginx, two storefront containers,
+TLS — on your machine, reading the **live production database** through an SSH
+tunnel. Everything is Docker; there is no `bun run dev` in this loop.
+
+```bash
+cp .env.live.local.example       .env.live.local        # VPS + db credentials
+cp .env.production.local.example .env.production.local  # stack settings
+# fill both in, then:
+
+bash scripts/live-tunnel.sh up      # read-only (default)
+bash scripts/live-stack.sh  up      # build + start + health-check
+# https://zuptech.local:8444
+bash scripts/live-stack.sh  down
+bash scripts/live-tunnel.sh down
+```
+
+Add the local names to `/etc/hosts` once:
+
+```
+127.0.0.1  zuptech.local www.zuptech.local api.zuptech.local
+```
+
+**Read these three before you rely on it.**
+
+**Schema changes cannot be tested this way.** The live database is on the
+migrations live production runs; a change of yours needing a new column has
+nowhere to apply it, and applying it to live before the code ships is how you
+get an outage. Migration-bearing work goes through the rehearsal stack instead
+(above). `backend/scripts/live-guard.ts` refuses `db:migrate`/`db:deploy`/`db:seed`
+while `DATABASE_URL` points at the tunnel, and `scripts/live-stack.sh` passes
+`--external-db` so `scripts/deploy.sh` never runs `migrate deploy` against
+production from a laptop.
+
+**Read-only mode cannot sign in.** The default tunnel connects as `zuptech_ro`
+(`deploy/live-readonly-role.sql`, run once on the VPS). Better Auth writes a
+`Session` row on every login, so the storefront browses real data fine while
+sign-in, checkout and the whole admin panel fail. That is the design, not a
+fault.
+
+Expect the failure to name a *read-only transaction*, and note the auth routes
+fail for two independent reasons — `allowHitDurable` (`lib/rate-limit.ts`)
+also writes a `RateLimitHit` row, so the error you see may point at the rate
+limiter rather than the session. Catalog routes use the in-memory `allowHit`
+and are unaffected, which is why browsing works at all. `/health` only reads,
+so the container still reports healthy.
+
+**Write mode writes to real customer data.** `live-tunnel.sh up --write`
+connects as the `zuptech` owner and gives you the full app against the real
+catalogue, customers and orders. (Don't size the risk from the row counts in
+the restore section above — those are load-test figures. The live database is
+small, which makes a bad write easier to miss, not less damaging.) It takes a
+`pg_dump` into
+`scratchpad/live-backups/` before the tunnel opens — that dump is your only
+undo. Close it the moment you are done.
+
+Two safety values in `.env.production.local` are load-bearing and commented as
+such: `SMTP_HOST` stays **empty** (real SMTP credentials plus one "forgot
+password?" test emails a real customer), and `CLOUDINARY_FOLDER_PREFIX` is
+`zuptech-localtest` so a test upload cannot land in the live media folder. Live
+photos still render either way — their URLs are absolute.
+
+The stack always **builds**, never pulls: `NEXT_PUBLIC_*` is baked into the
+frontend bundle at image build time, so a pulled image would point `next/image`
+and every absolute URL at the real domain and the local run would be a lie.
 
 Backups run nightly at 03:15 via the cron entry `scripts/vps-bootstrap.sh`
 installed, writing to `/backup` and keeping 14 days. Run one by hand with
@@ -301,6 +373,24 @@ is rendered by envsubst at container start. Two consequences: a new
 entrypoint scripts when the command starts with `nginx` — and ours starts with
 `/bin/sh` for the cert-reload loop. Remove that call and nginx silently serves
 its default welcome page.
+
+**nginx keeps stale upstream IPs after a container is recreated.** It resolves
+each upstream hostname once at startup and holds that address for the life of
+the process (the `resolve` parameter that re-resolves is NGINX Plus only).
+`docker compose up -d` recreates `backend` / `frontend` when their config or
+image changes but leaves `nginx` alone — so nginx goes on dialling IPs that no
+longer exist and every request through it 502s until something reloads it.
+
+Observed directly while testing §7.1: a staff login returned 502 from nginx
+while the session row it had just created was already committed in the
+database. `docker compose exec nginx nginx -s reload` fixes it instantly.
+
+Note what this means for a rollout. `scripts/deploy.sh`'s health checks all
+`exec` **into** the containers and the smoke check calls `127.0.0.1:3000` from
+inside the backend, so all of them pass while the public site is 502ing — and
+the deploy prints "Deployed." The 12-hourly reload loop in the nginx `command`
+does eventually recover it, which is a long time to be down. `live-stack.sh`
+reloads nginx after every `up` for this reason; `deploy.sh` does not yet.
 
 **`NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` must exactly match `CLOUDINARY_CLOUD_NAME`.**
 `next.config.ts`'s `images.remotePatterns` allow-lists

@@ -17,7 +17,7 @@ export function ProductVideo({ url, className }: { url?: string | null; classNam
   const video = parseProductVideo(url);
   if (!video) return null;
 
-  const frame = `aspect-video w-full overflow-hidden rounded-[20px] border border-zup-body/6 bg-black ${className ?? ""}`;
+  const frame = `aspect-video w-full overflow-hidden rounded-[2px] border border-zup-body/6 bg-black ${className ?? ""}`;
 
   if (video.kind === "file") {
     return (

@@ -53,14 +53,37 @@ model Product {
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id])
   price       Int // BDT
-  /// The deposit itself, in BDT — not a percentage of price. Display-only
-  /// today; checkout does not take deposits yet.
-  minDeposit  Int     @default(0)
+  /// Minimum down payment, as a whole percentage of price (0–100).
+  ///
+  /// This was the deposit in BDT until 2026-08-13, and the column deliberately
+  /// was not a percentage — see `salePrice` below for the rounding mess that
+  /// reasoning came from. It is a percentage now because the storefront states
+  /// it as one, and it is SAFE here only because it is display-only: nothing in
+  /// pricing, order creation or checkout reads this field.
+  ///
+  /// If checkout ever does take deposits, resolve it to taka ONCE, server-side,
+  /// and store that number on the order. Do not recompute the percentage in the
+  /// admin and again on the product page — that is precisely how a ৳999 product
+  /// came to show ৳669 and charge ৳670.
+  minDepositPct Int   @default(0)
   onSale      Boolean @default(false)
-  /// What the customer pays while `onSale`, in BDT. The admin types this
-  /// directly, so there is no discount arithmetic and nothing to round — the
-  /// old percentage column produced three different roundings across the
-  /// server, the admin preview and the product card.
+  /// The discount the admin types, 0–100. SOURCE of the sale as of 2026-08-13.
+  salePct     Int     @default(0)
+  /// What the customer pays while `onSale`, in BDT. Still the only money field
+  /// any reader touches — but it is now COMPUTED from `salePct` rather than
+  /// typed, by `salePriceFrom` in lib/rules.ts.
+  ///
+  /// A percentage column existed before and was removed, because the same
+  /// percentage got rounded three different ways — the server floored it, the
+  /// admin preview rounded it, the product card rounded again off a different
+  /// base — so a ৳999 product at 33% off showed ৳669 and charged ৳670. What
+  /// makes this safe is that the arithmetic happens ONCE, on write, and the
+  /// result is stored here. Nothing recomputes a price from `salePct` at
+  /// render time; the card prints it as a label, never as an input to a sum.
+  ///
+  /// Consequence: a change to `price` MUST recompute this. The admin write
+  /// path does. Anything else that edits `price` has to as well, or the
+  /// advertised percentage and the charged amount drift apart again.
   salePrice   Int     @default(0)
   rating      Float   @default(0)
   sold        Int     @default(0)
@@ -68,6 +91,27 @@ model Product {
   specs       String[] @default([]) // 4 bullet points
   description String   @default("")
   video       String   @default("") // promo video URL (YouTube etc.), "" = none
+
+  /// Products to show under this one, in this order. Curated per product — the
+  /// storefront shows exactly these and hides the row when empty.
+  ///
+  /// An ordered id array rather than a join table, matching
+  /// `SiteConfig.featuredIds`, which is the same shape and already has both
+  /// halves of the pattern: `getProductsByIds` resolves a list and silently
+  /// drops ids that no longer resolve, and the admin picker filters out
+  /// products that have since been deleted or hidden. A relation would add
+  /// referential integrity and a cascade path through the product-delete
+  /// rules, which are load-bearing and were fixed only recently.
+  recommendedIds String[] @default([])
+
+  /// Manual override for the storefront's status tag, "" = derive it.
+  ///
+  /// Derivation lives in `stockTagFor` (lib/rules.ts): in stock shows nothing,
+  /// nothing available shows "Out of stock", and nothing available with an
+  /// in-transit purchase order shows "Incoming". "Sold out" is only ever set
+  /// by hand — automatically it would be indistinguishable from "Out of
+  /// stock", and it exists to say a line is finished for good.
+  stockTag       String   @default("")
 
   // Admin-side extras
   sku             String  @unique // e.g. "ZT-IPS-1000"
@@ -181,6 +225,21 @@ model Order {
   /// order history (the OrderEvent trail keeps their name either way).
   preparedById    String?
   preparedBy      Staff?   @relation("OrderPreparedBy", fields: [preparedById], references: [id], onDelete: SetNull)
+  /// The campaign page this order came from, when it came from one.
+  ///
+  /// Nullable because most orders are ordinary storefront checkouts, and an
+  /// order must never fail for want of an attribution. Set only when the
+  /// request names a slug that resolves to a PUBLISHED page, so a guessed or
+  /// stale slug attributes nothing rather than inventing a sale for a
+  /// campaign that was not running.
+  ///
+  /// This is what makes per-campaign revenue answerable at all: `orderCount`
+  /// on LandingPage was a counter nothing ever incremented, so every campaign
+  /// reported zero sales forever. Counting rows here cannot drift from the
+  /// orders it counts.
+  landingPageId String?
+  landingPage   LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -192,6 +251,9 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([preparedById])
+
+  /// The admin campaign list groups every order by campaign on each load.
+  @@index([landingPageId])
 }
 
 model OrderItem {
@@ -386,6 +448,18 @@ model LandingPage {
   videoTitle String @default("")
   videoUrl   String @default("")
 
+  /// A video in the hero, in place of the pack shot. Blank falls back to the
+  /// product photo, so a campaign without one looks exactly as it did.
+  ///
+  /// Separate from `videoUrl` above rather than a flag on it: the two answer
+  /// different questions. The hero video is the thing that sells above the
+  /// fold, and the section below is the longer demo — a campaign can run
+  /// either, both, or neither. Same accepted forms as `Product.video`
+  /// (YouTube link or an uploaded file URL); parsing is the frontend's
+  /// `parseProductVideo`, so an unusable URL renders nothing rather than a
+  /// broken embed.
+  heroVideoUrl String @default("")
+
   /// Numbered feature list: [{ title, body }]
   featuresTitle String @default("")
   features      Json   @default("[]")
@@ -429,6 +503,43 @@ model LandingPage {
   footerTagline String   @default("")
   footerAbout   String   @default("")
   footerLines   String[] @default([])
+  /// ===== Theme =====
+  ///
+  /// Every colour the page paints with, per campaign. A direct-response page
+  /// is sold on its look as much as its copy, and two campaigns running at
+  /// once should not have to share a palette — so these are columns, not a
+  /// site-wide theme.
+  ///
+  /// Hex strings, validated at the DTO. Named for the ROLE each plays rather
+  /// than the colour it happens to hold, so a campaign can be recoloured
+  /// without every name turning into a lie ("colorGreenBand" going blue).
+  ///
+  /// Defaults are the reference design's palette, so a new page looks
+  /// deliberate before anyone opens the colour controls.
+  colorHeroBg      String @default("#17341B") // deep band behind the headline
+  colorHeroText    String @default("#FFFFFF")
+  colorBandBg      String @default("#45712F") // the price/statement bands
+  colorBandText    String @default("#FFFFFF")
+  colorTintBg      String @default("#F2F5EC") // testimonials, quiet sections
+  colorPageBg      String @default("#FFFFFF")
+  colorPageText    String @default("#15181E")
+  colorAccent      String @default("#45712F") // links, ticks, emphasis
+  colorHighlight   String @default("#FFF306") // the bundle-saving line
+  colorCtaBg       String @default("#000000") // the order button
+  colorCtaText     String @default("#FFFFFF")
+
+  /// A product row above the page body. Ordered ids, same shape and same
+  /// resolve-and-drop rules as SiteConfig.featuredIds — empty hides the row.
+  productRowIds  String[] @default([])
+
+  /// The two price-band labels ("Previous price", "Offer price"). Their own
+  /// columns rather than entries in `formLabels`, which is the ORDER FORM's
+  /// vocabulary — these sit in the hero bands and have nothing to do with it.
+  /// Blank falls back to English in the renderer, so a campaign written only
+  /// in Bangla still reads correctly the moment they are filled in.
+  priceCompareLabel String @default("")
+  priceOfferLabel   String @default("")
+
   /// This page's own GTM container, so ad spend is tracked separately from
   /// the main site's.
   gtmId          String   @default("")
@@ -438,7 +549,8 @@ model LandingPage {
   published Boolean @default(false)
 
   viewCount  Int      @default(0)
-  orderCount Int      @default(0)
+  /// Orders attributed to this campaign, so revenue can be read off them.
+  orders     Order[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -559,6 +671,12 @@ model PurchaseOrder {
   eta        DateTime
   status     String   @default("Confirmed") // Confirmed|In transit|Received|Cancelled
   createdAt  DateTime @default(now())
+
+  // The storefront's "Incoming" tag asks, per product, whether an in-transit
+  // order exists (`stockTagFor` in lib/rules.ts). That probe rides along with
+  // GET /api/products — the busiest dynamic query on the site — so it gets an
+  // index rather than a scan of every purchase order ever raised.
+  @@index([productId, status])
 }
 
 /// Append-only audit trail of every stock change.
@@ -693,6 +811,12 @@ model SiteConfig {
 
   featuredIds String[] @default([]) // product ids, ORDER matters (home page row)
 
+  /// The second product row on the home page, above the two booking forms.
+  /// Same shape and same rules as `featuredIds` — a separate list so the two
+  /// rows can merchandise different things rather than repeating one set twice
+  /// on a single page. Empty hides the row.
+  homeRowIds  String[] @default([])
+
   // Copy.
   //
   // Flat named columns rather than a JSON blob: keeps per-field validation in
@@ -758,7 +882,10 @@ model SiteConfig {
 
 model PaymentMethod {
   id          String  @id
-  name        String
+  /// Unique because checkout resolves the method BY NAME: two rows sharing
+  /// one made `findFirst` pick an arbitrary winner, and which one decided
+  /// whether the order was accepted at all.
+  name        String  @unique
   kind        String // "Mobile wallet" | "Card gateway" | "Offline"
   provider    String
   providers   String[] @default([]) // selectable provider options

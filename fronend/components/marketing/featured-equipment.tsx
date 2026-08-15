@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ProductCard } from "@/components/product-card";
+import type { Product } from "@/lib/products";
 import { useFeaturedProducts } from "@/lib/admin-bridge";
 import { usePrefersReducedMotion } from "@/components/marketing/hero-carousel";
 
@@ -11,8 +12,26 @@ const ADVANCE_MS = 6000;
 /** Card width + gap — the distance one step travels. */
 const STEP_PX = 220 + 14;
 
-export function FeaturedEquipment() {
-  const products = useFeaturedProducts();
+/**
+ * A horizontally-scrolling product row.
+ *
+ * Two of these on the home page now: the featured row under the hero, and a
+ * second one above the booking forms. The featured one keeps its live store
+ * subscription (a change in another tab appears without a reload); the second
+ * takes its products as a prop, resolved server-side from `homeRowIds`.
+ *
+ * The prop is optional rather than required so the featured usage is unchanged
+ * and there is only one auto-advancing row implementation to maintain.
+ */
+export function FeaturedEquipment({
+  products: override,
+  label = "Featured products",
+}: {
+  products?: Product[];
+  label?: string;
+} = {}) {
+  const featured = useFeaturedProducts();
+  const products = override ?? featured;
   const rowRef = useRef<HTMLDivElement>(null);
   const reduceMotion = usePrefersReducedMotion();
   const [paused, setPaused] = useState(false);
@@ -48,7 +67,7 @@ export function FeaturedEquipment() {
     // thing left in the header row.
     <section
       className="px-5 py-10"
-      aria-label="Featured products"
+      aria-label={label}
       // Pause while the visitor is reading or touching the row, so it can't
       // slide a card out from under a tap.
       onMouseEnter={() => setPaused(true)}

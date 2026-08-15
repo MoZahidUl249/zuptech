@@ -38,7 +38,7 @@ export function OrderSuccess({ order }: { order: PlacedOrderState }) {
 
       <div className="flex flex-wrap justify-center gap-3">
         <Link
-          href="/shop"
+          href="/products"
           className="rounded-full bg-zup-blue px-7 py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-zup-blue-dark"
         >
           Continue shopping
@@ -99,7 +99,7 @@ function ClaimAccount({ phone }: { phone: string }) {
 
   if (done) {
     return (
-      <div className="mb-6 rounded-[14px] border border-ok-fg/20 bg-ok-bg px-4 py-3.5 text-left text-[13.5px] leading-relaxed text-ok-fg">
+      <div className="mb-6 rounded-[2px] border border-ok-fg/20 bg-ok-bg px-4 py-3.5 text-left text-[13.5px] leading-relaxed text-ok-fg">
         You&apos;re signed in. Next time your details fill in automatically — and you
         can check on this order any time from the Account page.
       </div>
@@ -111,7 +111,7 @@ function ClaimAccount({ phone }: { phone: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mb-6 flex w-full cursor-pointer items-center gap-2.5 rounded-[14px] border border-zup-body/7 bg-white px-4 py-3.5 text-left transition-colors hover:bg-secondary"
+        className="mb-6 flex w-full cursor-pointer items-center gap-2.5 rounded-[2px] border border-zup-body/7 bg-white px-4 py-3.5 text-left transition-colors hover:bg-secondary"
       >
         <KeyRound className="h-5 w-5 flex-none text-zup-blue" strokeWidth={1.8} aria-hidden />
         <span className="text-[13px] leading-normal text-zup-mid">
@@ -123,7 +123,7 @@ function ClaimAccount({ phone }: { phone: string }) {
   }
 
   return (
-    <div className="mb-6 flex flex-col gap-3.5 rounded-[14px] border border-zup-body/7 bg-white px-4 py-4 text-left">
+    <div className="mb-6 flex flex-col gap-3.5 rounded-[2px] border border-zup-body/7 bg-white px-4 py-4 text-left">
       <p className="text-[13.5px] leading-relaxed text-zup-mid">
         Set a password for <strong>{phone}</strong>. Next time, ordering takes two taps.
       </p>
@@ -162,7 +162,7 @@ function ClaimAccount({ phone }: { phone: string }) {
         type="button"
         onClick={submit}
         disabled={busy}
-        className="min-h-12 cursor-pointer rounded-[14px] bg-zup-ink text-[15px] font-bold text-white transition-colors hover:bg-zup-body disabled:opacity-60"
+        className="min-h-12 cursor-pointer rounded-[2px] bg-zup-ink text-[15px] font-bold text-white transition-colors hover:bg-zup-body disabled:opacity-60"
       >
         {busy ? "Saving…" : "Save my details"}
       </button>

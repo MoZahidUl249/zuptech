@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * Product search for the site header.
  *
  * Deliberately a plain form that navigates rather than a live dropdown: the
- * catalogue browser on /shop already does the filtering, and pushing the query
+ * catalogue browser on /products already does the filtering, and pushing the query
  * into its URL means one search implementation instead of two that can
  * disagree — and a result page that can be linked, shared and bookmarked,
  * which the shop's own box could not do while its state was local-only.
@@ -26,7 +26,7 @@ export function ProductSearch({ className }: { className?: string }) {
         const term = q.trim();
         // An empty search is "show me everything", not a no-op — going to the
         // unfiltered shop is the least surprising outcome.
-        router.push(term ? `/shop?q=${encodeURIComponent(term)}` : "/shop");
+        router.push(term ? `/products?q=${encodeURIComponent(term)}` : "/products");
       }}
       className={cn("relative", className)}
     >

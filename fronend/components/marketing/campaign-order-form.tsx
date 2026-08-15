@@ -23,6 +23,8 @@ export function CampaignOrderForm({
   intro,
   deliveryFee,
   unitLabel,
+  campaignSlug,
+  payMethod,
 }: {
   productId: string;
   bundles: CampaignBundle[];
@@ -31,6 +33,19 @@ export function CampaignOrderForm({
   intro: string;
   deliveryFee: number;
   unitLabel: string;
+  /** Attributes the order to this campaign, so its sales can be counted. */
+  campaignSlug: string;
+  /**
+   * The payment method to place the order under, resolved on the server from
+   * the enabled list.
+   *
+   * This used to be the literal string "Cash on Delivery". Checkout resolves
+   * a method BY NAME, so renaming that row in the admin — or disabling it —
+   * broke every campaign order form silently and permanently, with the
+   * failure surfacing only as a 400 to a customer mid-purchase. Empty means
+   * nothing is enabled, and the form says so instead of posting a guess.
+   */
+  payMethod: string;
 }) {
   // Default to the best-value row the campaign offers, not the smallest — the
   // bundle ladder exists to lift order value and the page already argues for it.
@@ -64,8 +79,9 @@ export function CampaignOrderForm({
           phone: form.phone.trim(),
           address: form.address.trim(),
           insideDhaka: true,
-          pay: "Cash on Delivery",
+          pay: payMethod,
           items: [{ productId, qty }],
+          landingPageSlug: campaignSlug,
         }),
       });
       const body = await res.json();
@@ -195,7 +211,7 @@ export function CampaignOrderForm({
 
       <button
         type="submit"
-        disabled={busy}
+        disabled={busy || !payMethod}
         className="mt-4 w-full rounded-full bg-zup-orange px-5 py-3.5 text-[16px] font-bold text-white transition-colors hover:bg-zup-orange-dark disabled:opacity-60"
       >
         {busy ? "…" : labels.submit}

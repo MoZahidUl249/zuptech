@@ -203,7 +203,7 @@ export function HeroCarousel({
             {!decorative && s.cta ? (
               <div className="absolute inset-x-0 bottom-0 flex justify-center p-4 sm:justify-start sm:p-8">
                 <Link
-                  href={s.href || "/shop"}
+                  href={s.href || "/products"}
                   // Off-screen slides must not be tab stops.
                   tabIndex={i === active ? 0 : -1}
                   aria-hidden={i !== active}

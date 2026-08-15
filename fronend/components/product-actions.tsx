@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Wrench } from "lucide-react";
 import { useCart } from "@/lib/cart";
-import { type Product } from "@/lib/products";
+import { isUnavailable, type Product } from "@/lib/products";
 import { formatBDT } from "@/lib/site";
 import { OfferLadder } from "./offer-ladder";
 
@@ -27,7 +27,8 @@ export function ProductActions({
   const { add } = useCart();
   const router = useRouter();
 
-  const outOfStock = product.inStock === false;
+  // Shared with the product page — see isUnavailable in lib/products.
+  const outOfStock = isUnavailable(product);
   // Cap the order at what the backend says is available (stock − reserved).
   const maxQty =
     typeof product.available === "number" ? Math.min(99, Math.max(1, product.available)) : 99;
@@ -36,7 +37,6 @@ export function ProductActions({
   // a discount. The offer ladder below reads `qty` to show which tiers this
   // quantity has reached — it still shows no money; the charged amount comes
   // from the quote at checkout.
-  const hasSale = product.salePrice !== undefined && product.salePrice < product.price;
   const effectivePrice = product.salePrice ?? product.price;
 
   // Either zone having a fee means this product ships with installation.
@@ -56,10 +56,35 @@ export function ProductActions({
 
   if (outOfStock) {
     return (
-      <div className="rounded-[14px] border border-zup-body/10 bg-white px-5 py-4 text-[14.5px] font-semibold text-zup-gray">
-        This product is currently out of stock. Call us to reserve the next
-        batch.
-      </div>
+      <>
+        <div className="rounded-[2px] border border-zup-body/10 bg-white px-5 py-4 text-[14.5px] font-semibold text-zup-gray">
+          This product is currently out of stock. Call us to reserve the next
+          batch.
+        </div>
+
+        {/*
+         * The mobile bar still renders, disabled.
+         *
+         * MobileTabBar stands down on every /products/:slug route on the
+         * assumption that something replaces it here. This branch used to
+         * return before reaching the bar, so an out-of-stock product on a
+         * phone had NO bottom control at all — no tab bar and no buy bar — and
+         * the visitor lost the site's whole bottom navigation on that page.
+         *
+         * A disabled bar says why the action is unavailable, which an absent
+         * one cannot. It also keeps the two components' assumptions in step:
+         * whenever the tab bar hides, this renders.
+         */}
+        <div className="fixed inset-x-0 bottom-0 z-70 flex gap-2.5 border-t border-zup-body/8 bg-white/95 px-4 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl md:hidden">
+          <button
+            type="button"
+            disabled
+            className="min-h-13 w-full cursor-not-allowed rounded-[2px] bg-zup-body/15 text-[15px] font-bold text-zup-gray"
+          >
+            Out of stock
+          </button>
+        </div>
+      </>
     );
   }
 
@@ -102,7 +127,7 @@ export function ProductActions({
         depends on the zone and appears in the checkout total.
       */}
       {hasInstallation ? (
-        <p className="flex items-start gap-2 rounded-[14px] border border-zup-body/10 bg-white px-4 py-3 text-[13px] leading-relaxed text-zup-mid">
+        <p className="flex items-start gap-2 rounded-[2px] border border-zup-body/10 bg-white px-4 py-3 text-[13px] leading-relaxed text-zup-mid">
           <Wrench className="mt-0.5 h-4 w-4 flex-none text-zup-blue" strokeWidth={1.8} aria-hidden />
           <span>
             <strong className="font-bold">Installation included.</strong> Our engineer
@@ -114,55 +139,62 @@ export function ProductActions({
       {/* Live: rungs light up as the stepper crosses each threshold. */}
       <OfferLadder product={product} qty={qty} variant="panel" title={offersTitle} />
 
-      {/* Desktop buttons */}
-      <div className="hidden flex-col gap-2.5 md:flex">
+      {/*
+       * Desktop keeps the buttons in the page, side by side, each taking half
+       * the row. `min-w-0` lets them actually divide the space — without it a
+       * long label sets the button's minimum width and pushes its sibling off.
+       *
+       * On mobile these are hidden in favour of the fixed bar below, so the
+       * action is reachable from anywhere on a long product page rather than
+       * only at the point you happen to have scrolled past.
+       */}
+      <div className="hidden gap-2.5 md:flex">
         <button
           type="button"
           onClick={addToCart}
-          className="rounded-full bg-zup-orange px-8 py-4 text-base font-semibold text-white shadow-[0_8px_24px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark"
+          className="min-w-0 flex-1 rounded-full bg-zup-orange px-4 py-4 text-base font-semibold text-white shadow-[0_8px_24px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark"
         >
-          Add to Cart — {formatBDT(effectivePrice)} each
+          {/* The unit price is worth saying where there is room for it, but at
+              half a phone's width it wraps the label onto three lines. The
+              price is stated directly above these buttons either way. */}
+          Add to Cart
+          <span className="hidden sm:inline"> — {formatBDT(effectivePrice)} each</span>
         </button>
         <button
           type="button"
           onClick={buyNow}
-          className="rounded-full bg-zup-red px-8 py-4 text-base font-bold text-white shadow-[0_8px_24px_rgba(198,40,40,.25)] transition-colors hover:bg-zup-red-dark"
+          className="min-w-0 flex-1 rounded-full bg-zup-red px-4 py-4 text-base font-bold text-white shadow-[0_8px_24px_rgba(198,40,40,.25)] transition-colors hover:bg-zup-red-dark"
         >
           {ctaLabel}
         </button>
       </div>
 
-      {/* Mobile sticky bar */}
-      <div className="fixed inset-x-0 bottom-16 z-70 border-t border-zup-body/7 bg-white/94 px-4 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl md:hidden">
-        <div className="mx-auto flex max-w-[560px] items-center gap-3.5">
-          <div className="flex flex-col leading-tight">
-            <span className="text-[11px] text-zup-soft">Price</span>
-            <span className="flex items-baseline gap-1.5">
-              <span className="whitespace-nowrap text-lg font-extrabold tracking-[-0.02em]">
-                {formatBDT(effectivePrice)}
-              </span>
-              {hasSale ? (
-                <span className="text-[12px] text-zup-soft line-through">
-                  {formatBDT(product.price)}
-                </span>
-              ) : null}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={addToCart}
-            className="min-h-13 flex-1 rounded-[14px] bg-zup-orange text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(232,83,32,.3)] active:scale-[.98]"
-          >
-            Add to Cart
-          </button>
-          <button
-            type="button"
-            onClick={buyNow}
-            className="min-h-13 flex-1 rounded-[14px] bg-zup-red text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(198,40,40,.3)] active:scale-[.98]"
-          >
-            Buy Now
-          </button>
-        </div>
+      {/*
+       * Mobile: a fixed bar carrying the same two actions.
+       *
+       * It sits at `bottom-0`, NOT above the tab bar, because the tab bar
+       * hides itself on this route (see mobile-tab-bar.tsx). Two stacked fixed
+       * bars is what the previous version did and it ate a third of a phone
+       * screen. Buy Now leads, matching the order the buttons are asked for.
+       *
+       * No price here. The last version carried one, which put a second copy
+       * of the same number a few pixels below the one in the page.
+       */}
+      <div className="fixed inset-x-0 bottom-0 z-70 flex gap-2.5 border-t border-zup-body/8 bg-white/95 px-4 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl md:hidden">
+        <button
+          type="button"
+          onClick={buyNow}
+          className="min-h-13 min-w-0 flex-1 rounded-[2px] bg-zup-orange text-[15px] font-bold text-white active:scale-[.98]"
+        >
+          {ctaLabel}
+        </button>
+        <button
+          type="button"
+          onClick={addToCart}
+          className="min-h-13 min-w-0 flex-1 rounded-[2px] bg-zup-blue text-[15px] font-bold text-white active:scale-[.98]"
+        >
+          Add to Cart
+        </button>
       </div>
     </>
   );

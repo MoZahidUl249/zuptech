@@ -20,6 +20,14 @@ export const createOrderDto = t.Object({
   items: cartItemsDto,
   /** Signed-in only: persist this address/zone as the account's new default. */
   saveAddress: t.Optional(t.Boolean()),
+  /**
+   * The campaign page this order came from, when it came from one.
+   *
+   * A slug rather than an id because that is what the page already knows, and
+   * it is checked against the published set server-side — a guessed or stale
+   * slug attributes nothing rather than inventing a sale.
+   */
+  landingPageSlug: t.Optional(t.String({ maxLength: 120 })),
 });
 
 export const listOrdersQueryDto = t.Object({

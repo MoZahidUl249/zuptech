@@ -50,6 +50,8 @@ export interface LandingPage {
   heroCtaNote: string;
   brandStripTitle: string;
   brandLogos: string[];
+  /** Shown in the hero in place of the pack shot. "" keeps the photo. */
+  heroVideoUrl: string;
   videoTitle: string;
   videoUrl: string;
   featuresTitle: string;
@@ -67,8 +69,17 @@ export interface LandingPage {
   qcImageHint: string;
   countdownTitle: string;
   countdownNote: string;
-  /** ISO timestamp, or "" for no deadline. */
-  countdownEndsAt: string;
+  /**
+   * The campaign deadline, or "" for none.
+   *
+   * Typed `string | Date` because both turn up: the API serializes an ISO
+   * string, but the typed client revives ISO timestamps into `Date` objects
+   * before this code ever sees them. Declaring it `string` was a lie that
+   * type-checked, and the editor called `.slice()` on it — which threw and
+   * took the whole campaign editor down the moment a campaign had a deadline
+   * set. Read it through `datetimeLocalValue` below, never directly.
+   */
+  countdownEndsAt: string | Date;
   countdownCtaLabel: string;
   countdownAssurance: string;
   testimonialsTitle: string;
@@ -91,8 +102,34 @@ export interface LandingPage {
   footerTagline: string;
   footerAbout: string;
   footerLines: string[];
+
+  /* ===== Theme =====
+   * Every colour the page paints with, named for the ROLE it plays rather than
+   * the colour it holds — a campaign can be recoloured without a name turning
+   * into a lie. Hex strings; the server validates the format. */
+  colorHeroBg: string;
+  colorHeroText: string;
+  colorBandBg: string;
+  colorBandText: string;
+  colorTintBg: string;
+  colorPageBg: string;
+  colorPageText: string;
+  colorAccent: string;
+  colorHighlight: string;
+  colorCtaBg: string;
+  colorCtaText: string;
+
+  /** Ordered product ids for the row above the page body. Empty hides it. */
+  productRowIds: string[];
+  /** The two price-band labels. Blank falls back to English in the renderer. */
+  priceCompareLabel: string;
+  priceOfferLabel: string;
+
   viewCount: number;
+  /** Orders attributed to this campaign, counted from the orders themselves. */
   orderCount: number;
+  /** BDT ordered through it, cancellations excluded. */
+  revenue: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -117,7 +154,7 @@ type CampaignKey =
   | "hotlineLabel" | "hotlineNumber" | "headerCtaLabel"
   | "trustBadges" | "subheadline" | "discountBadge" | "heroCtaNote"
   | "brandStripTitle" | "brandLogos"
-  | "videoTitle" | "videoUrl"
+  | "heroVideoUrl" | "videoTitle" | "videoUrl"
   | "featuresTitle" | "features"
   | "specTitle" | "specMeta" | "specs"
   | "bundlesTitle" | "bundlesSubtitle" | "bundleUnitLabel" | "bundleMaxQty"
@@ -126,7 +163,22 @@ type CampaignKey =
   | "countdownCtaLabel" | "countdownAssurance"
   | "testimonialsTitle" | "testimonials"
   | "formTitle" | "formIntro" | "formLabels"
-  | "footerTagline" | "footerAbout" | "footerLines";
+  | "footerTagline" | "footerAbout" | "footerLines"
+  | "colorHeroBg" | "colorHeroText" | "colorBandBg" | "colorBandText"
+  | "colorTintBg" | "colorPageBg" | "colorPageText" | "colorAccent"
+  | "colorHighlight" | "colorCtaBg" | "colorCtaText"
+  | "productRowIds" | "priceCompareLabel" | "priceOfferLabel";
+
+/** The theme keys, in one place so the editor and the save boundary agree. */
+export const COLOR_KEYS = [
+  "colorHeroBg", "colorHeroText",
+  "colorBandBg", "colorBandText",
+  "colorTintBg", "colorPageBg", "colorPageText",
+  "colorAccent", "colorHighlight",
+  "colorCtaBg", "colorCtaText",
+] as const;
+
+export type ColorKey = (typeof COLOR_KEYS)[number];
 
 /**
  * The writable subset — everything the server resolves or owns is stripped.
@@ -142,6 +194,7 @@ export type LandingPageDraft = Omit<
   | "updatedAt"
   | "viewCount"
   | "orderCount"
+  | "revenue"
   | "productName"
   | "productSlug"
   | "productVisible"
@@ -164,16 +217,131 @@ function campaignNumbers<T extends Partial<LandingPageDraft>>(body: T): T {
   for (const key of ["offerPrice", "compareAtPrice", "bundleMaxQty"] as const) {
     if (typeof out[key] === "number") out[key] = whole(out[key]) as T[typeof key];
   }
+  // The one number with an upper bound. Clamping is safe where truncating a
+  // list is not: there is no wording to lose, and "10 rows" is plainly what
+  // was meant by "25 rows" once the server has refused it anyway.
+  if (typeof out.bundleMaxQty === "number") {
+    out.bundleMaxQty = Math.min(
+      BUNDLE_MAX_ROWS,
+      Math.max(1, out.bundleMaxQty),
+    ) as T["bundleMaxQty"];
+  }
   return out;
 }
 
+/**
+ * The server's list caps, mirrored.
+ *
+ * Every one of these answers 422 with a schema dump naming nothing a person
+ * would recognise — on a screen holding a page of unsaved ad copy. The editor
+ * checks them first so the message can name the section and the number, and
+ * so the copy stays on screen to be fixed.
+ *
+ * Truncating instead would be worse: the lines past the cap are wording
+ * someone wrote, and dropping them silently is indistinguishable from a bug.
+ *
+ * Keep in step with backend/src/dtos/landing-pages.dto.ts.
+ */
+export const CAMPAIGN_LIMITS: { key: keyof LandingPage; label: string; max: number }[] = [
+  { key: "trustBadges", label: "Trust badges", max: 6 },
+  { key: "brandLogos", label: "Brand names", max: 10 },
+  { key: "features", label: "Features", max: 12 },
+  { key: "specs", label: "Specs", max: 10 },
+  { key: "qcPoints", label: "Quality points", max: 8 },
+  { key: "testimonials", label: "Testimonials", max: 12 },
+  { key: "footerLines", label: "Footer contact lines", max: 8 },
+  { key: "productRowIds", label: "Product row", max: 12 },
+  { key: "benefitBullets", label: "Benefit bullets", max: 10 },
+];
+
+export const BUNDLE_MAX_ROWS = 10;
+
+/**
+ * What the server would reject, said in words the person typing can act on.
+ *
+ * Returns one line per problem, empty when the body will be accepted. It only
+ * covers the rules the editor can actually violate — a slug collision is the
+ * server's to detect, and 409s with a sentence of its own.
+ */
+export function campaignProblems(body: Partial<LandingPageDraft>): string[] {
+  const problems: string[] = [];
+
+  for (const { key, label, max } of CAMPAIGN_LIMITS) {
+    const value = body[key as keyof typeof body];
+    if (Array.isArray(value) && value.length > max) {
+      problems.push(`${label}: ${value.length} entered, at most ${max} allowed.`);
+    }
+  }
+
+  if (typeof body.title === "string" && body.title.trim().length < 2) {
+    problems.push("Internal title needs at least 2 characters.");
+  }
+  if (typeof body.slug === "string" && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(body.slug)) {
+    problems.push("Link slug: lowercase letters, numbers and single hyphens only.");
+  }
+  if (typeof body.gtmId === "string" && !/^$|^GTM-[A-Z0-9]+$/.test(body.gtmId)) {
+    problems.push("GTM container id must look like GTM-XXXXXXX, or be empty.");
+  }
+
+  return problems;
+}
+
+/**
+ * Make every colour something the DTO will accept, or send nothing for it.
+ *
+ * The server takes `#RGB` or `#RRGGBB` and 422s anything else. The colour
+ * editor only ever commits a valid value, so this is a backstop for the paths
+ * that don't go through it — a duplicated page, a field pasted into, a future
+ * caller. It expands the short form rather than passing it on, so what comes
+ * back from the server is the same string in every row.
+ *
+ * An unparseable value is dropped rather than sent: losing one colour on save
+ * beats a 422 that discards the campaign copy typed alongside it. The editor
+ * is what stops that being silent — it won't let an invalid value get here.
+ */
+function campaignColors<T extends Partial<LandingPageDraft>>(body: T): T {
+  const out = { ...body };
+  for (const key of COLOR_KEYS) {
+    const raw = out[key];
+    if (typeof raw !== "string") continue;
+    const hex = raw.trim().replace(/^#?/, "#");
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      out[key] = hex.toUpperCase() as T[ColorKey];
+    } else if (/^#[0-9a-fA-F]{3}$/.test(hex)) {
+      const [r, g, b] = hex.slice(1);
+      out[key] = `#${r}${r}${g}${g}${b}${b}`.toUpperCase() as T[ColorKey];
+    } else {
+      delete out[key];
+    }
+  }
+  return out;
+}
+
+/**
+ * Send the deadline as the ISO string the DTO takes.
+ *
+ * The draft may hold a `Date` — the typed client revives ISO timestamps on the
+ * way in — and posting one would serialize to a shape the schema rejects. "" is
+ * how "no deadline" is expressed and passes through untouched; the server turns
+ * it into a null column.
+ */
+function campaignDates<T extends Partial<LandingPageDraft>>(body: T) {
+  const at = body.countdownEndsAt;
+  if (at === undefined) return body as Omit<T, "countdownEndsAt"> & { countdownEndsAt?: string };
+  const iso = at instanceof Date ? at.toISOString() : String(at);
+  return { ...body, countdownEndsAt: iso };
+}
+
+const campaignBody = <T extends Partial<LandingPageDraft>>(body: T) =>
+  campaignDates(campaignColors(campaignNumbers(body)));
+
 export const createLandingPage = (draft: LandingPageDraft) =>
-  unwrap(api.admin.api["landing-pages"].post(campaignNumbers(draft)), "POST /admin/api/landing-pages");
+  unwrap(api.admin.api["landing-pages"].post(campaignBody(draft)), "POST /admin/api/landing-pages");
 
 
 export const patchLandingPage = (id: string, patch: Partial<LandingPageDraft>) =>
   unwrap(
-    api.admin.api["landing-pages"]({ id }).patch(campaignNumbers(patch)),
+    api.admin.api["landing-pages"]({ id }).patch(campaignBody(patch)),
     "PATCH /admin/api/landing-pages/:id",
   );
 
@@ -226,4 +394,17 @@ export function useLandingPages() {
   }, [fetchList]);
 
   return { pages, loading, error, reload };
+}
+
+/**
+ * What an `<input type="datetime-local">` needs, from whatever the API gave us.
+ *
+ * Accepts the ISO string the DTO documents and the Date the client actually
+ * hands back, and answers "" for anything unusable — an unparseable value must
+ * leave the field empty, not crash the screen it sits on.
+ */
+export function datetimeLocalValue(v: string | Date | null | undefined): string {
+  if (!v) return "";
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 16);
 }

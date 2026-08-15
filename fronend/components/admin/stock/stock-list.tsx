@@ -310,7 +310,24 @@ export function InventorySection() {
                         p.stock
                       )}
                     </Td>
-                    <Td className="text-zup-gray">{p.reserved}</Td>
+                    {/*
+                      Reserved above on-hand means units have been promised
+                      that do not exist. "Available" clamps at zero, so an
+                      oversold product used to look exactly like an ordinary
+                      sold-out one and nobody found out until the deliveries
+                      failed. It needs naming where the numbers are read.
+                    */}
+                    <Td className={p.reserved > p.stock ? "font-bold text-warn-fg" : "text-zup-gray"}>
+                      {p.reserved}
+                      {p.reserved > p.stock ? (
+                        <span
+                          className="ml-1.5 rounded-full bg-warn-bg px-1.5 py-0.5 text-ui-micro font-bold text-warn-fg"
+                          title={`${p.reserved - p.stock} unit(s) promised beyond what is on hand — orders will not all be fillable.`}
+                        >
+                          oversold {p.reserved - p.stock}
+                        </span>
+                      ) : null}
+                    </Td>
                     <Td className="font-bold">{Math.max(p.stock - p.reserved, 0)}</Td>
                     <Td className="text-zup-gray">{p.reorderAt}</Td>
                     <Td className="whitespace-nowrap">৳ {bd(p.cost * p.stock)}</Td>

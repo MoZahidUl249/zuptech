@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
-import { getProductBySlug, getProductPage } from "@/lib/api";
+import { getProductBySlug, getProductsByIds } from "@/lib/api";
+import { isUnavailable, type Product } from "@/lib/products";
 import { formatBDT, site , jsonLd } from "@/lib/site";
 import { ProductActions } from "@/components/product-actions";
 import { ProductCard, ProductImagePlaceholder } from "@/components/product-card";
@@ -40,23 +41,36 @@ export default async function ProductPage({
   if (!product) notFound();
 
   /*
-   * Related products, asked for by category instead of filtered out of the
-   * whole shop.
+   * Recommended products: exactly what the admin picked for this product, in
+   * their order. Nothing is derived.
    *
-   * Two things were wrong with doing it client-side. It fetched all 500 catalog
-   * rows to keep four, on the most-visited route on the site — most of why the
-   * storefront ran out of memory under load. And it matched on `cat`, which
-   * only exists on the bundled fallback seed: for live products both sides were
-   * `undefined`, so `p.cat === product.cat` was true for everything and
-   * "related" meant "any four products at all".
+   * This replaced a category → featured → catalogue fallback chain. That chain
+   * guaranteed a full row on every page, but "four products from the same
+   * category" is not a recommendation, and the catalogue tier in particular
+   * amounted to four arbitrary products. Curation means an uncurated product
+   * shows no row at all, which is the deliberate trade — an empty row is honest
+   * where a filled one was not.
    *
-   * Five, because the product itself comes back in its own category.
+   * `getProductsByIds` is one request and drops ids that no longer resolve, so
+   * a product deleted after being recommended costs one card rather than a hole
+   * or a crash. It also preserves nothing about order, so the ids are re-sorted
+   * back into the admin's sequence below.
    */
-  const { products: sameCategory } = product.category
-    ? await getProductPage({ category: product.category, limit: 5 })
-    : { products: [] };
-  const related = sameCategory.filter((p) => p.id !== product.id).slice(0, 4);
-  const outOfStock = product.inStock === false;
+  const recommendedIds = product.recommendedIds ?? [];
+  const resolved = recommendedIds.length > 0 ? await getProductsByIds(recommendedIds) : [];
+  const related = recommendedIds
+    .map((id) => resolved.find((p) => p.id === id))
+    .filter((p): p is Product => Boolean(p) && p!.id !== product.id);
+  /*
+   * Unbuyable, not merely empty — and asked of `isUnavailable` rather than
+   * spelled out here, because ProductActions must reach the same verdict.
+   *
+   * It didn't: this page honoured the pin in the status line while the buttons
+   * beneath it read `inStock` alone, so a product reading "Sold out" still had
+   * a working Buy Now. The rule now lives in lib/products.
+   */
+  const pinnedUnavailable = product.stockTag === "Sold out";
+  const outOfStock = isUnavailable(product);
   // salePrice is server-computed (PublicProductDto); never derived here.
   const onSale = product.salePrice !== undefined && product.salePrice < product.price;
   const video = parseProductVideo(product.video);
@@ -127,7 +141,7 @@ export default async function ProductPage({
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: site.url },
-      { "@type": "ListItem", position: 2, name: "Shop", item: `${site.url}/shop` },
+      { "@type": "ListItem", position: 2, name: "Products", item: `${site.url}/products` },
       {
         "@type": "ListItem",
         position: 3,
@@ -150,10 +164,10 @@ export default async function ProductPage({
 
       <nav aria-label="Breadcrumb" className="mb-1.5">
         <Link
-          href="/shop"
+          href="/products"
           className="px-1 py-1.5 text-sm font-semibold text-zup-blue transition-colors hover:text-zup-blue-dark"
         >
-          ← Shop
+          ← Products
         </Link>
       </nav>
 
@@ -172,12 +186,12 @@ export default async function ProductPage({
             <img
               src={product.photos[0]}
               alt={`${product.name} — main photo`}
-              className="w-full rounded-[20px] border border-zup-body/6 object-cover [aspect-ratio:1]"
+              className="w-full rounded-[2px] border border-zup-body/6 object-cover [aspect-ratio:1]"
             />
           ) : (
             <ProductImagePlaceholder
               label={`${product.imgHint} — main`}
-              className="rounded-[20px] border border-zup-body/6 [aspect-ratio:1]"
+              className="rounded-[2px] border border-zup-body/6 [aspect-ratio:1]"
             />
           )}
           <div className="mt-2.5 grid grid-cols-2 gap-2.5">
@@ -189,34 +203,41 @@ export default async function ProductPage({
                   key={url}
                   src={url}
                   alt={`${product.name} — photo ${i + 2}`}
-                  className="w-full rounded-[14px] border border-zup-body/6 object-cover [aspect-ratio:1]"
+                  className="w-full rounded-[2px] border border-zup-body/6 object-cover [aspect-ratio:1]"
                 />
               ))
             ) : (
               <>
                 <ProductImagePlaceholder
                   label={`${product.imgHint} — detail`}
-                  className="rounded-[14px] border border-zup-body/6 [aspect-ratio:1]"
+                  className="rounded-[2px] border border-zup-body/6 [aspect-ratio:1]"
                 />
                 <ProductImagePlaceholder
                   label="in-situ install photo"
-                  className="rounded-[14px] border border-zup-body/6 [aspect-ratio:1]"
+                  className="rounded-[2px] border border-zup-body/6 [aspect-ratio:1]"
                 />
               </>
             )}
           </div>
-          <div className="mt-5 rounded-2xl border border-zup-body/6 bg-white px-5.5 py-5">
-            <h2 className="mb-2 text-[15px] font-bold tracking-[-0.01em]">
-              Product description
-            </h2>
-            <p className="text-sm leading-relaxed text-zup-gray">
-              {product.description}
-            </p>
-          </div>
         </div>
 
+        {/*
+         * Source order here IS the mobile order: name, buttons, specs. Burying
+         * "Buy Now" under a dozen feature lines meant a scroll to reach the
+         * only action on the page.
+         *
+         * Desktop is the one that reorders, via `md:order-*`, back to
+         * specs-then-buttons — both are on screen together there anyway. It is
+         * this way round on purpose: `order` moves things visually but not for
+         * a keyboard or a screen reader, which follow source order. Putting the
+         * divergence on desktop keeps the phone — the layout this was asked
+         * for, and where the two are far apart on screen — honest.
+         *
+         * `order-*` rather than a second copy of the markup: duplicating it
+         * would render ProductActions twice, and it holds quantity state.
+         */}
         <div className="flex flex-col gap-4">
-          <div>
+          <div className="md:order-1">
             <span className="text-xs font-semibold uppercase tracking-[0.06em] text-zup-soft">
               {product.category ?? product.cat}
             </span>
@@ -248,26 +269,36 @@ export default async function ProductPage({
                   : "mt-2 text-[13.5px] font-semibold text-zup-green-dark"
               }
             >
-              {outOfStock
+              {pinnedUnavailable
+                ? "Sold out"
+                : outOfStock
                 ? "Out of stock — call us for availability"
                 : typeof product.available === "number"
                   ? `In stock · ${product.available} available`
                   : "In stock"}
             </p>
-            {product.minDeposit > 0 && (
+            {/* A percentage of the price, which is how it is stored — no taka
+                figure is derived here. The server holds the percent and this
+                prints it; nothing multiplies it out, which is the whole reason
+                a percentage is safe in this field (see schema.prisma). */}
+            {product.minDepositPct > 0 && (
               <p className="mt-3 inline-flex items-center gap-2 rounded-xl bg-zup-blue/6 px-3.5 py-2.5 text-[13.5px] font-semibold text-zup-blue">
                 <span
                   className="flex h-4.5 w-4.5 flex-none items-center justify-center rounded-full bg-zup-blue text-[10px] font-bold text-white"
                   aria-hidden
                 >
-                  ৳
+                  %
                 </span>
-                Minimum down payment for this product {formatBDT(product.minDeposit)}.
+                Minimum down payment for this product {product.minDepositPct}%.
               </p>
             )}
           </div>
 
-          <ul className="flex flex-col gap-[9px]">
+          <div className="md:order-3">
+            <ProductActions product={product} />
+          </div>
+
+          <ul className="flex flex-col gap-[9px] md:order-2">
             {product.specs.map((spec) => (
               <li
                 key={spec}
@@ -280,24 +311,56 @@ export default async function ProductPage({
               </li>
             ))}
           </ul>
-
-          <ProductActions product={product} />
         </div>
+
+        {/*
+         * The description, now a disclosure and now its own grid child.
+         *
+         * It used to sit inside the photo column, which on a phone put a wall
+         * of copy between the gallery and the name — the two things a visitor
+         * is actually looking for. As a third child it falls after the buy
+         * column on mobile and back under the photos on desktop (grid flow
+         * puts it in column 1, row 2), which is where it already was.
+         *
+         * Native <details>, not React state: this page is a server component,
+         * and making it a client one for a show/hide would ship the whole page
+         * to the browser for a toggle that HTML already does — and does before
+         * hydration. It is collapsed at every size; the copy is long enough
+         * that the desktop layout reads better for it too.
+         */}
+        <details className="group border border-zup-body/6 bg-white px-5.5 py-5">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+            <h2 className="text-[15px] font-bold tracking-[-0.01em]">
+              Product description
+            </h2>
+            <span className="flex-none text-[13px] font-semibold text-zup-blue">
+              <span className="group-open:hidden">More</span>
+              <span className="hidden group-open:inline">Less</span>
+            </span>
+          </summary>
+          <p className="mt-3 text-sm leading-relaxed text-zup-gray">
+            {product.description}
+          </p>
+        </details>
       </div>
 
       {related.length > 0 && (
         <section className="pt-18" aria-labelledby="related-heading">
           <h2 id="related-heading" className="mb-4.5 text-[22px] font-bold tracking-[-0.02em]">
-            Related products
+            Recommended products
           </h2>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:gap-3">
             {related.map((p) => (
-              <ProductCard key={p.id} product={p} showCategory={false} />
+              <ProductCard key={p.id} product={p} />
             ))}
           </div>
         </section>
       )}
-      <div className="h-[150px] md:h-20" />
+      {/* Clears the fixed buy bar on mobile — this page shows that instead of
+          the tab bar, so it is the only thing to clear. Its own height plus the
+          safe-area inset it already carries, and a little air. Desktop has no
+          fixed bar at all and just needs footer separation. */}
+      <div className="h-[calc(76px+env(safe-area-inset-bottom))] md:h-20" />
     </main>
   );
 }

@@ -39,13 +39,31 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  /*
+   * Near-square everywhere. The scale used to fan out from `--radius`
+   * (0.6× to 2.6×), so a card at `rounded-2xl` was nearly five times rounder
+   * than an input at `rounded-sm`. The brief is a flat, sharp geometry, so
+   * every step now resolves to the same 2px and the utility a component
+   * happens to use stops changing how round it looks.
+   *
+   * A flat value rather than a smaller `--radius` with the multipliers kept:
+   * scaling the token would preserve exactly the spread we are removing.
+   *
+   * Not `border-radius: 2%` either, despite the brief's wording — percentage
+   * radii resolve against width and height SEPARATELY, so a wide card would
+   * get elliptical corners that read as a rendering fault.
+   *
+   * `--radius` is flattened with them (see below), because components/ui/sonner.tsx
+   * feeds it straight to the toast as `--border-radius` and a rounded toast
+   * over square everything else is the one thing that would still look wrong.
+   */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 2px;
+  --radius-3xl: 2px;
+  --radius-4xl: 2px;
 
   /* ZUP TECH brand palette (from ZUP TECH.dc.html design) */
   --color-zup-blue: #0b4fe0;
@@ -140,7 +158,9 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  /* Flat, matching the --radius-* scale in @theme. Read directly by the
+     toast (components/ui/sonner.tsx) as well as by shadcn primitives. */
+  --radius: 2px;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -196,6 +216,32 @@
   html {
     @apply font-sans scroll-smooth;
   }
+}
+
+/* ===== Flat geometry: rounded-full =====
+ *
+ * `rounded-full` is the one radius the theme cannot reach. It is not built
+ * from `--radius-*` — Tailwind hardcodes it to an effectively infinite value
+ * (3.4e38px) — so the flattened scale in @theme leaves all ~150 uses of it
+ * untouched, and every avatar, count badge and icon chip would stay a circle
+ * while the cards around them went square.
+ *
+ * The doubled class is not a typo. Tailwind pulls this rule into
+ * `@layer utilities` alongside its own — verified in the built stylesheet, both
+ * rules land in that layer — so an ordinary `.rounded-full` would win only by
+ * being emitted later, which is a build-order accident and not something to
+ * depend on. `.rounded-full.rounded-full` raises specificity to (0,2,0) against
+ * Tailwind's (0,1,0), and specificity is resolved before source order, so this
+ * wins wherever it ends up. Cheaper than `!important`, which would also fight
+ * anything legitimately overriding a radius inline.
+ *
+ * ONE exception, and it is opt-in rather than carved out here: the desktop nav
+ * keeps its pill shape by using an arbitrary `rounded-[999px]`, which is a
+ * different class and so never matches this selector. See
+ * components/site-header.tsx.
+ */
+.rounded-full.rounded-full {
+  border-radius: 2px;
 }
 
 /* ===== ZUP TECH motion system (from design) ===== */

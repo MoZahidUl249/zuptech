@@ -21,6 +21,9 @@ export const siteConfig = new Elysia({ name: "routes/public/site-config", detail
 
     return {
       featuredIds: config.featuredIds,
+      // The home page's second product row. Separate list, same shape — the
+      // storefront resolves both through getProductsByIds.
+      homeRowIds: config.homeRowIds,
       // Only active slides with an image render (§4.9); zero → UI defaults.
       slides: slides.filter((s) => s.active && s.image).map(toSlide),
       // Every key here has a renderer on the storefront. That is the rule the

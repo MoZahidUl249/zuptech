@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useAdmin, taka, type AdminProduct } from "@/lib/admin";
+import { useAdmin, taka, type AdminProduct, type StockTag } from "@/lib/admin";
 import {
   uploadProductPhoto,
   deleteProductPhoto,
@@ -18,6 +18,7 @@ import { FormGroup, FormGroups } from "../primitives/form-section";
 import { numberInput, slugChars } from "@/lib/utils";
 import { PhotoSlot, VideoSlot } from "./media-uploader";
 import { OfferTierEditor, duplicateMinQtys } from "./offer-tier-editor";
+import { ProductPicker } from "./product-picker";
 
 export function ProductEditor({
   product: p,
@@ -56,12 +57,26 @@ export function ProductEditor({
     duplicateMinQtys(p.quantityOffers).length > 0 ||
     duplicateMinQtys(p.freeDeliveryOffers).length > 0;
 
-  // No arithmetic: the admin types what the customer pays. The old version
-  // computed this from a percentage with Math.round while the server floored
-  // the same sum, so the preview and the till disagreed by a taka.
-  const onSale = p.onSale && p.salePrice > 0 && p.salePrice < p.price;
-  const sellingPrice = onSale ? p.salePrice : p.price;
-  const saleSaving = onSale ? p.price - p.salePrice : 0;
+  /*
+   * The preview price, computed here because an unsaved draft has no
+   * server-computed `salePrice` yet — typing 20% has to show a number before
+   * you press save.
+   *
+   * THIS MUST STAY BYTE-FOR-BYTE THE SAME SUM AS `salePriceFrom` IN
+   * backend/src/lib/rules.ts. A second rounding site is exactly what produced
+   * the bug the schema comments describe — the server floored, this preview
+   * rounded, and a ৳999 product at 33% off displayed 669 while charging 670.
+   * Identical expression, identical Math.round, identical answer.
+   *
+   * It is display-only regardless: what gets stored is whatever the server
+   * computes on save, never this.
+   */
+  const previewSalePct = Math.min(100, Math.max(0, Math.round(p.salePct)));
+  const previewSalePrice =
+    previewSalePct > 0 ? Math.round((p.price * (100 - previewSalePct)) / 100) : 0;
+  const onSale = p.onSale && previewSalePrice > 0 && previewSalePrice < p.price;
+  const sellingPrice = onSale ? previewSalePrice : p.price;
+  const saleSaving = onSale ? p.price - previewSalePrice : 0;
   // Counted independently: a product can have a video and no photos, and the
   // old short-circuit on an empty gallery reported "No photos yet" for it,
   // hiding the video completely.
@@ -301,14 +316,19 @@ export function ProductEditor({
                 className={inputCls}
               />
             </Field>
-            <Field label="Smallest deposit (৳)">
+            {/* A percentage since 2026-08-13, not taka. `max` matters: the
+                backend caps it at 100 and rejects anything above, so without
+                this the save fails with a validation error rather than the
+                field simply refusing the number. */}
+            <Field label="Smallest deposit (% of price)">
               <input
                 type="number"
                 inputMode="numeric"
                 min={0}
-                value={p.minDeposit}
+                max={100}
+                value={p.minDepositPct}
                 onChange={(e) =>
-                  onChange({ minDeposit: numberInput(e.target.value) })
+                  onChange({ minDepositPct: numberInput(e.target.value) })
                 }
                 className={inputCls}
               />
@@ -326,15 +346,20 @@ export function ProductEditor({
               This product is on sale
             </label>
               <div className="w-40">
-                <Field label="Sale price (৳)">
+                {/* A percentage, not a price, since 2026-08-13. The server
+                    turns this into the sale price once and stores it; the
+                    figure below is that same sum, so what you type and what
+                    the customer pays cannot drift apart. */}
+                <Field label="Discount (% off)">
               <input
                 type="number"
                 inputMode="numeric"
                 min={0}
+                max={100}
                 disabled={!p.onSale}
-                value={p.salePrice}
+                value={p.salePct}
                 onChange={(e) =>
-                  onChange({ salePrice: numberInput(e.target.value) })
+                  onChange({ salePct: numberInput(e.target.value) })
                 }
                 className={`${inputCls} disabled:opacity-50`}
               />
@@ -466,6 +491,30 @@ export function ProductEditor({
 
         <FormGroup
           step={6}
+          value="recommended"
+          title="Recommended products"
+          help="Shown at the bottom of this product's page, in this order. Nothing is suggested automatically — an empty list hides the row."
+          summary={
+            p.recommendedIds.length === 0
+              ? "None"
+              : `${p.recommendedIds.length} product${p.recommendedIds.length === 1 ? "" : "s"}`
+          }
+        >
+          <ProductPicker
+            selectId={`rec-add-${p.id || "new"}`}
+            label="Recommended products"
+            addLabel="Recommend a product"
+            emptyNote="Nothing recommended — this product's page will not show the row."
+            ids={p.recommendedIds}
+            onChange={(recommendedIds) => onChange({ recommendedIds })}
+            // A product recommending itself would render a card linking to the
+            // page you are already on.
+            excludeId={p.id}
+          />
+        </FormGroup>
+
+        <FormGroup
+          step={7}
           value="stock"
           title="Stock"
           help="How many you have, and when to remind you to order more."
@@ -494,7 +543,7 @@ export function ProductEditor({
         </FormGroup>
 
         <FormGroup
-          step={7}
+          step={8}
           value="warranty"
           title="Warranty"
           help="Set this and a warranty record is created automatically when an order is delivered."
@@ -521,7 +570,7 @@ export function ProductEditor({
         </FormGroup>
 
         <FormGroup
-          step={8}
+          step={9}
           value="visibility"
           title="Show on the website"
           summary={p.visible ? "Live on the website" : "Hidden"}
@@ -536,6 +585,42 @@ export function ProductEditor({
               />
               Show this product on the website
             </label>
+
+            {/*
+             * The status label on the product card.
+             *
+             * "Automatic" is the default and covers the normal case: in stock
+             * shows nothing, empty shows "Out of stock", and empty with a
+             * purchase order in transit shows "Incoming". The resolved answer
+             * is printed beside the control, because "Automatic" on its own
+             * tells you nothing about what a shopper will actually see.
+             *
+             * Picking a label pins it and stops the derivation. "Sold out" is
+             * only ever reachable this way — derived, it would be
+             * indistinguishable from "Out of stock".
+             */}
+            <Field label="Status label on the card">
+              <select
+                value={p.stockTagOverride}
+                onChange={(e) =>
+                  onChange({ stockTagOverride: e.target.value as StockTag })
+                }
+                className={selectCls}
+              >
+                <option value="">Automatic (from stock)</option>
+                <option value="Out of stock">Always show “Out of stock”</option>
+                <option value="Incoming">Always show “Incoming”</option>
+                <option value="Sold out">Always show “Sold out”</option>
+              </select>
+              <p className="mt-1.5 text-ui-sm text-zup-gray">
+                {p.stockTagOverride
+                  ? `Pinned — the card always shows “${p.stockTagOverride}”.`
+                  : p.stockTag
+                    ? `Currently showing “${p.stockTag}”.`
+                    : "Currently showing no label — this product is in stock."}
+              </p>
+            </Field>
+
             <Field label="Photo description (for screen readers)" className="col-span-2 lg:col-span-3">
               <input
                 value={p.imgHint}

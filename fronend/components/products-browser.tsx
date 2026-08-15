@@ -88,7 +88,7 @@ function CategoryIcon({
  */
 const SCROLL_OFFSET = { mobile: 120, desktop: 72 } as const;
 
-export function ShopBrowser({
+export function ProductsBrowser({
   products,
   initialQuery = "",
 }: {
@@ -309,7 +309,7 @@ export function ShopBrowser({
             id="shop-sort"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as Sort)}
-            className="cursor-pointer appearance-none rounded-[10px] border border-zup-body/10 bg-white px-3 py-2.5 text-[13.5px] font-semibold text-zup-mid outline-none"
+            className="cursor-pointer appearance-none rounded-[2px] border border-zup-body/10 bg-white px-3 py-2.5 text-[13.5px] font-semibold text-zup-mid outline-none"
           >
             {sortDefs.map(([value, label]) => (
               <option key={value} value={value}>
@@ -334,13 +334,13 @@ export function ShopBrowser({
           No search box here. The header carries one at every breakpoint now,
           and this sat directly beneath it — two identical "Search products…"
           fields on the same screen. Searching from the header lands on
-          /shop?q=…, which seeds `query` below, so the behaviour is unchanged;
+          /products?q=…, which seeds `query` below, so the behaviour is unchanged;
           the term is shown back to the visitor in the header's own field.
         */}
         {/* The page title is visually hidden, not deleted: the products speak
             for themselves above the fold, but a page still needs one <h1> for
             search engines and for a screen reader arriving here. */}
-        <h1 className="sr-only">Shop</h1>
+        <h1 className="sr-only">Products</h1>
         {query.trim() && (
           <p className="mb-3 px-1 text-[13.5px] text-zup-gray">
             Showing results for{" "}
@@ -467,11 +467,11 @@ export function ShopBrowser({
                 <button
                   type="button"
                   onClick={clearAll}
-                  className="min-h-[52px] flex-none rounded-[14px] border-[1.5px] border-zup-body/12 px-5 text-[14.5px] font-semibold text-zup-mid"
+                  className="min-h-[52px] flex-none rounded-[2px] border-[1.5px] border-zup-body/12 px-5 text-[14.5px] font-semibold text-zup-mid"
                 >
                   Clear
                 </button>
-                <SheetClose className="min-h-[52px] flex-1 rounded-[14px] bg-zup-orange text-[15.5px] font-bold text-white shadow-[0_6px_18px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark">
+                <SheetClose className="min-h-[52px] flex-1 rounded-[2px] bg-zup-orange text-[15.5px] font-bold text-white shadow-[0_6px_18px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark">
                   Show {list.length} products
                 </SheetClose>
               </SheetFooter>
@@ -523,7 +523,7 @@ export function ShopBrowser({
           </p>
 
           {list.length === 0 ? (
-            <div className="mt-3.5 rounded-[20px] border border-zup-body/6 bg-white px-5 py-14 text-center">
+            <div className="mt-3.5 rounded-[2px] border border-zup-body/6 bg-white px-5 py-14 text-center">
               <p className="mb-1.5 text-[15px] font-semibold">No products found</p>
               <p className="mb-4.5 text-[13.5px] text-zup-gray">
                 Try a different search or clear your filters.

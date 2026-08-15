@@ -177,7 +177,7 @@ export function CheckoutFlow() {
           Your cart is empty — add a product to check out.
         </p>
         <Link
-          href="/shop"
+          href="/products"
           className="inline-block rounded-full bg-zup-blue px-6.5 py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-zup-blue-dark"
         >
           Browse products
@@ -281,7 +281,7 @@ export function CheckoutFlow() {
         type="button"
         onClick={submit}
         disabled={placing || quote?.total == null}
-        className="min-h-[54px] w-full cursor-pointer rounded-[14px] bg-zup-orange text-base font-bold text-white shadow-[0_8px_22px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-h-[54px] w-full cursor-pointer rounded-[2px] bg-zup-orange text-base font-bold text-white shadow-[0_8px_22px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark disabled:cursor-not-allowed disabled:opacity-60"
       >
         {placing
           ? "Placing order…"

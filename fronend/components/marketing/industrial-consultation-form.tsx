@@ -116,28 +116,22 @@ export function IndustrialConsultationForm({
     >
       {compact ? (
         <div className="bg-white px-6 pt-7 sm:px-8">
-          <span className="text-xs font-bold uppercase tracking-[0.14em] text-zup-orange">
-            Industrial clients
-          </span>
-          <h2 className="mt-2 text-[22px] font-bold tracking-[-0.02em]">
+          {/* Heading only. The "Industrial clients" eyebrow and the "share your
+              plant details" line were dropped on 2026-08-13 — the heading names
+              both audiences already, and the eyebrow contradicted it by saying
+              industrial. */}
+          <h2 className="text-[22px] font-bold tracking-[-0.02em]">
             Book Residential and Industrial Consultation
           </h2>
-          <p className="mt-2 text-[14px] leading-relaxed text-zup-gray">
-            Share your plant details and we will prepare a scoped technical proposal.
-          </p>
         </div>
       ) : (
       <div className="flex flex-col gap-5 px-6 py-8 sm:px-9 sm:py-10">
+        {/* Same copy removal as the compact variant above — this component
+            renders one or the other, so both carried the two dropped lines. */}
         <div>
-          <span className="text-xs font-bold uppercase tracking-[0.14em] text-zup-orange">
-            Industrial clients
-          </span>
-          <h2 className="mt-2 text-[26px] font-bold tracking-[-0.02em]">
+          <h2 className="text-[26px] font-bold tracking-[-0.02em]">
             Book Residential and Industrial Consultation
           </h2>
-          <p className="mt-2 text-[14.5px] leading-relaxed text-zup-gray">
-            Share your plant details and we will prepare a scoped technical proposal.
-          </p>
           <div className="mt-3 h-[3px] w-14 rounded-full bg-zup-orange" aria-hidden />
         </div>
         <div className="flex flex-col gap-3">

@@ -37,10 +37,10 @@ export function CartView({ products }: { products: Product[] }) {
       <h1 className="mb-5.5 text-3xl font-bold tracking-[-0.025em]">Cart</h1>
 
       {count === 0 ? (
-        <div className="rounded-[20px] border border-zup-body/6 bg-white px-5 py-14 text-center">
+        <div className="rounded-[2px] border border-zup-body/6 bg-white px-5 py-14 text-center">
           <p className="mb-5 text-[15px] text-zup-gray">Your cart is empty.</p>
           <Link
-            href="/shop"
+            href="/products"
             className="inline-block rounded-full bg-zup-blue px-6.5 py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-zup-blue-dark"
           >
             Browse products
@@ -159,19 +159,19 @@ export function CartView({ products }: { products: Product[] }) {
 
           <Link
             href="/checkout"
-            className="mt-4 flex min-h-[54px] w-full items-center justify-center rounded-[14px] bg-zup-orange text-base font-bold text-white shadow-[0_8px_22px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark"
+            className="mt-4 flex min-h-[54px] w-full items-center justify-center rounded-[2px] bg-zup-orange text-base font-bold text-white shadow-[0_8px_22px_rgba(232,83,32,.25)] transition-colors hover:bg-zup-orange-dark"
           >
             Checkout
           </Link>
 
           <div className="mt-3.5 flex items-center justify-center gap-2">
-            <span className="rounded-[7px] bg-[rgba(194,24,91,.07)] px-2.5 py-[5px] text-[11.5px] font-bold text-[#C2185B]">
+            <span className="rounded-[2px] bg-[rgba(194,24,91,.07)] px-2.5 py-[5px] text-[11.5px] font-bold text-[#C2185B]">
               bKash
             </span>
-            <span className="rounded-[7px] bg-[rgba(230,81,0,.07)] px-2.5 py-[5px] text-[11.5px] font-bold text-[#E65100]">
+            <span className="rounded-[2px] bg-[rgba(230,81,0,.07)] px-2.5 py-[5px] text-[11.5px] font-bold text-[#E65100]">
               Nagad
             </span>
-            <span className="rounded-[7px] bg-zup-body/6 px-2.5 py-[5px] text-[11.5px] font-bold text-zup-mid">
+            <span className="rounded-[2px] bg-zup-body/6 px-2.5 py-[5px] text-[11.5px] font-bold text-zup-mid">
               COD
             </span>
           </div>

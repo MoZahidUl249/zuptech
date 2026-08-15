@@ -59,7 +59,10 @@ export function ServiceCardView({
   return (
     <article
       className={cn(
-        "grid overflow-hidden rounded-2xl border border-zup-body/6 bg-white md:grid-cols-2",
+        // Square corners, explicitly: service cards are called out as sharp,
+        // and `rounded-none` says so rather than relying on the flattened
+        // radius scale in globals.css happening to land near zero.
+        "grid overflow-hidden rounded-none border border-zup-body/6 bg-white md:grid-cols-2",
         className,
       )}
     >

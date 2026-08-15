@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { unwrap } from "@/lib/admin-http";
 import { api } from "@/lib/eden";
-import { emptyState } from "@/lib/admin";
+import { emptyState, STOCK_TAGS } from "@/lib/admin";
 import { whole } from "@/lib/utils";
 import type { ServiceBulletStyle, ServiceImageSide } from "@/lib/api";
 import type {
@@ -21,6 +21,7 @@ import type {
   SiteContact,
   SiteCopy,
   StaffMember,
+  StockTag,
   Supplier,
 } from "@/lib/admin";
 
@@ -91,9 +92,21 @@ function shortDateTime(iso: string): string {
  * the UI maps or measures is defaulted here so a shape change degrades to an
  * empty list instead of a render crash.
  */
-export function toAdminProduct(p: AdminProduct & { photos?: (string | null)[] }): AdminProduct {
+export function toAdminProduct(
+  p: Omit<AdminProduct, "stockTagOverride"> & {
+    photos?: (string | null)[];
+    stockTagOverride?: string;
+  },
+): AdminProduct {
   return {
     ...p,
+    // Narrowed at the boundary rather than cast: the backend types this as a
+    // plain string, and an unrecognised label would otherwise flow into a
+    // <select> that has no matching option and silently render as blank.
+    // Anything unknown falls back to "derive it", which is the safe default.
+    stockTagOverride: STOCK_TAGS.includes(p.stockTagOverride as StockTag)
+      ? (p.stockTagOverride as StockTag)
+      : "",
     photos: (p.photos ?? []).filter((x): x is string => Boolean(x)),
     specs: p.specs ?? [],
     quantityOffers: p.quantityOffers ?? [],
@@ -106,6 +119,7 @@ export function toAdminProduct(p: AdminProduct & { photos?: (string | null)[] })
 
 interface PublicSiteConfig {
   featuredIds: string[];
+  homeRowIds: string[];
   copy: SiteCopy;
   contact: SiteContact;
   gtm: string | { id: string } | null;
@@ -231,6 +245,7 @@ export async function loadAdminState(
     // Public endpoint — no module gate, every role needs the site copy.
     slice<PublicSiteConfig>("sitecontent", "Site content", () => unwrap(api.api["site-config"].get(), "GET /api/site-config"), {
       featuredIds: [],
+      homeRowIds: [],
       copy: emptyState().copy,
       contact: emptyState().contact,
       gtm: null,
@@ -249,6 +264,7 @@ export async function loadAdminState(
       sections,
       categories,
       featuredIds: config.featuredIds,
+      homeRowIds: config.homeRowIds ?? [],
       orders,
       leads,
       industrialLeads,
@@ -332,6 +348,12 @@ export const setMessageRead = (id: string, read: boolean) =>
 
 export const setFeatured = (ids: string[]) =>
   unwrap(api.admin.api.products.featured.patch({ ids }), "PATCH /admin/api/products/featured");
+
+export const setHomeRow = (ids: string[]) =>
+  unwrap(
+    api.admin.api.products["home-row"].patch({ ids }),
+    "PATCH /admin/api/products/home-row",
+  );
 
 export const putSlides = (slides: HeroSlide[]) =>
   unwrap(
@@ -425,15 +447,26 @@ export const putPaymentMethod = (id: string, body: Partial<PaymentMethod>) =>
  * the 1251 that `t.Integer` accepts. Without it the DTO answers 422 with a
  * schema dump and the product cannot be saved at all.
  */
+/** 0–100, whole. Both percentage fields are capped server-side, and
+ *  `numberInput` deliberately lets you type freely — so without this a pasted
+ *  "150" leaves the form and comes back as a 422 with nothing pointing at the
+ *  field that caused it. Clamped here, at the one place the payload is built. */
+const pct = (n: number) => Math.min(100, Math.max(0, whole(n)));
+
 function productBody(p: AdminProduct) {
   return {
     name: p.name,
     slug: p.slug,
     categoryId: p.categoryId,
     price: whole(p.price),
-    minDeposit: whole(p.minDeposit),
+    minDepositPct: pct(p.minDepositPct),
+    recommendedIds: p.recommendedIds,
     onSale: p.onSale,
-    salePrice: whole(p.salePrice),
+    // The percentage, not the price: the server derives salePrice from this.
+    // Sending both would let the two disagree, which is the failure the
+    // percentage design exists to prevent.
+    salePct: pct(p.salePct),
+    stockTag: p.stockTagOverride,
     deliveryFeeInsideDhaka: whole(p.deliveryFeeInsideDhaka),
     deliveryFeeOutsideDhaka: whole(p.deliveryFeeOutsideDhaka),
     installationFeeInsideDhaka: whole(p.installationFeeInsideDhaka),

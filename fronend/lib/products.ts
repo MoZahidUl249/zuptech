@@ -23,8 +23,19 @@ export interface Product {
   slug: string;
   name: string;
   price: number;
-  /** Minimum down payment required to order, in BDT. Display-only. */
-  minDeposit: number;
+  /** Minimum down payment as a whole percent of price (0–100). Display-only —
+   *  nothing in the cart or checkout reads it. */
+  minDepositPct: number;
+  /** Curated products shown under this one, in this order. Ids only; the page
+   *  resolves them through getProductsByIds. Empty hides the row. */
+  recommendedIds?: string[];
+  /** The admin-typed discount, 0–100 — a LABEL only. `salePrice` is the money
+   *  and was already resolved from this server-side; nothing here multiplies. */
+  salePct?: number;
+  /** Resolved status label: "" | "Out of stock" | "Incoming" | "Sold out".
+   *  The manual override and the stock derivation are both applied server-side
+   *  (stockTagFor), so the card prints this verbatim. */
+  stockTag?: string;
   rating: number;
   sold: number;
   imgHint: string;
@@ -94,7 +105,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Backup"],
     price: 42500,
-    minDeposit: 8500,
+    minDepositPct: 20,
     rating: 4.7,
     sold: 312,
     imgHint: "IPS unit photo",
@@ -114,7 +125,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Solar"],
     price: 55000,
-    minDeposit: 13750,
+    minDepositPct: 25,
     rating: 4.8,
     sold: 189,
     imgHint: "solar panel kit photo",
@@ -134,7 +145,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Protection"],
     price: 92000,
-    minDeposit: 27600,
+    minDepositPct: 30,
     rating: 4.6,
     sold: 74,
     imgHint: "stabilizer photo",
@@ -154,7 +165,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Switchgear"],
     price: 485000,
-    minDeposit: 194000,
+    minDepositPct: 40,
     rating: 4.9,
     sold: 41,
     imgHint: "transformer photo",
@@ -174,7 +185,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Switchgear"],
     price: 145000,
-    minDeposit: 50750,
+    minDepositPct: 35,
     rating: 4.7,
     sold: 58,
     imgHint: "LT panel photo",
@@ -194,7 +205,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Solar"],
     price: 620000,
-    minDeposit: 248000,
+    minDepositPct: 40,
     rating: 4.8,
     sold: 23,
     imgHint: "rooftop solar photo",
@@ -214,7 +225,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Backup", "Protection"],
     price: 12800,
-    minDeposit: 1280,
+    minDepositPct: 10,
     rating: 4.5,
     sold: 146,
     imgHint: "ATS photo",
@@ -234,7 +245,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Protection"],
     price: 1650,
-    minDeposit: 165,
+    minDepositPct: 10,
     rating: 4.6,
     sold: 921,
     imgHint: "voltage protector photo",
@@ -254,7 +265,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Lighting"],
     price: 2400,
-    minDeposit: 240,
+    minDepositPct: 10,
     rating: 4.4,
     sold: 534,
     imgHint: "flood light photo",
@@ -274,7 +285,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Protection", "Switchgear"],
     price: 18500,
-    minDeposit: 2775,
+    minDepositPct: 15,
     rating: 4.7,
     sold: 203,
     imgHint: "MCCB photo",
@@ -309,3 +320,24 @@ export const featuredProducts: Product[] = [
   products[8],
   products[9],
 ];
+
+/**
+ * Whether this product may be bought.
+ *
+ * Two facts make a product unbuyable and they arrive on different fields:
+ * `inStock` (derived from stock − reserved) and a `stockTag` the admin has
+ * pinned to "Sold out" for a line that is finished for good. A pinned product
+ * can still report `inStock: true` — there may be units on the shelf that are
+ * deliberately not for sale — so a check on `inStock` alone keeps selling it.
+ *
+ * This lives here because the rule had drifted: the product page honoured the
+ * pin in its status line while ProductActions, deriving the same fact from
+ * `inStock` alone, went on rendering Buy Now beneath the words "Sold out".
+ * Every reader must ask this function, not the fields.
+ *
+ * "Incoming" deliberately still sells — stock is on the way, and taking the
+ * order is the point of saying so.
+ */
+export function isUnavailable(p: Pick<Product, "inStock" | "stockTag">): boolean {
+  return p.inStock === false || p.stockTag === "Sold out";
+}

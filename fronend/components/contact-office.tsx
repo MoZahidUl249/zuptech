@@ -40,7 +40,7 @@ export function ContactOffice() {
 
   return (
     <div className="mb-4 grid grid-cols-1 gap-3.5">
-      <div className="rounded-[20px] border border-zup-body/6 bg-white px-6 py-6.5">
+      <div className="rounded-[2px] border border-zup-body/6 bg-white px-6 py-6.5">
         <span className="mb-3 flex items-start gap-2 text-xs font-bold uppercase tracking-[0.1em] text-zup-orange">
           <MapPin className="mt-0.5 h-4 w-4 flex-none" strokeWidth={2} aria-hidden />
           {copy.contactOfficeHeading}
@@ -78,7 +78,7 @@ export function ContactOffice() {
       </div>
 
       {contact.warehouseName || contact.warehouseAddress ? (
-        <div className="rounded-[20px] bg-zup-ink px-6 py-5">
+        <div className="rounded-[2px] bg-zup-ink px-6 py-5">
           <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.1em] text-zup-sky">
             {contact.warehouseName}
           </span>

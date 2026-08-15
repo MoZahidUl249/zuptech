@@ -290,11 +290,55 @@ export const DEFAULT_PAGE_SIZE = 48;
  * has nothing to round.
  */
 
-/** What the customer pays: the admin-entered sale price while it is on sale and
+/** What the customer pays: the stored sale price while it is on sale and
  *  actually below the list price, otherwise the list price. A sale price of 0
  *  means "not set" rather than "free". */
 export function sellingPrice(p: { price: number; onSale: boolean; salePrice: number }): number {
   return p.onSale && p.salePrice > 0 && p.salePrice < p.price ? p.salePrice : p.price;
+}
+
+/**
+ * Resolve an admin-typed discount into the taka the customer pays.
+ *
+ * THE ONLY PLACE A PERCENTAGE BECOMES MONEY. Call it on write, store the
+ * result in `salePrice`, and let every reader work from that — never from the
+ * percentage. The paragraph above records what happens when several places
+ * each do this sum with their own rounding: a ৳999 product at 33% off showing
+ * ৳669 and charging ৳670. One call site, one rounding, one stored answer.
+ *
+ * Because the result depends on `price`, changing a product's price without
+ * calling this again leaves the advertised percentage and the charged amount
+ * disagreeing. The admin write path recomputes on either field changing.
+ */
+export function salePriceFrom(price: number, salePct: number): number {
+  const pct = Math.min(100, Math.max(0, Math.round(salePct)));
+  if (pct === 0) return 0;
+  return Math.round((price * (100 - pct)) / 100);
+}
+
+/** The labels the storefront may show. "" renders no tag at all. */
+export const STOCK_TAGS = ["Out of stock", "Incoming", "Sold out"] as const;
+export type StockTag = (typeof STOCK_TAGS)[number] | "";
+
+/**
+ * The status tag on a product card.
+ *
+ * Manual override wins outright — that is the point of the column, and it is
+ * how "Sold out" is ever shown: derived, it would be indistinguishable from
+ * "Out of stock", so automatic resolution never produces it. It exists to say
+ * a line is finished for good rather than merely empty today.
+ *
+ * `hasIncoming` is a yes/no about an in-transit purchase order, resolved by
+ * the caller — `productInclude` fetches at most one id for exactly this, so a
+ * product listing does not drag a purchase-order history along with it.
+ */
+export function stockTagFor(
+  p: StockLike & { stockTag: string },
+  hasIncoming: boolean,
+): StockTag {
+  if (p.stockTag) return p.stockTag as StockTag;
+  if (availableStock(p) > 0) return "";
+  return hasIncoming ? "Incoming" : "Out of stock";
 }
 
 /**

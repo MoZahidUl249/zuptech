@@ -115,6 +115,11 @@ const nextConfig: NextConfig = {
       // /solutions was renamed to /services (2026-07-26) — permanent so
       // search engines and any existing backlinks transfer cleanly.
       { source: "/solutions", destination: "/services", permanent: true },
+      // /shop was renamed to /products (2026-08-13), so the catalogue and the
+      // product pages under it finally share a prefix. Permanent for the same
+      // reason as above; the query string carries over untouched, which is what
+      // keeps /shop?q=… working for the header search and any indexed result.
+      { source: "/shop", destination: "/products", permanent: true },
     ];
   },
   async rewrites() {
