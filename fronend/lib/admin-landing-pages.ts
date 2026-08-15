@@ -117,7 +117,10 @@ export interface LandingPage {
   priceOfferLabel: string;
 
   viewCount: number;
+  /** Orders attributed to this campaign, counted from the orders themselves. */
   orderCount: number;
+  /** BDT ordered through it, cancellations excluded. */
+  revenue: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -182,6 +185,7 @@ export type LandingPageDraft = Omit<
   | "updatedAt"
   | "viewCount"
   | "orderCount"
+  | "revenue"
   | "productName"
   | "productSlug"
   | "productVisible"

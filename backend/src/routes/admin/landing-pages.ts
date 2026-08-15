@@ -77,7 +77,36 @@ export const adminLandingPages = new Elysia({
         orderBy: { createdAt: "desc" },
         include: landingPageInclude,
       });
-      return pages.map(toLandingPage);
+
+      /*
+       * Sales per campaign, in one aggregate for the whole list.
+       *
+       * This is the number the screen exists to show — what each campaign
+       * actually sold — and it is counted from the orders themselves rather
+       * than from a counter, so it cannot drift from them. Cancelled orders
+       * are excluded: an order that was placed and then cancelled is not
+       * revenue, and leaving it in would flatter every campaign that attracts
+       * impulse buys.
+       */
+      const stats = await prisma.order.groupBy({
+        by: ["landingPageId"],
+        where: {
+          landingPageId: { in: pages.map((p) => p.id) },
+          status: { not: "Cancelled" },
+        },
+        _count: { _all: true },
+        _sum: { total: true },
+      });
+      const byPage = new Map(
+        stats.map((row) => [
+          row.landingPageId,
+          { orderCount: row._count._all, revenue: row._sum.total ?? 0 },
+        ]),
+      );
+
+      return pages.map((page) =>
+        toLandingPage(page, byPage.get(page.id) ?? { orderCount: 0, revenue: 0 }),
+      );
     },
     { query: listLandingPagesQueryDto },
   )
@@ -206,10 +235,10 @@ export const adminLandingPages = new Elysia({
       slug: _slug,
       createdAt: _createdAt,
       updatedAt: _updatedAt,
-      // Counters belong to the page that earned them; inheriting them would
-      // corrupt both pages' reporting.
+      // The view counter belongs to the page that earned it; inheriting it
+      // would corrupt both pages' reporting. Orders need no exclusion — they
+      // are counted from Order rows that point at the original.
       viewCount: _viewCount,
-      orderCount: _orderCount,
       // A copy is a draft for the next campaign, never live on creation.
       published: _published,
       title,

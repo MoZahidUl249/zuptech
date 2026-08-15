@@ -225,6 +225,21 @@ model Order {
   /// order history (the OrderEvent trail keeps their name either way).
   preparedById    String?
   preparedBy      Staff?   @relation("OrderPreparedBy", fields: [preparedById], references: [id], onDelete: SetNull)
+  /// The campaign page this order came from, when it came from one.
+  ///
+  /// Nullable because most orders are ordinary storefront checkouts, and an
+  /// order must never fail for want of an attribution. Set only when the
+  /// request names a slug that resolves to a PUBLISHED page, so a guessed or
+  /// stale slug attributes nothing rather than inventing a sale for a
+  /// campaign that was not running.
+  ///
+  /// This is what makes per-campaign revenue answerable at all: `orderCount`
+  /// on LandingPage was a counter nothing ever incremented, so every campaign
+  /// reported zero sales forever. Counting rows here cannot drift from the
+  /// orders it counts.
+  landingPageId String?
+  landingPage   LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -236,6 +251,9 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([preparedById])
+
+  /// The admin campaign list groups every order by campaign on each load.
+  @@index([landingPageId])
 }
 
 model OrderItem {
@@ -531,7 +549,8 @@ model LandingPage {
   published Boolean @default(false)
 
   viewCount  Int      @default(0)
-  orderCount Int      @default(0)
+  /// Orders attributed to this campaign, so revenue can be read off them.
+  orders     Order[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -863,7 +882,10 @@ model SiteConfig {
 
 model PaymentMethod {
   id          String  @id
-  name        String
+  /// Unique because checkout resolves the method BY NAME: two rows sharing
+  /// one made `findFirst` pick an arbitrary winner, and which one decided
+  /// whether the order was accepted at all.
+  name        String  @unique
   kind        String // "Mobile wallet" | "Card gateway" | "Offline"
   provider    String
   providers   String[] @default([]) // selectable provider options

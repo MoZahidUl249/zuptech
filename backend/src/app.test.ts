@@ -464,14 +464,13 @@ const SOURCE = {
   priceOfferLabel: "অফার প্রাইস",
   published: true,
   viewCount: 900,
-  orderCount: 40,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-02-01"),
 };
 
 describe("POST /admin/api/landing-pages/:id/duplicate", () => {
   /** What a copy must NOT inherit. Everything else has to come across. */
-  const RESET = ["id", "slug", "title", "published", "viewCount", "orderCount", "createdAt", "updatedAt"];
+  const RESET = ["id", "slug", "title", "published", "viewCount", "createdAt", "updatedAt"];
 
   /*
    * The regression this exists for. The handler used to name the columns it
@@ -514,7 +513,6 @@ describe("POST /admin/api/landing-pages/:id/duplicate", () => {
     expect(data.title).toBe("Winter push (copy)");
     expect(data.id).toBeUndefined();
     expect(data.viewCount).toBeUndefined();
-    expect(data.orderCount).toBeUndefined();
   });
 
   test("refuses a staff member who may only look at campaigns", async () => {

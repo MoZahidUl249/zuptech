@@ -138,6 +138,18 @@ export function LandingPagesSection() {
                   /lp/{page.slug} · {page.viewCount.toLocaleString()} views ·{" "}
                   {page.orderCount.toLocaleString()} orders
                 </p>
+                {/* Revenue is the number this screen exists for — what the
+                    campaign actually sold against what it cost to run. It is
+                    counted from the orders attributed to the page, so it can
+                    only be as wrong as the orders are. */}
+                {page.orderCount > 0 ? (
+                  <p className="mt-1 text-ui-sm font-bold text-zup-green-dark">
+                    {taka(page.revenue)} sold
+                    <span className="ml-1.5 font-semibold text-zup-soft">
+                      · {taka(Math.round(page.revenue / page.orderCount))} average order
+                    </span>
+                  </p>
+                ) : null}
               </div>
               <span className="whitespace-nowrap text-ui-base font-bold">
                 {taka(page.offerPrice)}

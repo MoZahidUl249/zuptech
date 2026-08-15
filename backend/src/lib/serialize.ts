@@ -510,7 +510,25 @@ function campaignContent(lp: LandingPageRow) {
   };
 }
 
-export function toLandingPage(lp: LandingPageRow): LandingPageDto {
+/**
+ * Orders attributed to a campaign, counted from the Order rows themselves.
+ *
+ * Passed in rather than read here because the admin list resolves them for
+ * every campaign in one groupBy — a per-row query would be one round trip per
+ * campaign on a screen whose whole job is comparing campaigns.
+ *
+ * Absent means "not measured on this call" and shows as zero, which is honest:
+ * the single-campaign GET does not run the aggregate.
+ */
+export interface LandingPageStats {
+  orderCount: number;
+  revenue: number;
+}
+
+export function toLandingPage(
+  lp: LandingPageRow,
+  stats: LandingPageStats = { orderCount: 0, revenue: 0 },
+): LandingPageDto {
   return {
     id: lp.id,
     title: lp.title,
@@ -534,7 +552,9 @@ export function toLandingPage(lp: LandingPageRow): LandingPageDto {
     published: lp.published,
     ...campaignContent(lp),
     viewCount: lp.viewCount,
-    orderCount: lp.orderCount,
+    orderCount: stats.orderCount,
+    /** BDT actually ordered through this campaign — order totals, summed. */
+    revenue: stats.revenue,
     createdAt: lp.createdAt.toISOString(),
     updatedAt: lp.updatedAt.toISOString(),
   };

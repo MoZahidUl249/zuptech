@@ -67,6 +67,23 @@ export const publicOrders = new Elysia({ name: "routes/public/orders", detail: {
       });
       if (!method) throw badRequest(`Payment method "${body.pay}" is not available`);
 
+      /*
+       * Attribute the order to a campaign, when it came from one.
+       *
+       * Resolved against the PUBLISHED set: an unknown or unpublished slug
+       * attributes nothing rather than crediting a campaign that was not
+       * running, and never fails the order — a broken attribution must not
+       * cost a sale.
+       */
+      let landingPageId: string | null = null;
+      if (body.landingPageSlug) {
+        const lp = await prisma.landingPage.findUnique({
+          where: { slug: body.landingPageSlug },
+          select: { id: true, published: true },
+        });
+        if (lp?.published) landingPageId = lp.id;
+      }
+
       const zoneLabel = insideDhaka ? "Inside Dhaka" : "Outside Dhaka";
 
       const order = await prisma.$transaction(async (tx) => {
@@ -118,6 +135,7 @@ export const publicOrders = new Elysia({ name: "routes/public/orders", detail: {
             installationFee,
             total,
             pay: method.name,
+            landingPageId,
             status: "Processing",
             items: {
               create: cart.lines.map((line) => ({

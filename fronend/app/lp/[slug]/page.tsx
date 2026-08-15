@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Check, Phone, Play } from "lucide-react";
-import { getLandingPage, getProductsByIds } from "@/lib/api";
+import { getLandingPage, getProductsByIds, getSiteConfig } from "@/lib/api";
 import { formatBDTBangla as formatBDT, toBanglaDigits } from "@/lib/site";
 import { LandingPageGtm } from "@/components/marketing/landing-page-gtm";
 import { ProductCard } from "@/components/product-card";
@@ -137,11 +137,29 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
     ctaText: pub.colorCtaText || "#FFFFFF",
   };
 
-  /* The row above the page body — resolved and re-sorted into the admin's
-   * order, dropping ids that no longer resolve, exactly as the home rows and a
-   * product's recommendations do. */
+  /*
+   * The payment method this page's order form places orders under.
+   *
+   * Resolved here, from the enabled list, because checkout matches a method
+   * by NAME: the form used to send the literal "Cash on Delivery", so
+   * renaming or disabling that row in the admin broke every campaign order
+   * silently. Preferring an offline method keeps cash-on-delivery behaviour
+   * where one exists, and falling back to the first enabled method means the
+   * page still sells if the shop is card-only.
+   */
+  const siteConfig = await getSiteConfig();
+  const payOptions = siteConfig?.paymentOptions ?? [];
+  const payMethod =
+    payOptions.find((o) => /cash on delivery|cod/i.test(o.label))?.label ??
+    payOptions[0]?.label ??
+    "";
+
   // Parsed, not just non-empty: an unusable URL must fall back to the photo.
   const heroVideo = parseProductVideo(pub.heroVideoUrl);
+
+  /* The row shown above the footer — resolved and re-sorted into the admin's
+   * order, dropping ids that no longer resolve, exactly as the home rows and a
+   * product's recommendations do. */
   const rowIds = pub.productRowIds ?? [];
   const rowFetched = rowIds.length > 0 ? await getProductsByIds(rowIds) : [];
   const productRow = rowIds
@@ -579,6 +597,8 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             intro={pub.formIntro}
             deliveryFee={product.deliveryFeeInsideDhaka ?? 0}
             unitLabel={pub.bundleUnitLabel}
+            campaignSlug={slug}
+            payMethod={payMethod}
           />
         </Inner>
       </Section>

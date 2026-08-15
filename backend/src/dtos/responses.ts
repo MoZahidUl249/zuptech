@@ -415,6 +415,7 @@ export interface LandingPageDto extends CampaignContentDto {
   published: boolean;
   viewCount: number;
   orderCount: number;
+  revenue: number;
   createdAt: string;
   updatedAt: string;
 }
