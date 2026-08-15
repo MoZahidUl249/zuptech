@@ -60,21 +60,55 @@ export function ProductCard({
         className,
       )}
     >
-      {/* `object-contain`, not `object-cover`: the catalogue is hardware of
-          wildly different shapes — a tall battery cabinet, a wide switchgear
-          panel — and cropping to a square was cutting the ends off the things
-          people are trying to recognise. The square box stays so the grid rows
-          stay level; the image now fits inside it. */}
-      {product.photos?.[0] ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={product.photos[0]}
-          alt={product.name}
-          className="aspect-square w-full bg-white object-contain"
-        />
-      ) : (
-        <ProductImagePlaceholder label={product.imgHint} className="aspect-square" />
-      )}
+      <div className="relative">
+        {/* `object-contain`, not `object-cover`: the catalogue is hardware of
+            wildly different shapes — a tall battery cabinet, a wide switchgear
+            panel — and cropping to a square was cutting the ends off the things
+            people are trying to recognise. The square box stays so the grid rows
+            stay level; the image now fits inside it. */}
+        {product.photos?.[0] ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={product.photos[0]}
+            alt={product.name}
+            className="aspect-square w-full bg-white object-contain"
+          />
+        ) : (
+          <ProductImagePlaceholder label={product.imgHint} className="aspect-square" />
+        )}
+
+        {/*
+         * Two labels over the photo: status left, discount right. Bold text
+         * and nothing else — no pill, no fill, no icon.
+         *
+         * The text-shadow is not decoration. `object-contain` puts these on
+         * whatever the photo happens to show in its corners, and half this
+         * catalogue is white-background product shots where plain dark text on
+         * a pale panel is barely legible. A tight white halo costs nothing
+         * visually on a dark corner and rescues the light ones. Anything more —
+         * a scrim, a chip — would be the box we just removed.
+         *
+         * `stockTag` is resolved server-side (stockTagFor in backend rules):
+         * the manual override and the stock/purchase-order derivation are both
+         * server facts, so the card only ever prints the answer.
+         */}
+        {product.stockTag ? (
+          <span
+            className="absolute left-2.5 top-2.5 text-[12.5px] font-bold text-zup-body"
+            style={{ textShadow: "0 0 4px #fff, 0 0 8px #fff" }}
+          >
+            {product.stockTag}
+          </span>
+        ) : null}
+        {product.salePct ? (
+          <span
+            className="absolute right-2.5 top-2.5 text-[12.5px] font-bold text-zup-orange-dark"
+            style={{ textShadow: "0 0 4px #fff, 0 0 8px #fff" }}
+          >
+            -{product.salePct}% off
+          </span>
+        ) : null}
+      </div>
       <div className="flex flex-col gap-1.5 px-3.5 pb-3.5 pt-3">
         <h3 className="min-h-9 text-sm font-semibold leading-tight text-zup-body">
           {product.name}
@@ -91,10 +125,9 @@ export function ProductCard({
             {formatBDT(hasSale ? product.salePrice! : product.price)}
           </span>
         </span>
-        {/* Plain bold text where a floating pill used to sit over the photo. */}
-        {product.inStock === false && (
-          <span className="text-[12.5px] font-bold text-zup-body">Out of stock</span>
-        )}
+        {/* The out-of-stock line that used to sit here has moved onto the
+            photo as the status tag above — it now covers "Incoming" and
+            "Sold out" too, and the admin can pin any of them. */}
       </div>
     </Link>
   );

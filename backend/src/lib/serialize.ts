@@ -75,7 +75,9 @@ import {
   PAYMENT_ENVIRONMENTS,
   PAYMENT_KINDS,
   PO_STATUSES,
+  salePriceFrom,
   sellingPrice,
+  stockTagFor,
   SERVICE_BULLET_STYLES,
   SERVICE_IMAGE_SIDES,
   WARRANTY_STATUSES,
@@ -96,6 +98,23 @@ export const productInclude = {
   quantityOffers: { orderBy: { minQty: "asc" as const } },
   freeDeliveryOffers: { orderBy: { minQty: "asc" as const } },
   category: { include: { section: true } },
+  /*
+   * A yes/no: does this product have stock on the way?
+   *
+   * Feeds the "Incoming" status tag (`stockTagFor` in lib/rules.ts). Written
+   * as narrowly as the question allows — `take: 1` and `select: id`, filtered
+   * in the database — because this rides along with GET /api/products, and the
+   * index comment on Product records what an unbounded query costs on that
+   * route. Backed by PurchaseOrder(productId, status).
+   *
+   * Note it deliberately does NOT return the purchase orders themselves: they
+   * are inventory internals and must never reach the public DTO.
+   */
+  purchaseOrders: {
+    where: { status: "In transit" },
+    select: { id: true },
+    take: 1,
+  },
 };
 
 /** A product row with `productInclude` applied. */
@@ -103,6 +122,8 @@ export type ProductWithRelations = Product & {
   quantityOffers: QuantityOffer[];
   freeDeliveryOffers: FreeDeliveryOffer[];
   category: Category & { section: Section };
+  /** At most one row — the "is anything on the way" probe, not a history. */
+  purchaseOrders: { id: string }[];
 };
 
 /** Storefront view — no cost/stock internals, just what the shop renders. */
@@ -136,6 +157,11 @@ export function toPublicProduct(p: ProductWithRelations): PublicProductDto {
     video: p.video,
     photos: p.photos,
     recommendedIds: p.recommendedIds,
+    salePct: p.salePct,
+    // Resolved here, not on the client: the manual override and the stock
+    // derivation are both server facts, and the card should only ever print
+    // the answer.
+    stockTag: stockTagFor(p, p.purchaseOrders.length > 0),
     available: availableStock(p),
     inStock: availableStock(p) > 0,
   };
@@ -148,6 +174,7 @@ export function toAdminProduct(
 ): AdminProductDto {
   return {
     ...toPublicProduct(p),
+    stockTagOverride: p.stockTag,
     sku: p.sku,
     cost: p.cost,
     stock: p.stock,

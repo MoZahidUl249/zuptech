@@ -81,6 +81,17 @@ export interface AdminSection {
   categories: AdminCategory[];
 }
 
+/**
+ * The status labels the storefront may show on a product card.
+ *
+ * "" is not "no tag" — it means "derive it", and the server then resolves
+ * stock and in-transit purchase orders into one of the other three. Kept as a
+ * union rather than a string so the admin cannot send a label the backend DTO
+ * will reject.
+ */
+export const STOCK_TAGS = ["", "Out of stock", "Incoming", "Sold out"] as const;
+export type StockTag = (typeof STOCK_TAGS)[number];
+
 /** One "buy N+, take ৳X off each unit" tier. A relation on the backend, not a
  *  column. */
 export interface QuantityOffer {
@@ -126,9 +137,18 @@ export interface AdminProduct {
    *  renders exactly these and hides the row when empty. */
   recommendedIds: string[];
   onSale: boolean;
-  /** What the customer pays while on sale, in BDT — the admin types this, so
-   *  there is no discount to round. Only meaningful when onSale is true. */
+  /** The discount the admin types, 0–100. The SOURCE of the sale: the server
+   *  resolves it into `salePrice` once, on write. */
+  salePct: number;
+  /** What the customer pays while on sale, in BDT. Server-computed from
+   *  `salePct` and `price` — read-only here, never sent. */
   salePrice: number;
+  /** The RESOLVED status label the storefront shows — read-only. Already has
+   *  the override and the stock derivation applied. */
+  stockTag: string;
+  /** The manual override itself, "" = derive it. This is the editable one;
+   *  `stockTag` above is what the derivation produced from it. */
+  stockTagOverride: StockTag;
   deliveryFeeInsideDhaka: number;
   deliveryFeeOutsideDhaka: number;
   installationFeeInsideDhaka: number;

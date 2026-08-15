@@ -345,12 +345,11 @@ export default async function ProductPage({
           </div>
         </section>
       )}
-      {/* Clears the fixed mobile tab bar: its 64px, the 12px it floats above
-          the edge, the safe-area inset under that, and a little air. It used to
-          be a flat 150px because the buy bar floated above the tab bar and both
-          had to be cleared; with the buttons back in the flow only the bar is
-          left, and the figure now follows it rather than guessing past it. */}
-      <div className="h-[calc(84px+env(safe-area-inset-bottom))] md:h-20" />
+      {/* Clears the fixed buy bar on mobile — this page shows that instead of
+          the tab bar, so it is the only thing to clear. Its own height plus the
+          safe-area inset it already carries, and a little air. Desktop has no
+          fixed bar at all and just needs footer separation. */}
+      <div className="h-[calc(76px+env(safe-area-inset-bottom))] md:h-20" />
     </main>
   );
 }

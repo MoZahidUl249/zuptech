@@ -9,6 +9,8 @@ import {
   effectiveUnitPrice,
   GTM_ID_RE,
   isLowStock,
+  salePriceFrom,
+  stockTagFor,
   isMaskedSecret,
   secretsMatch,
   isOneOf,
@@ -231,5 +233,60 @@ describe("vocabularies", () => {
   test("parseOrderStatus throws on corrupt data instead of passing it on", () => {
     expect(() => parseOrderStatus("Shipped")).toThrow(/Unknown order status/);
     expect(() => parseOrderStatus("")).toThrow(/Unknown order status/);
+  });
+});
+
+describe("salePriceFrom — the one place a percentage becomes money", () => {
+  test("resolves a percentage to taka, rounding once", () => {
+    expect(salePriceFrom(42500, 10)).toBe(38250);
+    expect(salePriceFrom(1000, 25)).toBe(750);
+    // 999 at 33% is 669.33 — the case in the schema comment, where three
+    // separate roundings once produced a display of 669 against a charge of
+    // 670. One call site, one answer.
+    expect(salePriceFrom(999, 33)).toBe(669);
+  });
+  test("0% means no sale, not a free product", () => {
+    expect(salePriceFrom(1000, 0)).toBe(0);
+  });
+  test("100% is allowed and floors at zero", () => {
+    expect(salePriceFrom(1000, 100)).toBe(0);
+  });
+  test("clamps nonsense rather than computing a negative price", () => {
+    expect(salePriceFrom(1000, 140)).toBe(0);
+    expect(salePriceFrom(1000, -20)).toBe(0);
+  });
+  test("round-trips the values the migration backfills", () => {
+    // The backfill derives a percentage from an existing sale price; feeding
+    // it back must reproduce that price, or deploying the migration would
+    // silently reprice the catalogue on the next admin save.
+    for (const [price, sale] of [[42500, 38250], [999, 669], [55000, 41250]] as const) {
+      const pct = Math.round(((price - sale) * 100) / price);
+      expect(salePriceFrom(price, pct)).toBe(sale);
+    }
+  });
+});
+
+describe("stockTagFor", () => {
+  const inStock = { stock: 5, reserved: 0, reorderAt: 2, stockTag: "" };
+  const empty = { stock: 0, reserved: 0, reorderAt: 2, stockTag: "" };
+  const allReserved = { stock: 3, reserved: 3, reorderAt: 2, stockTag: "" };
+
+  test("shows nothing while there is stock to sell", () => {
+    expect(stockTagFor(inStock, false)).toBe("");
+    expect(stockTagFor(inStock, true)).toBe("");
+  });
+  test("out of stock when nothing is available and nothing is coming", () => {
+    expect(stockTagFor(empty, false)).toBe("Out of stock");
+    // Reserved units are spoken for — available, not on-hand, is the question.
+    expect(stockTagFor(allReserved, false)).toBe("Out of stock");
+  });
+  test("incoming when nothing is available but a purchase order is in transit", () => {
+    expect(stockTagFor(empty, true)).toBe("Incoming");
+  });
+  test("a manual tag overrides the derivation entirely", () => {
+    expect(stockTagFor({ ...inStock, stockTag: "Sold out" }, false)).toBe("Sold out");
+    expect(stockTagFor({ ...empty, stockTag: "Incoming" }, false)).toBe("Incoming");
+    // Including overriding back to a plainer label than the data suggests.
+    expect(stockTagFor({ ...empty, stockTag: "Sold out" }, true)).toBe("Sold out");
   });
 });

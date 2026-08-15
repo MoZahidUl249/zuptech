@@ -56,6 +56,10 @@ interface FakeProduct {
   category: { name: string; svgLogo: string | null; section: { name: string } };
   price: number;
   minDepositPct: number;
+  salePct: number;
+  stockTag: string;
+  /** The in-transit probe from productInclude — at most one row. */
+  purchaseOrders: { id: string }[];
   recommendedIds: string[];
   onSale: boolean;
   salePrice: number;
@@ -90,6 +94,8 @@ const CATALOG: FakeProduct[] = [
     category: { name: "IPS", svgLogo: null, section: { name: "Home" } },
     price: 1000,
     minDepositPct: 0,
+    salePct: 0,
+    stockTag: "",
     recommendedIds: [],
     onSale: false,
     salePrice: 0,
@@ -101,6 +107,9 @@ const CATALOG: FakeProduct[] = [
     installationFeeOutsideDhaka: 80,
     quantityOffers: [{ minQty: 10, amount: 200 }],
     freeDeliveryOffers: [],
+    // The "is stock on the way" probe from productInclude. Empty = nothing
+    // in transit, so this product's status tag derives from stock alone.
+    purchaseOrders: [],
     rating: 0,
     sold: 0,
     imgHint: null,

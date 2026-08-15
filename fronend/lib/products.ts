@@ -29,6 +29,13 @@ export interface Product {
   /** Curated products shown under this one, in this order. Ids only; the page
    *  resolves them through getProductsByIds. Empty hides the row. */
   recommendedIds?: string[];
+  /** The admin-typed discount, 0–100 — a LABEL only. `salePrice` is the money
+   *  and was already resolved from this server-side; nothing here multiplies. */
+  salePct?: number;
+  /** Resolved status label: "" | "Out of stock" | "Incoming" | "Sold out".
+   *  The manual override and the stock derivation are both applied server-side
+   *  (stockTagFor), so the card prints this verbatim. */
+  stockTag?: string;
   rating: number;
   sold: number;
   imgHint: string;

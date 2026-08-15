@@ -26,6 +26,21 @@ const icons: Record<string, typeof Home> = {
 export function MobileTabBar() {
   const pathname = usePathname();
 
+  /*
+   * A product page shows the buy bar instead of this.
+   *
+   * Both are fixed to the bottom, and stacking them cost a third of a phone
+   * screen — and buried the only action on the page under a row of section
+   * links. On a product page the action IS the navigation, so this stands
+   * down. Matched on the detail route only: `/products` itself is a listing
+   * and keeps the bar.
+   *
+   * `ProductActions` renders that buy bar. If this guard and that component
+   * ever disagree, a phone gets either two bars or none.
+   */
+  const onProductDetail = /^\/products\/[^/]+/.test(pathname);
+  if (onProductDetail) return null;
+
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 

@@ -14,11 +14,28 @@ const productFields = {
   // unbounded "percentage" is how a display like "340% down payment" gets in.
   // Display-only; see schema.prisma before letting anything charge from it.
   minDepositPct: t.Integer({ minimum: 0, maximum: 100 }),
-  // `salePrice` is flat BDT: what the customer pays, not a discount to apply,
-  // so there is no ceiling to validate against price here — sellingPrice()
-  // ignores a sale price that isn't below the list price.
   onSale: t.Boolean(),
-  salePrice: t.Integer({ minimum: 0 }),
+  // The discount the admin types. Capped, because this is the source the
+  // server resolves into `salePrice` — an uncapped "percentage" would compute
+  // a negative price.
+  //
+  // `salePrice` is NOT accepted from the client any more: it is derived from
+  // this and `price` by salePriceFrom() on write. Taking both would let a
+  // caller send a percentage and a price that disagree, which is the whole
+  // failure this design exists to prevent.
+  salePct: t.Integer({ minimum: 0, maximum: 100 }),
+  // Manual override for the storefront status tag. "" hands it back to the
+  // stock derivation in rules.ts — it is not "no tag", it is "decide for me".
+  // A union rather than a free string, matching how the other status columns
+  // in this codebase are validated.
+  stockTag: t.Optional(
+    t.Union([
+      t.Literal(""),
+      t.Literal("Out of stock"),
+      t.Literal("Incoming"),
+      t.Literal("Sold out"),
+    ]),
+  ),
   // Curated, ordered product ids shown under this product. Unvalidated against
   // the catalogue on purpose: an id that stops resolving costs one missing card
   // (getProductsByIds drops it), and rejecting the whole save because an

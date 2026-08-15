@@ -68,7 +68,7 @@ const validProduct = {
   price: 1650,
   minDepositPct: 20,
   onSale: false,
-  salePrice: 0,
+  salePct: 0,
   recommendedIds: [],
   deliveryFeeInsideDhaka: 60,
   deliveryFeeOutsideDhaka: 150,

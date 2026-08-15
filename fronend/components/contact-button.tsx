@@ -69,8 +69,10 @@ export function ContactButton() {
 
   if (pathname.startsWith("/checkout")) return null;
 
-  // Product pages show a sticky buy bar above the tab bar on mobile —
-  // lift the button clear of it there.
+  // A product page shows the buy bar INSTEAD of the tab bar, not above it —
+  // so there is one bar to clear here, not two. This used to lift the button
+  // by both heights, which left it stranded mid-screen once the tab bar
+  // stopped rendering on this route.
   const aboveBuyBar = pathname.startsWith("/products/");
 
   const channels = [
@@ -128,8 +130,11 @@ export function ContactButton() {
          * flat `bottom-20` (80px) was measured against a bar welded to the
          * edge and left only a few pixels once it lifted off.
          */
+        // Product page: the buy bar is welded to bottom-0 and is ~72px tall
+        // including its own safe-area padding. Everywhere else: the tab bar
+        // floats 12px up and is 64px tall.
         aboveBuyBar
-          ? "bottom-[calc(152px+env(safe-area-inset-bottom))]"
+          ? "bottom-[calc(84px+env(safe-area-inset-bottom))]"
           : "bottom-[calc(88px+env(safe-area-inset-bottom))]",
       )}
     >

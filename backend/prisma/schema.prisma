@@ -67,10 +67,23 @@ model Product {
   /// came to show ৳669 and charge ৳670.
   minDepositPct Int   @default(0)
   onSale      Boolean @default(false)
-  /// What the customer pays while `onSale`, in BDT. The admin types this
-  /// directly, so there is no discount arithmetic and nothing to round — the
-  /// old percentage column produced three different roundings across the
-  /// server, the admin preview and the product card.
+  /// The discount the admin types, 0–100. SOURCE of the sale as of 2026-08-13.
+  salePct     Int     @default(0)
+  /// What the customer pays while `onSale`, in BDT. Still the only money field
+  /// any reader touches — but it is now COMPUTED from `salePct` rather than
+  /// typed, by `salePriceFrom` in lib/rules.ts.
+  ///
+  /// A percentage column existed before and was removed, because the same
+  /// percentage got rounded three different ways — the server floored it, the
+  /// admin preview rounded it, the product card rounded again off a different
+  /// base — so a ৳999 product at 33% off showed ৳669 and charged ৳670. What
+  /// makes this safe is that the arithmetic happens ONCE, on write, and the
+  /// result is stored here. Nothing recomputes a price from `salePct` at
+  /// render time; the card prints it as a label, never as an input to a sum.
+  ///
+  /// Consequence: a change to `price` MUST recompute this. The admin write
+  /// path does. Anything else that edits `price` has to as well, or the
+  /// advertised percentage and the charged amount drift apart again.
   salePrice   Int     @default(0)
   rating      Float   @default(0)
   sold        Int     @default(0)
@@ -90,6 +103,15 @@ model Product {
   /// referential integrity and a cascade path through the product-delete
   /// rules, which are load-bearing and were fixed only recently.
   recommendedIds String[] @default([])
+
+  /// Manual override for the storefront's status tag, "" = derive it.
+  ///
+  /// Derivation lives in `stockTagFor` (lib/rules.ts): in stock shows nothing,
+  /// nothing available shows "Out of stock", and nothing available with an
+  /// in-transit purchase order shows "Incoming". "Sold out" is only ever set
+  /// by hand — automatically it would be indistinguishable from "Out of
+  /// stock", and it exists to say a line is finished for good.
+  stockTag       String   @default("")
 
   // Admin-side extras
   sku             String  @unique // e.g. "ZT-IPS-1000"
@@ -581,6 +603,12 @@ model PurchaseOrder {
   eta        DateTime
   status     String   @default("Confirmed") // Confirmed|In transit|Received|Cancelled
   createdAt  DateTime @default(now())
+
+  // The storefront's "Incoming" tag asks, per product, whether an in-transit
+  // order exists (`stockTagFor` in lib/rules.ts). That probe rides along with
+  // GET /api/products — the busiest dynamic query on the site — so it gets an
+  // index rather than a scan of every purchase order ever raised.
+  @@index([productId, status])
 }
 
 /// Append-only audit trail of every stock change.

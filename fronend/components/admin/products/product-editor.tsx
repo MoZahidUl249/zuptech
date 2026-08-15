@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useAdmin, taka, type AdminProduct } from "@/lib/admin";
+import { useAdmin, taka, type AdminProduct, type StockTag } from "@/lib/admin";
 import {
   uploadProductPhoto,
   deleteProductPhoto,
@@ -57,12 +57,25 @@ export function ProductEditor({
     duplicateMinQtys(p.quantityOffers).length > 0 ||
     duplicateMinQtys(p.freeDeliveryOffers).length > 0;
 
-  // No arithmetic: the admin types what the customer pays. The old version
-  // computed this from a percentage with Math.round while the server floored
-  // the same sum, so the preview and the till disagreed by a taka.
-  const onSale = p.onSale && p.salePrice > 0 && p.salePrice < p.price;
-  const sellingPrice = onSale ? p.salePrice : p.price;
-  const saleSaving = onSale ? p.price - p.salePrice : 0;
+  /*
+   * The preview price, computed here because an unsaved draft has no
+   * server-computed `salePrice` yet — typing 20% has to show a number before
+   * you press save.
+   *
+   * THIS MUST STAY BYTE-FOR-BYTE THE SAME SUM AS `salePriceFrom` IN
+   * backend/src/lib/rules.ts. A second rounding site is exactly what produced
+   * the bug the schema comments describe — the server floored, this preview
+   * rounded, and a ৳999 product at 33% off displayed 669 while charging 670.
+   * Identical expression, identical Math.round, identical answer.
+   *
+   * It is display-only regardless: what gets stored is whatever the server
+   * computes on save, never this.
+   */
+  const previewSalePrice =
+    p.salePct > 0 ? Math.round((p.price * (100 - p.salePct)) / 100) : 0;
+  const onSale = p.onSale && previewSalePrice > 0 && previewSalePrice < p.price;
+  const sellingPrice = onSale ? previewSalePrice : p.price;
+  const saleSaving = onSale ? p.price - previewSalePrice : 0;
   // Counted independently: a product can have a video and no photos, and the
   // old short-circuit on an empty gallery reported "No photos yet" for it,
   // hiding the video completely.
@@ -332,15 +345,20 @@ export function ProductEditor({
               This product is on sale
             </label>
               <div className="w-40">
-                <Field label="Sale price (৳)">
+                {/* A percentage, not a price, since 2026-08-13. The server
+                    turns this into the sale price once and stores it; the
+                    figure below is that same sum, so what you type and what
+                    the customer pays cannot drift apart. */}
+                <Field label="Discount (% off)">
               <input
                 type="number"
                 inputMode="numeric"
                 min={0}
+                max={100}
                 disabled={!p.onSale}
-                value={p.salePrice}
+                value={p.salePct}
                 onChange={(e) =>
-                  onChange({ salePrice: numberInput(e.target.value) })
+                  onChange({ salePct: numberInput(e.target.value) })
                 }
                 className={`${inputCls} disabled:opacity-50`}
               />
@@ -566,6 +584,42 @@ export function ProductEditor({
               />
               Show this product on the website
             </label>
+
+            {/*
+             * The status label on the product card.
+             *
+             * "Automatic" is the default and covers the normal case: in stock
+             * shows nothing, empty shows "Out of stock", and empty with a
+             * purchase order in transit shows "Incoming". The resolved answer
+             * is printed beside the control, because "Automatic" on its own
+             * tells you nothing about what a shopper will actually see.
+             *
+             * Picking a label pins it and stops the derivation. "Sold out" is
+             * only ever reachable this way — derived, it would be
+             * indistinguishable from "Out of stock".
+             */}
+            <Field label="Status label on the card">
+              <select
+                value={p.stockTagOverride}
+                onChange={(e) =>
+                  onChange({ stockTagOverride: e.target.value as StockTag })
+                }
+                className={selectCls}
+              >
+                <option value="">Automatic (from stock)</option>
+                <option value="Out of stock">Always show “Out of stock”</option>
+                <option value="Incoming">Always show “Incoming”</option>
+                <option value="Sold out">Always show “Sold out”</option>
+              </select>
+              <p className="mt-1.5 text-ui-sm text-zup-gray">
+                {p.stockTagOverride
+                  ? `Pinned — the card always shows “${p.stockTagOverride}”.`
+                  : p.stockTag
+                    ? `Currently showing “${p.stockTag}”.`
+                    : "Currently showing no label — this product is in stock."}
+              </p>
+            </Field>
+
             <Field label="Photo description (for screen readers)" className="col-span-2 lg:col-span-3">
               <input
                 value={p.imgHint}

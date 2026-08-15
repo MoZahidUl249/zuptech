@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { unwrap } from "@/lib/admin-http";
 import { api } from "@/lib/eden";
-import { emptyState } from "@/lib/admin";
+import { emptyState, STOCK_TAGS } from "@/lib/admin";
 import { whole } from "@/lib/utils";
 import type { ServiceBulletStyle, ServiceImageSide } from "@/lib/api";
 import type {
@@ -21,6 +21,7 @@ import type {
   SiteContact,
   SiteCopy,
   StaffMember,
+  StockTag,
   Supplier,
 } from "@/lib/admin";
 
@@ -91,9 +92,21 @@ function shortDateTime(iso: string): string {
  * the UI maps or measures is defaulted here so a shape change degrades to an
  * empty list instead of a render crash.
  */
-export function toAdminProduct(p: AdminProduct & { photos?: (string | null)[] }): AdminProduct {
+export function toAdminProduct(
+  p: Omit<AdminProduct, "stockTagOverride"> & {
+    photos?: (string | null)[];
+    stockTagOverride?: string;
+  },
+): AdminProduct {
   return {
     ...p,
+    // Narrowed at the boundary rather than cast: the backend types this as a
+    // plain string, and an unrecognised label would otherwise flow into a
+    // <select> that has no matching option and silently render as blank.
+    // Anything unknown falls back to "derive it", which is the safe default.
+    stockTagOverride: STOCK_TAGS.includes(p.stockTagOverride as StockTag)
+      ? (p.stockTagOverride as StockTag)
+      : "",
     photos: (p.photos ?? []).filter((x): x is string => Boolean(x)),
     specs: p.specs ?? [],
     quantityOffers: p.quantityOffers ?? [],
@@ -443,7 +456,11 @@ function productBody(p: AdminProduct) {
     minDepositPct: whole(p.minDepositPct),
     recommendedIds: p.recommendedIds,
     onSale: p.onSale,
-    salePrice: whole(p.salePrice),
+    // The percentage, not the price: the server derives salePrice from this.
+    // Sending both would let the two disagree, which is the failure the
+    // percentage design exists to prevent.
+    salePct: whole(p.salePct),
+    stockTag: p.stockTagOverride,
     deliveryFeeInsideDhaka: whole(p.deliveryFeeInsideDhaka),
     deliveryFeeOutsideDhaka: whole(p.deliveryFeeOutsideDhaka),
     installationFeeInsideDhaka: whole(p.installationFeeInsideDhaka),

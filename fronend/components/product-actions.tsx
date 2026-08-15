@@ -114,19 +114,15 @@ export function ProductActions({
       <OfferLadder product={product} qty={qty} variant="panel" title={offersTitle} />
 
       {/*
-       * The buy buttons, in the page at every size.
+       * Desktop keeps the buttons in the page, side by side, each taking half
+       * the row. `min-w-0` lets them actually divide the space — without it a
+       * long label sets the button's minimum width and pushes its sibling off.
        *
-       * These used to be desktop-only, with mobile served by a bar fixed above
-       * the tab bar. That bar is gone: the product page now orders itself so
-       * the buttons come straight after the name, which is the same job the
-       * floating bar was doing — except in the flow, where it doesn't cover the
-       * page, doesn't need a spacer under the content to compensate, and
-       * doesn't sit a second price next to the one already on screen.
+       * On mobile these are hidden in favour of the fixed bar below, so the
+       * action is reachable from anywhere on a long product page rather than
+       * only at the point you happen to have scrolled past.
        */}
-      {/* Side by side, each taking half the row. `min-w-0` lets them actually
-          divide the space — without it a long label sets the button's minimum
-          width and pushes its sibling off. */}
-      <div className="flex gap-2.5">
+      <div className="hidden gap-2.5 md:flex">
         <button
           type="button"
           onClick={addToCart}
@@ -147,6 +143,33 @@ export function ProductActions({
         </button>
       </div>
 
+      {/*
+       * Mobile: a fixed bar carrying the same two actions.
+       *
+       * It sits at `bottom-0`, NOT above the tab bar, because the tab bar
+       * hides itself on this route (see mobile-tab-bar.tsx). Two stacked fixed
+       * bars is what the previous version did and it ate a third of a phone
+       * screen. Buy Now leads, matching the order the buttons are asked for.
+       *
+       * No price here. The last version carried one, which put a second copy
+       * of the same number a few pixels below the one in the page.
+       */}
+      <div className="fixed inset-x-0 bottom-0 z-70 flex gap-2.5 border-t border-zup-body/8 bg-white/95 px-4 pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl md:hidden">
+        <button
+          type="button"
+          onClick={buyNow}
+          className="min-h-13 min-w-0 flex-1 rounded-[2px] bg-zup-orange text-[15px] font-bold text-white active:scale-[.98]"
+        >
+          {ctaLabel}
+        </button>
+        <button
+          type="button"
+          onClick={addToCart}
+          className="min-h-13 min-w-0 flex-1 rounded-[2px] bg-zup-blue text-[15px] font-bold text-white active:scale-[.98]"
+        >
+          Add to Cart
+        </button>
+      </div>
     </>
   );
 }

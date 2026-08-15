@@ -7,7 +7,7 @@ import {
   uploadProductVideoDto,
 } from "../../dtos/products.dto";
 import { prisma } from "../../lib/db";
-import { LIST_CAP } from "../../lib/rules";
+import { LIST_CAP, salePriceFrom } from "../../lib/rules";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { productInclude, toAdminProduct } from "../../lib/serialize";
@@ -92,6 +92,8 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
       const product = await prisma.product.create({
         data: {
           ...fields,
+          // The percentage is the input; the taka is stored. See salePriceFrom.
+          salePrice: salePriceFrom(fields.price, fields.salePct),
           id,
           ...(quantityOffers ? { quantityOffers: { create: quantityOffers } } : {}),
           ...(freeDeliveryOffers ? { freeDeliveryOffers: { create: freeDeliveryOffers } } : {}),
@@ -129,10 +131,25 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
         if (freeDeliveryOffers) {
           await tx.freeDeliveryOffer.deleteMany({ where: { productId: params.id } });
         }
+        /*
+         * Recompute the sale price whenever EITHER input moves.
+         *
+         * PATCH is partial, so a request may carry a new price, a new
+         * percentage, or one of them alone. Recomputing only when `salePct`
+         * arrives would leave a price edit quietly contradicting the
+         * advertised discount — "-20% off" on a product whose price changed
+         * and whose salePrice did not. Both fall back to the stored row, so a
+         * request touching neither leaves the pair exactly as it was.
+         */
+        const priceChanging = fields.price !== undefined || fields.salePct !== undefined;
+        const nextPrice = fields.price ?? existing.price;
+        const nextPct = fields.salePct ?? existing.salePct;
+
         return tx.product.update({
           where: { id: params.id },
           data: {
             ...fields,
+            ...(priceChanging ? { salePrice: salePriceFrom(nextPrice, nextPct) } : {}),
             ...(quantityOffers ? { quantityOffers: { create: quantityOffers } } : {}),
             ...(freeDeliveryOffers ? { freeDeliveryOffers: { create: freeDeliveryOffers } } : {}),
           },

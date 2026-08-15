@@ -50,6 +50,9 @@ export interface PublicProductDto {
   price: number;
   minDepositPct: number; // whole percent of price (0–100), display-only
   onSale: boolean;
+  /** The admin-typed discount, 0–100. A LABEL for the card — `salePrice` is
+   *  the money, and is what this percentage was already resolved into. */
+  salePct: number;
   salePrice: number; // what the customer pays; equals price when not on sale
   quantityOffers: QuantityOfferDto[]; // "buy N+, save X%" tiers, ordered by minQty ascending
   deliveryFeeInsideDhaka: number; // BDT, per unit
@@ -68,11 +71,23 @@ export interface PublicProductDto {
   // storefront resolves them in one request rather than this endpoint
   // embedding whole products and recursing into their recommendations.
   recommendedIds: string[];
+  /** Resolved status label: "" | "Out of stock" | "Incoming" | "Sold out".
+   *  Already accounts for the manual override — the client just prints it. */
+  stockTag: string;
   available: number;
   inStock: boolean;
 }
 
 export interface AdminProductDto extends PublicProductDto {
+  /**
+   * The RAW override column, as opposed to the resolved `stockTag` above.
+   *
+   * The admin needs both: "" here with "Out of stock" resolved means the
+   * derivation produced it, and the editor should show "Auto". Sending only
+   * the resolved value would make those two states indistinguishable, and
+   * saving the form would silently pin a tag nobody chose.
+   */
+  stockTagOverride: string;
   sku: string;
   cost: number;
   stock: number;
