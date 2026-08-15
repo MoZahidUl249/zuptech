@@ -69,8 +69,17 @@ export interface LandingPage {
   qcImageHint: string;
   countdownTitle: string;
   countdownNote: string;
-  /** ISO timestamp, or "" for no deadline. */
-  countdownEndsAt: string;
+  /**
+   * The campaign deadline, or "" for none.
+   *
+   * Typed `string | Date` because both turn up: the API serializes an ISO
+   * string, but the typed client revives ISO timestamps into `Date` objects
+   * before this code ever sees them. Declaring it `string` was a lie that
+   * type-checked, and the editor called `.slice()` on it — which threw and
+   * took the whole campaign editor down the moment a campaign had a deadline
+   * set. Read it through `datetimeLocalValue` below, never directly.
+   */
+  countdownEndsAt: string | Date;
   countdownCtaLabel: string;
   countdownAssurance: string;
   testimonialsTitle: string;
@@ -308,8 +317,23 @@ function campaignColors<T extends Partial<LandingPageDraft>>(body: T): T {
   return out;
 }
 
-const campaignBody = <T extends Partial<LandingPageDraft>>(body: T): T =>
-  campaignColors(campaignNumbers(body));
+/**
+ * Send the deadline as the ISO string the DTO takes.
+ *
+ * The draft may hold a `Date` — the typed client revives ISO timestamps on the
+ * way in — and posting one would serialize to a shape the schema rejects. "" is
+ * how "no deadline" is expressed and passes through untouched; the server turns
+ * it into a null column.
+ */
+function campaignDates<T extends Partial<LandingPageDraft>>(body: T) {
+  const at = body.countdownEndsAt;
+  if (at === undefined) return body as Omit<T, "countdownEndsAt"> & { countdownEndsAt?: string };
+  const iso = at instanceof Date ? at.toISOString() : String(at);
+  return { ...body, countdownEndsAt: iso };
+}
+
+const campaignBody = <T extends Partial<LandingPageDraft>>(body: T) =>
+  campaignDates(campaignColors(campaignNumbers(body)));
 
 export const createLandingPage = (draft: LandingPageDraft) =>
   unwrap(api.admin.api["landing-pages"].post(campaignBody(draft)), "POST /admin/api/landing-pages");
@@ -370,4 +394,17 @@ export function useLandingPages() {
   }, [fetchList]);
 
   return { pages, loading, error, reload };
+}
+
+/**
+ * What an `<input type="datetime-local">` needs, from whatever the API gave us.
+ *
+ * Accepts the ISO string the DTO documents and the Date the client actually
+ * hands back, and answers "" for anything unusable — an unparseable value must
+ * leave the field empty, not crash the screen it sits on.
+ */
+export function datetimeLocalValue(v: string | Date | null | undefined): string {
+  if (!v) return "";
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 16);
 }

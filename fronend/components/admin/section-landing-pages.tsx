@@ -13,6 +13,7 @@ import {
   unpublishLandingPage,
   duplicateLandingPage,
   campaignProblems,
+  datetimeLocalValue,
   BUNDLE_MAX_ROWS,
   type ColorKey,
   type LandingPage,
@@ -597,7 +598,7 @@ function LandingPageEditor({
         <Group
           step={2}
           title="Product row"
-          hint="A strip of other products across the top of the page. Leave empty to hide it."
+          hint="A strip of other products near the bottom of the page, above the footer. Leave empty to hide it."
         >
           <ProductPicker
             ids={draft.productRowIds ?? []}
@@ -922,7 +923,7 @@ function LandingPageEditor({
             </Field>
             <Field label="Countdown ends at (blank = no clock)">
               <Input type="datetime-local" disabled={readOnly}
-                value={(draft.countdownEndsAt ?? "").slice(0, 16)}
+                value={datetimeLocalValue(draft.countdownEndsAt)}
                 onChange={(e) =>
                   set("countdownEndsAt", e.target.value ? new Date(e.target.value).toISOString() : "")
                 } />
