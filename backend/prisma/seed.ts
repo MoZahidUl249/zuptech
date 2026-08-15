@@ -232,10 +232,23 @@ const movements = [
 /* ===== Payment methods ===== */
 
 // prettier-ignore
+/*
+ * Launch configuration: Cash on Delivery only.
+ *
+ * The gateways stay as rows so the admin can switch one on the day it is
+ * actually contracted — the machinery is untouched, and `enabled` is the
+ * single switch checkout obeys. They are seeded DISABLED rather than deleted
+ * because deleting them would also delete the provider/webhook fields someone
+ * has to fill in later, and because an order's `pay` is a stored name that
+ * should still resolve to a row if history is ever read back.
+ *
+ * The credentials below are placeholders. A gateway must not be enabled until
+ * its real keys are in, which is the other reason none of them ships on.
+ */
 const paymentMethods = [
-  { id: "bkash", name: "bKash", kind: "Mobile wallet", provider: "bKash Merchant API", providers: ["bKash Merchant API", "bKash PGW (Aggregator)"], enabled: true, environment: "Live", apiKey: "app_id: ZUP-9f3a12", apiSecret: "bk_live_7f31a92c44e8", webhookUrl: "https://api.zuptech.com/pay/bkash", isGateway: true, sort: 0 },
-  { id: "nagad", name: "Nagad", kind: "Mobile wallet", provider: "Nagad PGW", providers: ["Nagad PGW"], enabled: true, environment: "Live", apiKey: "MID: ZUP0192837", apiSecret: "ng_live_c210d84feaa1", webhookUrl: "https://api.zuptech.com/pay/nagad", isGateway: true, sort: 1 },
-  { id: "card", name: "Cards (Visa / Mastercard)", kind: "Card gateway", provider: "SSLCommerz", providers: ["SSLCommerz", "AamarPay", "Stripe"], enabled: true, environment: "Test", apiKey: "store_id: zuptechlive", apiSecret: "ssl_test_91b2ac0377", webhookUrl: "https://api.zuptech.com/pay/card", isGateway: true, sort: 2 },
+  { id: "bkash", name: "bKash", kind: "Mobile wallet", provider: "bKash Merchant API", providers: ["bKash Merchant API", "bKash PGW (Aggregator)"], enabled: false, environment: "Live", apiKey: "app_id: ZUP-9f3a12", apiSecret: "bk_live_7f31a92c44e8", webhookUrl: "https://api.zuptech.com/pay/bkash", isGateway: true, sort: 0 },
+  { id: "nagad", name: "Nagad", kind: "Mobile wallet", provider: "Nagad PGW", providers: ["Nagad PGW"], enabled: false, environment: "Live", apiKey: "MID: ZUP0192837", apiSecret: "ng_live_c210d84feaa1", webhookUrl: "https://api.zuptech.com/pay/nagad", isGateway: true, sort: 1 },
+  { id: "card", name: "Cards (Visa / Mastercard)", kind: "Card gateway", provider: "SSLCommerz", providers: ["SSLCommerz", "AamarPay", "Stripe"], enabled: false, environment: "Test", apiKey: "store_id: zuptechlive", apiSecret: "ssl_test_91b2ac0377", webhookUrl: "https://api.zuptech.com/pay/card", isGateway: true, sort: 2 },
   { id: "cod", name: "Cash on Delivery", kind: "Offline", provider: "Manual", providers: ["Manual"], enabled: true, environment: "Live", apiKey: "", apiSecret: "", webhookUrl: "", isGateway: false, sort: 3 },
   { id: "rocket", name: "Rocket", kind: "Mobile wallet", provider: "DBBL Rocket", providers: ["DBBL Rocket"], enabled: false, environment: "Test", apiKey: "", apiSecret: "", webhookUrl: "", isGateway: true, sort: 4 },
 ];

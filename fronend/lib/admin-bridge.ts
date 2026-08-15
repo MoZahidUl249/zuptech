@@ -129,9 +129,16 @@ export function useHeroSlides(page: HeroPage = "home"): HeroSlide[] {
 
 export type { PaymentOption };
 
+/*
+ * What checkout shows before GET /api/site-config resolves.
+ *
+ * Only what is actually accepted: this list used to name bKash and Nagad,
+ * which are seeded disabled for launch, so a customer on a slow connection
+ * could pick a method the server would refuse — a 400 at the last step of a
+ * purchase, blamed on the shop. Keep this in step with whatever is enabled;
+ * it is a fallback, not a menu.
+ */
 export const DEFAULT_PAY_OPTIONS: PaymentOption[] = [
-  { label: "bKash", sub: "Pay instantly from your bKash wallet" },
-  { label: "Nagad", sub: "Pay instantly from your Nagad wallet" },
   { label: "Cash on Delivery", sub: "Pay when your order arrives" },
 ];
 
