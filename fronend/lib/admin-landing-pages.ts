@@ -91,6 +91,29 @@ export interface LandingPage {
   footerTagline: string;
   footerAbout: string;
   footerLines: string[];
+
+  /* ===== Theme =====
+   * Every colour the page paints with, named for the ROLE it plays rather than
+   * the colour it holds — a campaign can be recoloured without a name turning
+   * into a lie. Hex strings; the server validates the format. */
+  colorHeroBg: string;
+  colorHeroText: string;
+  colorBandBg: string;
+  colorBandText: string;
+  colorTintBg: string;
+  colorPageBg: string;
+  colorPageText: string;
+  colorAccent: string;
+  colorHighlight: string;
+  colorCtaBg: string;
+  colorCtaText: string;
+
+  /** Ordered product ids for the row above the page body. Empty hides it. */
+  productRowIds: string[];
+  /** The two price-band labels. Blank falls back to English in the renderer. */
+  priceCompareLabel: string;
+  priceOfferLabel: string;
+
   viewCount: number;
   orderCount: number;
   createdAt: string;
@@ -126,7 +149,22 @@ type CampaignKey =
   | "countdownCtaLabel" | "countdownAssurance"
   | "testimonialsTitle" | "testimonials"
   | "formTitle" | "formIntro" | "formLabels"
-  | "footerTagline" | "footerAbout" | "footerLines";
+  | "footerTagline" | "footerAbout" | "footerLines"
+  | "colorHeroBg" | "colorHeroText" | "colorBandBg" | "colorBandText"
+  | "colorTintBg" | "colorPageBg" | "colorPageText" | "colorAccent"
+  | "colorHighlight" | "colorCtaBg" | "colorCtaText"
+  | "productRowIds" | "priceCompareLabel" | "priceOfferLabel";
+
+/** The theme keys, in one place so the editor and the save boundary agree. */
+export const COLOR_KEYS = [
+  "colorHeroBg", "colorHeroText",
+  "colorBandBg", "colorBandText",
+  "colorTintBg", "colorPageBg", "colorPageText",
+  "colorAccent", "colorHighlight",
+  "colorCtaBg", "colorCtaText",
+] as const;
+
+export type ColorKey = (typeof COLOR_KEYS)[number];
 
 /**
  * The writable subset — everything the server resolves or owns is stripped.
@@ -167,13 +205,47 @@ function campaignNumbers<T extends Partial<LandingPageDraft>>(body: T): T {
   return out;
 }
 
+/**
+ * Make every colour something the DTO will accept, or send nothing for it.
+ *
+ * The server takes `#RGB` or `#RRGGBB` and 422s anything else. The colour
+ * editor only ever commits a valid value, so this is a backstop for the paths
+ * that don't go through it — a duplicated page, a field pasted into, a future
+ * caller. It expands the short form rather than passing it on, so what comes
+ * back from the server is the same string in every row.
+ *
+ * An unparseable value is dropped rather than sent: losing one colour on save
+ * beats a 422 that discards the campaign copy typed alongside it. The editor
+ * is what stops that being silent — it won't let an invalid value get here.
+ */
+function campaignColors<T extends Partial<LandingPageDraft>>(body: T): T {
+  const out = { ...body };
+  for (const key of COLOR_KEYS) {
+    const raw = out[key];
+    if (typeof raw !== "string") continue;
+    const hex = raw.trim().replace(/^#?/, "#");
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      out[key] = hex.toUpperCase() as T[ColorKey];
+    } else if (/^#[0-9a-fA-F]{3}$/.test(hex)) {
+      const [r, g, b] = hex.slice(1);
+      out[key] = `#${r}${r}${g}${g}${b}${b}`.toUpperCase() as T[ColorKey];
+    } else {
+      delete out[key];
+    }
+  }
+  return out;
+}
+
+const campaignBody = <T extends Partial<LandingPageDraft>>(body: T): T =>
+  campaignColors(campaignNumbers(body));
+
 export const createLandingPage = (draft: LandingPageDraft) =>
-  unwrap(api.admin.api["landing-pages"].post(campaignNumbers(draft)), "POST /admin/api/landing-pages");
+  unwrap(api.admin.api["landing-pages"].post(campaignBody(draft)), "POST /admin/api/landing-pages");
 
 
 export const patchLandingPage = (id: string, patch: Partial<LandingPageDraft>) =>
   unwrap(
-    api.admin.api["landing-pages"]({ id }).patch(campaignNumbers(patch)),
+    api.admin.api["landing-pages"]({ id }).patch(campaignBody(patch)),
     "PATCH /admin/api/landing-pages/:id",
   );
 
