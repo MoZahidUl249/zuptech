@@ -504,6 +504,25 @@ export interface PublicLandingPage {
   testimonials: { quote: string; name: string; location: string }[];
   formTitle: string;
   formIntro: string;
+  /* Theme — every colour the campaign paints with. Optional so a payload from
+   * a backend predating these columns degrades to the renderer's fallbacks
+   * rather than painting `undefined` into a style attribute. */
+  colorHeroBg?: string;
+  colorHeroText?: string;
+  colorBandBg?: string;
+  colorBandText?: string;
+  colorTintBg?: string;
+  colorPageBg?: string;
+  colorPageText?: string;
+  colorAccent?: string;
+  colorHighlight?: string;
+  colorCtaBg?: string;
+  colorCtaText?: string;
+  /** Ordered product ids for the row above the page body. */
+  productRowIds?: string[];
+  /** Price-band labels; blank falls back to English. */
+  priceCompareLabel?: string;
+  priceOfferLabel?: string;
   formLabels: CampaignFormLabels;
   footerTagline: string;
   footerAbout: string;

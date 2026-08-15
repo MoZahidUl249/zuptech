@@ -439,6 +439,22 @@ function campaignContent(lp: LandingPageRow) {
   const labels = (lp.formLabels ?? {}) as Record<string, unknown>;
 
   return {
+    // The whole palette, on both the admin and the public payload — the admin
+    // previews the page with the same values it renders with.
+    colorHeroBg: lp.colorHeroBg,
+    colorHeroText: lp.colorHeroText,
+    colorBandBg: lp.colorBandBg,
+    colorBandText: lp.colorBandText,
+    colorTintBg: lp.colorTintBg,
+    colorPageBg: lp.colorPageBg,
+    colorPageText: lp.colorPageText,
+    colorAccent: lp.colorAccent,
+    colorHighlight: lp.colorHighlight,
+    colorCtaBg: lp.colorCtaBg,
+    colorCtaText: lp.colorCtaText,
+    productRowIds: lp.productRowIds,
+    priceCompareLabel: lp.priceCompareLabel,
+    priceOfferLabel: lp.priceOfferLabel,
     hotlineLabel: lp.hotlineLabel,
     hotlineNumber: lp.hotlineNumber,
     headerCtaLabel: lp.headerCtaLabel,

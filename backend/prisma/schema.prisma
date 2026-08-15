@@ -473,6 +473,43 @@ model LandingPage {
   footerTagline String   @default("")
   footerAbout   String   @default("")
   footerLines   String[] @default([])
+  /// ===== Theme =====
+  ///
+  /// Every colour the page paints with, per campaign. A direct-response page
+  /// is sold on its look as much as its copy, and two campaigns running at
+  /// once should not have to share a palette — so these are columns, not a
+  /// site-wide theme.
+  ///
+  /// Hex strings, validated at the DTO. Named for the ROLE each plays rather
+  /// than the colour it happens to hold, so a campaign can be recoloured
+  /// without every name turning into a lie ("colorGreenBand" going blue).
+  ///
+  /// Defaults are the reference design's palette, so a new page looks
+  /// deliberate before anyone opens the colour controls.
+  colorHeroBg      String @default("#17341B") // deep band behind the headline
+  colorHeroText    String @default("#FFFFFF")
+  colorBandBg      String @default("#45712F") // the price/statement bands
+  colorBandText    String @default("#FFFFFF")
+  colorTintBg      String @default("#F2F5EC") // testimonials, quiet sections
+  colorPageBg      String @default("#FFFFFF")
+  colorPageText    String @default("#15181E")
+  colorAccent      String @default("#45712F") // links, ticks, emphasis
+  colorHighlight   String @default("#FFF306") // the bundle-saving line
+  colorCtaBg       String @default("#000000") // the order button
+  colorCtaText     String @default("#FFFFFF")
+
+  /// A product row above the page body. Ordered ids, same shape and same
+  /// resolve-and-drop rules as SiteConfig.featuredIds — empty hides the row.
+  productRowIds  String[] @default([])
+
+  /// The two price-band labels ("Previous price", "Offer price"). Their own
+  /// columns rather than entries in `formLabels`, which is the ORDER FORM's
+  /// vocabulary — these sit in the hero bands and have nothing to do with it.
+  /// Blank falls back to English in the renderer, so a campaign written only
+  /// in Bangla still reads correctly the moment they are filled in.
+  priceCompareLabel String @default("")
+  priceOfferLabel   String @default("")
+
   /// This page's own GTM container, so ad spend is tracked separately from
   /// the main site's.
   gtmId          String   @default("")
