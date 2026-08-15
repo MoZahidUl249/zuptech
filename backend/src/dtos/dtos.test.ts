@@ -66,9 +66,10 @@ const validProduct = {
   slug: "voltage-protector-220v",
   categoryId: "cat_protection",
   price: 1650,
-  minDeposit: 4250,
+  minDepositPct: 20,
   onSale: false,
   salePrice: 0,
+  recommendedIds: [],
   deliveryFeeInsideDhaka: 60,
   deliveryFeeOutsideDhaka: 150,
   installationFeeInsideDhaka: 0,
@@ -112,6 +113,24 @@ describe("product DTOs", () => {
     expect(Value.Check(updateProductDto, { warrantyMonths: 24 })).toBe(true);
     expect(Value.Check(updateProductDto, { warrantyMonths: -1 })).toBe(false);
     expect(Value.Check(updateProductDto, { warrantyMonths: 241 })).toBe(false);
+  });
+  test("minDepositPct is a whole percentage, capped at 100", () => {
+    expect(Value.Check(updateProductDto, { minDepositPct: 0 })).toBe(true);
+    expect(Value.Check(updateProductDto, { minDepositPct: 20 })).toBe(true);
+    expect(Value.Check(updateProductDto, { minDepositPct: 100 })).toBe(true);
+    // The ceiling is the whole reason this field is validated: it was BDT
+    // until 2026-08-13, where any positive integer was legitimate, and an
+    // uncapped "percentage" renders as "340% down payment" on the product page.
+    expect(Value.Check(updateProductDto, { minDepositPct: 101 })).toBe(false);
+    expect(Value.Check(updateProductDto, { minDepositPct: -1 })).toBe(false);
+    // A deposit is a whole percent — no 12.5% tiers to round later.
+    expect(Value.Check(updateProductDto, { minDepositPct: 12.5 })).toBe(false);
+  });
+  test("recommendedIds is an ordered id list, and may be empty", () => {
+    expect(Value.Check(updateProductDto, { recommendedIds: [] })).toBe(true);
+    expect(Value.Check(updateProductDto, { recommendedIds: ["ips1000", "solar5k"] })).toBe(true);
+    expect(Value.Check(updateProductDto, { recommendedIds: [""] })).toBe(false);
+    expect(Value.Check(updateProductDto, { recommendedIds: "ips1000" })).toBe(false);
   });
   test("quantityOffers accepts valid tiers and rejects out-of-range values", () => {
     const offers = [

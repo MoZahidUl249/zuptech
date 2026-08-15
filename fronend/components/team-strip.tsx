@@ -30,13 +30,16 @@ export function TeamStrip({ members }: { members: TeamMember[] }) {
             >
               {/* Fixed square, so a row of people lines up regardless of what
                   aspect ratio each photo was uploaded at. */}
-              <div className="relative h-24 w-24 flex-none overflow-hidden rounded-2xl sm:h-28 sm:w-28">
+              <div className="relative h-48 w-48 flex-none overflow-hidden rounded-2xl sm:h-54 sm:w-54">
                 {m.photo ? (
                   <Image
                     src={m.photo}
                     alt={m.name}
                     fill
-                    sizes="112px"
+                    // Must track the box above: `sizes` is what next/image uses
+                    // to pick a source width, so leaving it behind would serve
+                    // an image too small for the box and it would look soft.
+                    sizes="216px"
                     className="object-cover"
                   />
                 ) : (

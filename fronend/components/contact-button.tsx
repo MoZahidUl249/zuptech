@@ -144,12 +144,17 @@ export function ContactButton() {
             onClick={() => setOpen(false)}
             className="group flex items-center gap-2.5"
           >
-            <span className="rounded-full bg-zup-ink/90 px-2.5 py-1 text-[12px] font-semibold text-white shadow-md">
+            {/* `rounded-[999px]`, not `rounded-full`: globals.css squares off
+                `rounded-full` site-wide, and this floating stack is one of the
+                two places that keeps its round shape (the desktop nav is the
+                other). Switching these back to `rounded-full` silently
+                flattens them. */}
+            <span className="rounded-[999px] bg-zup-ink/90 px-2.5 py-1 text-[12px] font-semibold text-white shadow-md">
               {label}
             </span>
             <span
               className={cn(
-                "flex h-11 w-11 flex-none items-center justify-center rounded-full shadow-lg transition-transform duration-150 group-hover:scale-105",
+                "flex h-11 w-11 flex-none items-center justify-center rounded-[999px] shadow-lg transition-transform duration-150 group-hover:scale-105",
                 className,
               )}
             >
@@ -163,7 +168,7 @@ export function ContactButton() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={open ? "Close contact options" : "Contact us"}
-        className="flex h-[54px] w-[54px] items-center justify-center self-end rounded-full bg-zup-green text-white shadow-[0_10px_26px_rgba(31,168,85,.4)] transition-[transform,background-color] duration-200 hover:scale-105 hover:bg-zup-green-dark"
+        className="flex h-[54px] w-[54px] items-center justify-center self-end rounded-[999px] bg-zup-green text-white shadow-[0_10px_26px_rgba(31,168,85,.4)] transition-[transform,background-color] duration-200 hover:scale-105 hover:bg-zup-green-dark"
       >
         {open ? (
           <X className="h-6 w-6" strokeWidth={2.4} aria-hidden />

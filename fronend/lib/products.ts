@@ -23,8 +23,12 @@ export interface Product {
   slug: string;
   name: string;
   price: number;
-  /** Minimum down payment required to order, in BDT. Display-only. */
-  minDeposit: number;
+  /** Minimum down payment as a whole percent of price (0–100). Display-only —
+   *  nothing in the cart or checkout reads it. */
+  minDepositPct: number;
+  /** Curated products shown under this one, in this order. Ids only; the page
+   *  resolves them through getProductsByIds. Empty hides the row. */
+  recommendedIds?: string[];
   rating: number;
   sold: number;
   imgHint: string;
@@ -94,7 +98,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Backup"],
     price: 42500,
-    minDeposit: 8500,
+    minDepositPct: 20,
     rating: 4.7,
     sold: 312,
     imgHint: "IPS unit photo",
@@ -114,7 +118,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Solar"],
     price: 55000,
-    minDeposit: 13750,
+    minDepositPct: 25,
     rating: 4.8,
     sold: 189,
     imgHint: "solar panel kit photo",
@@ -134,7 +138,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Protection"],
     price: 92000,
-    minDeposit: 27600,
+    minDepositPct: 30,
     rating: 4.6,
     sold: 74,
     imgHint: "stabilizer photo",
@@ -154,7 +158,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Switchgear"],
     price: 485000,
-    minDeposit: 194000,
+    minDepositPct: 40,
     rating: 4.9,
     sold: 41,
     imgHint: "transformer photo",
@@ -174,7 +178,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Switchgear"],
     price: 145000,
-    minDeposit: 50750,
+    minDepositPct: 35,
     rating: 4.7,
     sold: 58,
     imgHint: "LT panel photo",
@@ -194,7 +198,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Solar"],
     price: 620000,
-    minDeposit: 248000,
+    minDepositPct: 40,
     rating: 4.8,
     sold: 23,
     imgHint: "rooftop solar photo",
@@ -214,7 +218,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Backup", "Protection"],
     price: 12800,
-    minDeposit: 1280,
+    minDepositPct: 10,
     rating: 4.5,
     sold: 146,
     imgHint: "ATS photo",
@@ -234,7 +238,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Protection"],
     price: 1650,
-    minDeposit: 165,
+    minDepositPct: 10,
     rating: 4.6,
     sold: 921,
     imgHint: "voltage protector photo",
@@ -254,7 +258,7 @@ export const products: Product[] = [
     cat: "Home",
     tags: ["Lighting"],
     price: 2400,
-    minDeposit: 240,
+    minDepositPct: 10,
     rating: 4.4,
     sold: 534,
     imgHint: "flood light photo",
@@ -274,7 +278,7 @@ export const products: Product[] = [
     cat: "Industrial",
     tags: ["Protection", "Switchgear"],
     price: 18500,
-    minDeposit: 2775,
+    minDepositPct: 15,
     rating: 4.7,
     sold: 203,
     imgHint: "MCCB photo",

@@ -55,7 +55,8 @@ interface FakeProduct {
   categoryId: string;
   category: { name: string; svgLogo: string | null; section: { name: string } };
   price: number;
-  minDeposit: number;
+  minDepositPct: number;
+  recommendedIds: string[];
   onSale: boolean;
   salePrice: number;
   stock: number;
@@ -88,7 +89,8 @@ const CATALOG: FakeProduct[] = [
     categoryId: "cat-ips",
     category: { name: "IPS", svgLogo: null, section: { name: "Home" } },
     price: 1000,
-    minDeposit: 0,
+    minDepositPct: 0,
+    recommendedIds: [],
     onSale: false,
     salePrice: 0,
     stock: 5,

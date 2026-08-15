@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import { HeroBanner } from "@/components/marketing/hero-banner";
 import { FeaturedEquipment } from "@/components/marketing/featured-equipment";
 import { site, jsonLd } from "@/lib/site";
-import { getIndustrialServices, getServices, getShowcaseCards, getSiteConfig } from "@/lib/api";
+import {
+  getIndustrialServices,
+  getProductsByIds,
+  getServices,
+  getShowcaseCards,
+  getSiteConfig,
+} from "@/lib/api";
 import { resolveCopy } from "@/lib/site-copy";
 import { resolveSlides } from "@/lib/hero-slides";
 import { ShowcaseStrip } from "@/components/marketing/showcase-strip";
@@ -60,6 +66,23 @@ export default async function HomePage() {
   // no extra request, `config` is already fetched above.
   const slides = resolveSlides(config?.slides, "home");
 
+  /*
+   * The second product row, above the booking forms.
+   *
+   * Resolved server-side and passed down, unlike the featured row, which
+   * subscribes to the admin bridge's store. Only one of the two needs a live
+   * subscription to look right, and this one is below the fold — a request per
+   * visit to keep it hot is not worth it.
+   *
+   * `homeRowIds` order is the admin's, and getProductsByIds does not preserve
+   * it, so it is re-sorted back. An id that no longer resolves drops out.
+   */
+  const homeRowIds = config?.homeRowIds ?? [];
+  const homeRowFetched = homeRowIds.length > 0 ? await getProductsByIds(homeRowIds) : [];
+  const homeRow = homeRowIds
+    .map((id) => homeRowFetched.find((p) => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => Boolean(p));
+
   return (
     <main>
       <script
@@ -78,6 +101,12 @@ export default async function HomePage() {
       <FeaturedEquipment />
 
       <ShowcaseStrip cards={showcase} />
+
+      {/* The admin's second row. Hidden entirely when the list is empty, so an
+          uncurated site doesn't show an empty scroller above the forms. */}
+      {homeRow.length > 0 && (
+        <FeaturedEquipment products={homeRow} label="More products" />
+      )}
 
       <HomeBooking services={services} industrialServices={industrialServices} />
     </main>

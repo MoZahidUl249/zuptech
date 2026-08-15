@@ -119,8 +119,12 @@ export interface AdminProduct {
   category: string;
   section: string;
   price: number;
-  /** Minimum down payment in BDT, shown on the product page. */
-  minDeposit: number;
+  /** Minimum down payment as a whole percent of price (0–100), shown on the
+   *  product page. Display-only — nothing charges from it. */
+  minDepositPct: number;
+  /** Products shown under this one, in this order. Curated: the storefront
+   *  renders exactly these and hides the row when empty. */
+  recommendedIds: string[];
   onSale: boolean;
   /** What the customer pays while on sale, in BDT — the admin types this, so
    *  there is no discount to round. Only meaningful when onSale is true. */
@@ -535,6 +539,9 @@ export interface AdminState {
   categories: AdminCategory[];
   /** Storefront product ids shown in the home-page "Featured products" row, in order. */
   featuredIds: string[];
+  /** The home page's second product row, above the booking forms. Separate
+   *  list from featuredIds so the two rows can show different things. */
+  homeRowIds: string[];
   orders: AdminOrder[];
   leads: ServiceLead[];
   industrialLeads: IndustrialLead[];
@@ -583,6 +590,7 @@ export function emptyState(): AdminState {
     sections: [],
     categories: [],
     featuredIds: [],
+    homeRowIds: [],
     orders: [],
     leads: [],
     industrialLeads: [],
@@ -743,6 +751,11 @@ async function syncKeys(
   await run("featuredIds", async () => {
     if (prev.featuredIds.join() === next.featuredIds.join()) return;
     await api.setFeatured(next.featuredIds);
+  });
+
+  await run("homeRowIds", async () => {
+    if (prev.homeRowIds.join() === next.homeRowIds.join()) return;
+    await api.setHomeRow(next.homeRowIds);
   });
 
   await run("slides", async () => {

@@ -48,7 +48,7 @@ export interface PublicProductDto {
   categoryLogo: string; // Category.svgLogo, "" = none
   section: string; // Section.name — the storefront's top-level filter
   price: number;
-  minDeposit: number; // BDT, display-only
+  minDepositPct: number; // whole percent of price (0–100), display-only
   onSale: boolean;
   salePrice: number; // what the customer pays; equals price when not on sale
   quantityOffers: QuantityOfferDto[]; // "buy N+, save X%" tiers, ordered by minQty ascending
@@ -64,6 +64,10 @@ export interface PublicProductDto {
   description: string;
   video: string;
   photos: string[];
+  // Curated products shown under this one, in this order. Ids only — the
+  // storefront resolves them in one request rather than this endpoint
+  // embedding whole products and recursing into their recommendations.
+  recommendedIds: string[];
   available: number;
   inStock: boolean;
 }

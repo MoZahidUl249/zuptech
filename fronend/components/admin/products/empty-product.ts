@@ -12,7 +12,8 @@ export function emptyDraftProduct(): AdminProduct {
     sku: "", // typed in by the admin — the server no longer invents one
     price: 0,
     cost: 0,
-    minDeposit: 0,
+    minDepositPct: 0,
+    recommendedIds: [],
     onSale: false,
     salePrice: 0,
     deliveryFeeInsideDhaka: 0,

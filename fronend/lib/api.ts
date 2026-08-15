@@ -258,6 +258,9 @@ export interface PaymentOption {
 
 export interface SiteConfig {
   featuredIds: string[];
+  /** The home page's second product row, above the booking forms. Optional so
+   *  a backend that predates it degrades to an empty row, not a crash. */
+  homeRowIds?: string[];
   slides: HeroSlide[];
   copy: SiteCopy;
   contact: SiteContact;

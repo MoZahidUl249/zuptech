@@ -53,9 +53,19 @@ model Product {
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id])
   price       Int // BDT
-  /// The deposit itself, in BDT — not a percentage of price. Display-only
-  /// today; checkout does not take deposits yet.
-  minDeposit  Int     @default(0)
+  /// Minimum down payment, as a whole percentage of price (0–100).
+  ///
+  /// This was the deposit in BDT until 2026-08-13, and the column deliberately
+  /// was not a percentage — see `salePrice` below for the rounding mess that
+  /// reasoning came from. It is a percentage now because the storefront states
+  /// it as one, and it is SAFE here only because it is display-only: nothing in
+  /// pricing, order creation or checkout reads this field.
+  ///
+  /// If checkout ever does take deposits, resolve it to taka ONCE, server-side,
+  /// and store that number on the order. Do not recompute the percentage in the
+  /// admin and again on the product page — that is precisely how a ৳999 product
+  /// came to show ৳669 and charge ৳670.
+  minDepositPct Int   @default(0)
   onSale      Boolean @default(false)
   /// What the customer pays while `onSale`, in BDT. The admin types this
   /// directly, so there is no discount arithmetic and nothing to round — the
@@ -68,6 +78,18 @@ model Product {
   specs       String[] @default([]) // 4 bullet points
   description String   @default("")
   video       String   @default("") // promo video URL (YouTube etc.), "" = none
+
+  /// Products to show under this one, in this order. Curated per product — the
+  /// storefront shows exactly these and hides the row when empty.
+  ///
+  /// An ordered id array rather than a join table, matching
+  /// `SiteConfig.featuredIds`, which is the same shape and already has both
+  /// halves of the pattern: `getProductsByIds` resolves a list and silently
+  /// drops ids that no longer resolve, and the admin picker filters out
+  /// products that have since been deleted or hidden. A relation would add
+  /// referential integrity and a cascade path through the product-delete
+  /// rules, which are load-bearing and were fixed only recently.
+  recommendedIds String[] @default([])
 
   // Admin-side extras
   sku             String  @unique // e.g. "ZT-IPS-1000"
@@ -692,6 +714,12 @@ model SiteConfig {
   id Int @id @default(1)
 
   featuredIds String[] @default([]) // product ids, ORDER matters (home page row)
+
+  /// The second product row on the home page, above the two booking forms.
+  /// Same shape and same rules as `featuredIds` — a separate list so the two
+  /// rows can merchandise different things rather than repeating one set twice
+  /// on a single page. Empty hides the row.
+  homeRowIds  String[] @default([])
 
   // Copy.
   //

@@ -2,12 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
-import {
-  getProductBySlug,
-  getProductPage,
-  getProductsByIds,
-  getSiteConfig,
-} from "@/lib/api";
+import { getProductBySlug, getProductsByIds } from "@/lib/api";
 import type { Product } from "@/lib/products";
 import { formatBDT, site , jsonLd } from "@/lib/site";
 import { ProductActions } from "@/components/product-actions";
@@ -46,59 +41,26 @@ export default async function ProductPage({
   if (!product) notFound();
 
   /*
-   * Recommended products: same category first, then topped up so the row is
-   * never empty.
+   * Recommended products: exactly what the admin picked for this product, in
+   * their order. Nothing is derived.
    *
-   * Category is asked for by query rather than filtered out of the whole shop.
-   * Two things were wrong with doing it client-side. It fetched all 500 catalog
-   * rows to keep four, on the most-visited route on the site — most of why the
-   * storefront ran out of memory under load. And it matched on `cat`, which
-   * only exists on the bundled fallback seed: for live products both sides were
-   * `undefined`, so `p.cat === product.cat` was true for everything and
-   * "related" meant "any four products at all".
+   * This replaced a category → featured → catalogue fallback chain. That chain
+   * guaranteed a full row on every page, but "four products from the same
+   * category" is not a recommendation, and the catalogue tier in particular
+   * amounted to four arbitrary products. Curation means an uncurated product
+   * shows no row at all, which is the deliberate trade — an empty row is honest
+   * where a filled one was not.
    *
-   * Five, because the product itself comes back in its own category.
-   *
-   * The top-up exists because category alone leaves a dead end: a product that
-   * is the only one in its category — the toolset, today — rendered no row at
-   * all, so the page offered a visitor nothing to look at next. Featured comes
-   * before the general catalogue because it is the merchandising choice
-   * somebody actually made in the admin.
+   * `getProductsByIds` is one request and drops ids that no longer resolve, so
+   * a product deleted after being recommended costs one card rather than a hole
+   * or a crash. It also preserves nothing about order, so the ids are re-sorted
+   * back into the admin's sequence below.
    */
-  const [{ products: sameCategory }, config] = await Promise.all([
-    product.category
-      ? getProductPage({ category: product.category, limit: 5 })
-      : Promise.resolve({ products: [], total: 0 }),
-    getSiteConfig(),
-  ]);
-
-  const RECOMMENDED = 4;
-  const picked: Product[] = [];
-  const seen = new Set([product.id]);
-  const take = (candidates: Product[]) => {
-    for (const p of candidates) {
-      if (picked.length >= RECOMMENDED) return;
-      if (seen.has(p.id)) continue;
-      seen.add(p.id);
-      picked.push(p);
-    }
-  };
-
-  take(sameCategory);
-  // `config` is null when the backend is unreachable — the row then falls
-  // through to the catalogue top-up below rather than failing the page.
-  const featuredIds = config?.featuredIds ?? [];
-  if (picked.length < RECOMMENDED && featuredIds.length > 0) {
-    take(await getProductsByIds(featuredIds));
-  }
-  if (picked.length < RECOMMENDED) {
-    // Deliberately a small page, not the catalogue: this is filler for a short
-    // row, and the whole reason the category query exists is to not pull 500
-    // rows into this route.
-    const { products: more } = await getProductPage({ limit: RECOMMENDED + 5 });
-    take(more);
-  }
-  const related = picked;
+  const recommendedIds = product.recommendedIds ?? [];
+  const resolved = recommendedIds.length > 0 ? await getProductsByIds(recommendedIds) : [];
+  const related = recommendedIds
+    .map((id) => resolved.find((p) => p.id === id))
+    .filter((p): p is Product => Boolean(p) && p!.id !== product.id);
   const outOfStock = product.inStock === false;
   // salePrice is server-computed (PublicProductDto); never derived here.
   const onSale = product.salePrice !== undefined && product.salePrice < product.price;
@@ -304,15 +266,19 @@ export default async function ProductPage({
                   ? `In stock · ${product.available} available`
                   : "In stock"}
             </p>
-            {product.minDeposit > 0 && (
+            {/* A percentage of the price, which is how it is stored — no taka
+                figure is derived here. The server holds the percent and this
+                prints it; nothing multiplies it out, which is the whole reason
+                a percentage is safe in this field (see schema.prisma). */}
+            {product.minDepositPct > 0 && (
               <p className="mt-3 inline-flex items-center gap-2 rounded-xl bg-zup-blue/6 px-3.5 py-2.5 text-[13.5px] font-semibold text-zup-blue">
                 <span
                   className="flex h-4.5 w-4.5 flex-none items-center justify-center rounded-full bg-zup-blue text-[10px] font-bold text-white"
                   aria-hidden
                 >
-                  ৳
+                  %
                 </span>
-                Minimum down payment for this product {formatBDT(product.minDeposit)}.
+                Minimum down payment for this product {product.minDepositPct}%.
               </p>
             )}
           </div>

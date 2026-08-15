@@ -116,7 +116,7 @@ export function toPublicProduct(p: ProductWithRelations): PublicProductDto {
     categoryLogo: p.category.svgLogo,
     section: p.category.section.name,
     price: p.price,
-    minDeposit: p.minDeposit,
+    minDepositPct: p.minDepositPct,
     onSale: p.onSale,
     salePrice: sellingPrice(p),
     quantityOffers: p.quantityOffers.map((o) => ({ minQty: o.minQty, amount: o.amount })),
@@ -135,6 +135,7 @@ export function toPublicProduct(p: ProductWithRelations): PublicProductDto {
     description: p.description,
     video: p.video,
     photos: p.photos,
+    recommendedIds: p.recommendedIds,
     available: availableStock(p),
     inStock: availableStock(p) > 0,
   };

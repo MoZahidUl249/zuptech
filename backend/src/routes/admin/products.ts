@@ -17,6 +17,27 @@ import { staffGuard } from "./guard";
 /** Gallery cap — first photo is the cover; matches products.dto.ts's maxItems. */
 const MAX_PRODUCT_PHOTOS = 12;
 
+/**
+ * Reject ids that aren't in the catalogue, naming them.
+ *
+ * Shared by the two ordered-row endpoints: both write a list of product ids
+ * into SiteConfig, and a typo'd id there is a permanently blank slot on the
+ * home page that nothing surfaces. Note this is deliberately NOT applied to a
+ * product's own `recommendedIds` — see the DTO comment there.
+ */
+async function assertKnownProducts(ids: string[], verb: string): Promise<void> {
+  if (ids.length === 0) return;
+  const products = await prisma.product.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  const known = new Set(products.map((p) => p.id));
+  const missing = ids.filter((id) => !known.has(id));
+  if (missing.length > 0) {
+    throw badRequest(`Only catalog products can be ${verb} — unknown: ${missing.join(", ")}`);
+  }
+}
+
 async function featuredIds(): Promise<string[]> {
   const config = await prisma.siteConfig.findUniqueOrThrow({ where: { id: 1 } });
   return config.featuredIds;
@@ -320,19 +341,24 @@ export const adminProducts = new Elysia({ name: "routes/admin/products", detail:
     "/admin/api/products/featured",
     async ({ body, staffCtx }) => {
       assertCan(staffCtx, "homepage", "manage");
-
-      const products = await prisma.product.findMany({
-        where: { id: { in: body.ids } },
-        select: { id: true },
-      });
-      const known = new Set(products.map((p) => p.id));
-      const missing = body.ids.filter((id) => !known.has(id));
-      if (missing.length > 0) {
-        throw badRequest(`Only catalog products can be featured — unknown: ${missing.join(", ")}`);
-      }
-
+      await assertKnownProducts(body.ids, "featured");
       await prisma.siteConfig.update({ where: { id: 1 }, data: { featuredIds: body.ids } });
       return { featuredIds: body.ids };
+    },
+    { body: updateFeaturedDto },
+  )
+
+  /**
+   * The home page's second product row. Same contract as /featured above —
+   * same guard, same ordering rule, different column.
+   */
+  .patch(
+    "/admin/api/products/home-row",
+    async ({ body, staffCtx }) => {
+      assertCan(staffCtx, "homepage", "manage");
+      await assertKnownProducts(body.ids, "put in the home row");
+      await prisma.siteConfig.update({ where: { id: 1 }, data: { homeRowIds: body.ids } });
+      return { homeRowIds: body.ids };
     },
     { body: updateFeaturedDto },
   );

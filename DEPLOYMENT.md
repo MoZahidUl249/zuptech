@@ -292,7 +292,7 @@ Add the local names to `/etc/hosts` once:
 migrations live production runs; a change of yours needing a new column has
 nowhere to apply it, and applying it to live before the code ships is how you
 get an outage. Migration-bearing work goes through the rehearsal stack instead
-(above). `scripts/live-guard.sh` refuses `db:migrate`/`db:deploy`/`db:seed`
+(above). `backend/scripts/live-guard.ts` refuses `db:migrate`/`db:deploy`/`db:seed`
 while `DATABASE_URL` points at the tunnel, and `scripts/live-stack.sh` passes
 `--external-db` so `scripts/deploy.sh` never runs `migrate deploy` against
 production from a laptop.

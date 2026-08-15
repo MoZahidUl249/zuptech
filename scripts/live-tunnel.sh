@@ -28,7 +28,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${LIVE_ENV_FILE:-$REPO/.env.live.local}"
 
 # 15432, not 5432: this workstation already runs its own PostgreSQL on 5432,
-# and the unusual number doubles as the marker scripts/live-guard.sh greps for
+# and the unusual number doubles as the marker backend/scripts/live-guard.ts looks for
 # in DATABASE_URL to recognise "this points at live".
 PORT=15432
 CONTAINER=zuptech-live-tunnel

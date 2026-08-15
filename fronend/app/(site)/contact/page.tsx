@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import { site, jsonLd } from "@/lib/site";
-import { ContactForm } from "@/components/contact-form";
-import { ContactCards } from "@/components/contact-cards";
 import { ContactOffice } from "@/components/contact-office";
 import { TeamStrip } from "@/components/team-strip";
 import { getSiteConfig, getTeam } from "@/lib/api";
@@ -55,25 +53,23 @@ export default async function ContactPage() {
         dangerouslySetInnerHTML={{ __html: jsonLd(contactJsonLd) }}
       />
 
-      {/* No hero band. Contact is a page you arrive at to do one thing, and a
-          full-height dark slab pushed the form below the fold to say nothing
-          the heading doesn't. The heading stays as the page's <h1>, on the
-          normal background, directly above the thing it introduces. */}
-      <section className="px-5 pt-10">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-          <h1 className="text-[clamp(26px,4vw,38px)] font-bold leading-[1.1] tracking-[-0.03em] lg:col-span-2">
-            {copy.contactHeading}
-          </h1>
-          <div className="rounded-3xl border border-zup-body/8 bg-white px-6 py-7 sm:px-8 sm:py-8">
-            <ContactForm heading={copy.contactFormHeading} />
-          </div>
-          <aside>
-            <ContactCards />
-          </aside>
-        </div>
-      </section>
+      {/*
+        The message form, the Sales desk / WhatsApp / Email cards and the
+        visible heading were removed on 2026-08-13 at the client's request.
 
-      <section className="px-5 pt-6">
+        The heading survives as a visually-hidden <h1>. A page still needs
+        exactly one — for search engines, and so a screen reader announces
+        something on arrival other than the first thing it happens to find —
+        and the same treatment is already used on the home page for the same
+        reason. It renders nothing on screen.
+
+        NOTE: with the form gone there is no route from the site into
+        ContactMessage. The backend endpoint and the admin's Messages screen
+        still exist and will simply never receive anything new.
+      */}
+      <h1 className="sr-only">{copy.contactHeading}</h1>
+
+      <section className="px-5 pt-10">
         <div className="mx-auto max-w-[1120px]">
           <ContactOffice />
         </div>

@@ -106,6 +106,7 @@ export function toAdminProduct(p: AdminProduct & { photos?: (string | null)[] })
 
 interface PublicSiteConfig {
   featuredIds: string[];
+  homeRowIds: string[];
   copy: SiteCopy;
   contact: SiteContact;
   gtm: string | { id: string } | null;
@@ -231,6 +232,7 @@ export async function loadAdminState(
     // Public endpoint — no module gate, every role needs the site copy.
     slice<PublicSiteConfig>("sitecontent", "Site content", () => unwrap(api.api["site-config"].get(), "GET /api/site-config"), {
       featuredIds: [],
+      homeRowIds: [],
       copy: emptyState().copy,
       contact: emptyState().contact,
       gtm: null,
@@ -249,6 +251,7 @@ export async function loadAdminState(
       sections,
       categories,
       featuredIds: config.featuredIds,
+      homeRowIds: config.homeRowIds ?? [],
       orders,
       leads,
       industrialLeads,
@@ -332,6 +335,12 @@ export const setMessageRead = (id: string, read: boolean) =>
 
 export const setFeatured = (ids: string[]) =>
   unwrap(api.admin.api.products.featured.patch({ ids }), "PATCH /admin/api/products/featured");
+
+export const setHomeRow = (ids: string[]) =>
+  unwrap(
+    api.admin.api.products["home-row"].patch({ ids }),
+    "PATCH /admin/api/products/home-row",
+  );
 
 export const putSlides = (slides: HeroSlide[]) =>
   unwrap(
@@ -431,7 +440,8 @@ function productBody(p: AdminProduct) {
     slug: p.slug,
     categoryId: p.categoryId,
     price: whole(p.price),
-    minDeposit: whole(p.minDeposit),
+    minDepositPct: whole(p.minDepositPct),
+    recommendedIds: p.recommendedIds,
     onSale: p.onSale,
     salePrice: whole(p.salePrice),
     deliveryFeeInsideDhaka: whole(p.deliveryFeeInsideDhaka),

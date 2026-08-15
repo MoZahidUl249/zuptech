@@ -10,12 +10,20 @@ const productFields = {
   // Category row id — the section is reached through it, never set directly.
   categoryId: t.String({ minLength: 1, maxLength: 50 }),
   price: t.Integer({ minimum: 0 }),
-  // Both are flat BDT now. `salePrice` is what the customer pays, not a
-  // discount to apply, so there is no ceiling to validate against price here —
-  // sellingPrice() ignores a sale price that isn't below the list price.
-  minDeposit: t.Integer({ minimum: 0 }),
+  // A whole percentage of price, capped — the ceiling is the point, since an
+  // unbounded "percentage" is how a display like "340% down payment" gets in.
+  // Display-only; see schema.prisma before letting anything charge from it.
+  minDepositPct: t.Integer({ minimum: 0, maximum: 100 }),
+  // `salePrice` is flat BDT: what the customer pays, not a discount to apply,
+  // so there is no ceiling to validate against price here — sellingPrice()
+  // ignores a sale price that isn't below the list price.
   onSale: t.Boolean(),
   salePrice: t.Integer({ minimum: 0 }),
+  // Curated, ordered product ids shown under this product. Unvalidated against
+  // the catalogue on purpose: an id that stops resolving costs one missing card
+  // (getProductsByIds drops it), and rejecting the whole save because an
+  // unrelated product was deleted would be worse.
+  recommendedIds: t.Array(t.String({ minLength: 1, maxLength: 50 })),
   deliveryFeeInsideDhaka: t.Integer({ minimum: 0 }),
   deliveryFeeOutsideDhaka: t.Integer({ minimum: 0 }),
   installationFeeInsideDhaka: t.Integer({ minimum: 0 }),

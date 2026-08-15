@@ -18,6 +18,7 @@ import { FormGroup, FormGroups } from "../primitives/form-section";
 import { numberInput, slugChars } from "@/lib/utils";
 import { PhotoSlot, VideoSlot } from "./media-uploader";
 import { OfferTierEditor, duplicateMinQtys } from "./offer-tier-editor";
+import { ProductPicker } from "./product-picker";
 
 export function ProductEditor({
   product: p,
@@ -301,14 +302,19 @@ export function ProductEditor({
                 className={inputCls}
               />
             </Field>
-            <Field label="Smallest deposit (৳)">
+            {/* A percentage since 2026-08-13, not taka. `max` matters: the
+                backend caps it at 100 and rejects anything above, so without
+                this the save fails with a validation error rather than the
+                field simply refusing the number. */}
+            <Field label="Smallest deposit (% of price)">
               <input
                 type="number"
                 inputMode="numeric"
                 min={0}
-                value={p.minDeposit}
+                max={100}
+                value={p.minDepositPct}
                 onChange={(e) =>
-                  onChange({ minDeposit: numberInput(e.target.value) })
+                  onChange({ minDepositPct: numberInput(e.target.value) })
                 }
                 className={inputCls}
               />
@@ -466,6 +472,30 @@ export function ProductEditor({
 
         <FormGroup
           step={6}
+          value="recommended"
+          title="Recommended products"
+          help="Shown at the bottom of this product's page, in this order. Nothing is suggested automatically — an empty list hides the row."
+          summary={
+            p.recommendedIds.length === 0
+              ? "None"
+              : `${p.recommendedIds.length} product${p.recommendedIds.length === 1 ? "" : "s"}`
+          }
+        >
+          <ProductPicker
+            selectId={`rec-add-${p.id || "new"}`}
+            label="Recommended products"
+            addLabel="Recommend a product"
+            emptyNote="Nothing recommended — this product's page will not show the row."
+            ids={p.recommendedIds}
+            onChange={(recommendedIds) => onChange({ recommendedIds })}
+            // A product recommending itself would render a card linking to the
+            // page you are already on.
+            excludeId={p.id}
+          />
+        </FormGroup>
+
+        <FormGroup
+          step={7}
           value="stock"
           title="Stock"
           help="How many you have, and when to remind you to order more."
@@ -494,7 +524,7 @@ export function ProductEditor({
         </FormGroup>
 
         <FormGroup
-          step={7}
+          step={8}
           value="warranty"
           title="Warranty"
           help="Set this and a warranty record is created automatically when an order is delivered."
@@ -521,7 +551,7 @@ export function ProductEditor({
         </FormGroup>
 
         <FormGroup
-          step={8}
+          step={9}
           value="visibility"
           title="Show on the website"
           summary={p.visible ? "Live on the website" : "Hidden"}
