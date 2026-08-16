@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Eye, Copy, ExternalLink } from "lucide-react";
 import { isUnsaved, useAdmin, taka, tempId, type AdminProduct } from "@/lib/admin";
@@ -285,6 +285,49 @@ function LandingPageEditor({
   const set = <K extends keyof LandingPage>(key: K, value: LandingPage[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
 
+  /*
+   * Which sections still have nothing in them.
+   *
+   * Collapsing all sixteen made the editor readable, and made a wordless
+   * campaign indistinguishable from a finished one: every band looks the same
+   * closed. Worse, the ONE section open by default is Setup, whose fields are
+   * the only ones a visitor never sees — so the natural thing to do is type in
+   * the box that is already open, save, and find the page unchanged. That is
+   * exactly what happened on the live site.
+   */
+  const filled = (...values: unknown[]) =>
+    values.some((v) =>
+      typeof v === "string" ? v.trim().length > 0 : Array.isArray(v) ? v.length > 0 : Boolean(v),
+    );
+
+  const empty = {
+    productRow: !filled(draft.productRowIds),
+    header: !filled(draft.hotlineLabel, draft.hotlineNumber, draft.headerCtaLabel),
+    hero: !filled(
+      draft.headline, draft.subheadline, lists.trustBadges, draft.discountBadge,
+      draft.ribbonText, draft.heroCtaNote, draft.imageHint, draft.heroVideoUrl,
+    ),
+    brand: !filled(draft.brandStripTitle, lists.brandLogos),
+    video: !filled(draft.videoUrl, draft.videoTitle),
+    features: !filled(draft.featuresTitle, blocks.features),
+    specs: !filled(draft.specTitle, draft.specMeta, blocks.specs),
+    bundles: !filled(draft.bundlesTitle, draft.bundlesSubtitle, draft.bundleUnitLabel),
+    quality: !filled(draft.qcTitle, draft.qcBody, lists.qcPoints),
+    countdown: !filled(draft.countdownTitle, draft.countdownNote, draft.countdownCtaLabel, draft.countdownEndsAt),
+    testimonials: !filled(draft.testimonialsTitle, blocks.testimonials),
+    form: !filled(draft.formTitle, draft.formIntro, draft.formLabels?.submit),
+    footer: !filled(draft.footerTagline, draft.footerAbout, lists.footerLines, draft.footerNote),
+  };
+
+  /** Nothing a visitor would read is set — the page is a price and a photo. */
+  const wordless = empty.hero && empty.features && empty.specs && empty.quality && empty.form;
+
+  const groupsRef = useRef<HTMLDivElement>(null);
+  const setAllOpen = (open: boolean) =>
+    groupsRef.current?.querySelectorAll("details").forEach((d) => {
+      d.open = open;
+    });
+
   const save = async () => {
     setSaving(true);
     const patch: Partial<LandingPageDraft> = {
@@ -531,11 +574,44 @@ function LandingPageEditor({
         stored value still round-trips on save, so nothing is lost if the
         column comes back.
       */}
-      <div className="flex flex-col gap-2.5">
+      {/*
+        A campaign with no words in it still saves, still publishes, and still
+        looks finished in this editor — the visitor just gets the product name
+        and a price. Say so, where the person who has to fix it is looking.
+      */}
+      {wordless ? (
+        <Card className="border-warn-fg/30 bg-warn-bg/40 px-5 py-4">
+          <p className="text-ui-sm font-bold text-warn-fg">
+            This page has no wording yet.
+          </p>
+          <p className="mt-1 text-ui-sm leading-relaxed text-zup-gray">
+            Visitors currently see the product&apos;s own name, photo and price —
+            nothing you have written. The words live in steps 4 onwards; the
+            ones marked <span className="font-semibold">empty</span> are still
+            blank. Step 1 is internal only and never appears on the page.
+          </p>
+        </Card>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-ui-micro text-zup-soft">
+          The page, section by section, in the order visitors meet them.
+        </p>
+        <div className="flex gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setAllOpen(true)}>
+            Open all
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setAllOpen(false)}>
+            Close all
+          </Button>
+        </div>
+      </div>
+
+      <div ref={groupsRef} className="flex flex-col gap-2.5">
         <Group
           step={1}
           title="Setup"
-          hint="Names and wiring. None of this is shown to visitors."
+          hint="Names and wiring — internal only, never shown on the page."
           defaultOpen
         >
           <div className="grid gap-3.5 sm:grid-cols-2">
@@ -598,6 +674,7 @@ function LandingPageEditor({
         <Group
           step={2}
           title="Product row"
+          empty={empty.productRow}
           hint="A strip of other products near the bottom of the page, above the footer. Leave empty to hide it."
         >
           <ProductPicker
@@ -617,6 +694,7 @@ function LandingPageEditor({
         <Group
           step={3}
           title="Header strip"
+          empty={empty.header}
           hint="The thin bar at the very top: hotline and the button beside it."
         >
           <div className="grid gap-3.5 sm:grid-cols-3">
@@ -641,7 +719,9 @@ function LandingPageEditor({
         <Group
           step={4}
           title="Hero"
-          hint="The first screen: headline, the badges around it, and the main button."
+          empty={empty.hero}
+          hint="The first screen: headline, the badges around it, and the main button. This is where the page's words start."
+          defaultOpen
         >
           <Field label="Public headline">
             <Input
@@ -765,7 +845,8 @@ function LandingPageEditor({
           </div>
         </Group>
 
-        <Group step={6} title="Brand strip" hint="The logos row: payment and courier partners.">
+        <Group step={6} title="Brand strip"
+          empty={empty.brand} hint="The logos row: payment and courier partners.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Brand strip title">
               <Input value={draft.brandStripTitle ?? ""} disabled={readOnly}
@@ -781,7 +862,8 @@ function LandingPageEditor({
           </div>
         </Group>
 
-        <Group step={7} title="Video" hint="Leave the URL blank and the whole section disappears.">
+        <Group step={7} title="Video"
+          empty={empty.video} hint="Leave the URL blank and the whole section disappears.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Video section title">
               <Input value={draft.videoTitle ?? ""} disabled={readOnly}
@@ -795,7 +877,8 @@ function LandingPageEditor({
           </div>
         </Group>
 
-        <Group step={8} title="Features" hint="The numbered selling points down the page.">
+        <Group step={8} title="Features"
+          empty={empty.features} hint="The numbered selling points down the page.">
           <Field label="Features title">
             <Input value={draft.featuresTitle ?? ""} disabled={readOnly}
               onChange={(e) => set("featuresTitle", e.target.value)} />
@@ -808,7 +891,8 @@ function LandingPageEditor({
           </Field>
         </Group>
 
-        <Group step={9} title="Spec sheet" hint="The grid of numbers under the features.">
+        <Group step={9} title="Spec sheet"
+          empty={empty.specs} hint="The grid of numbers under the features.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Spec sheet title">
               <Input value={draft.specTitle ?? ""} disabled={readOnly}
@@ -831,6 +915,7 @@ function LandingPageEditor({
         <Group
           step={10}
           title="Bundles"
+          empty={empty.bundles}
           hint="Buy-more rows. Only the wording is here — every price comes from the product's quantity offers."
         >
           <div className="grid gap-3.5 sm:grid-cols-2">
@@ -892,7 +977,8 @@ function LandingPageEditor({
           ) : null}
         </Group>
 
-        <Group step={11} title="Quality / anti-counterfeit" hint="The reassurance block with the photo.">
+        <Group step={11} title="Quality / anti-counterfeit"
+          empty={empty.quality} hint="The reassurance block with the photo.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Quality section title">
               <Input value={draft.qcTitle ?? ""} disabled={readOnly}
@@ -914,7 +1000,8 @@ function LandingPageEditor({
           </Field>
         </Group>
 
-        <Group step={12} title="Countdown" hint="Urgency block. Leave the deadline blank to keep the copy without a clock.">
+        <Group step={12} title="Countdown"
+          empty={empty.countdown} hint="Urgency block. Leave the deadline blank to keep the copy without a clock.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Countdown title">
               <Input value={draft.countdownTitle ?? ""} disabled={readOnly}
@@ -943,7 +1030,8 @@ function LandingPageEditor({
           </Field>
         </Group>
 
-        <Group step={13} title="Testimonials" hint="Customer quotes.">
+        <Group step={13} title="Testimonials"
+          empty={empty.testimonials} hint="Customer quotes.">
           <Field label="Testimonials title">
             <Input value={draft.testimonialsTitle ?? ""} disabled={readOnly}
               onChange={(e) => set("testimonialsTitle", e.target.value)} />
@@ -956,7 +1044,8 @@ function LandingPageEditor({
           </Field>
         </Group>
 
-        <Group step={14} title="Order form" hint="The cash-on-delivery form. Every label is yours, including the button.">
+        <Group step={14} title="Order form"
+          empty={empty.form} hint="The cash-on-delivery form. Every label is yours, including the button.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Order form title">
               <Input value={draft.formTitle ?? ""} disabled={readOnly}
@@ -998,7 +1087,8 @@ function LandingPageEditor({
           </div>
         </Group>
 
-        <Group step={15} title="Footer" hint="The last block on the page.">
+        <Group step={15} title="Footer"
+          empty={empty.footer} hint="The last block on the page.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Footer tagline">
               <Input value={draft.footerTagline ?? ""} disabled={readOnly}
@@ -1121,12 +1211,23 @@ function Group({
   title,
   hint,
   defaultOpen,
+  empty,
   children,
 }: {
   step: number;
   title: string;
   hint: string;
   defaultOpen?: boolean;
+  /**
+   * Nothing in this section is filled in yet.
+   *
+   * Collapsing every section made the editor readable and made it impossible
+   * to see, at a glance, that a campaign has no words in it. A page can be
+   * saved with all fifteen content sections blank and still look "saved" —
+   * the visitor just gets the product name and a price. The chip is what
+   * turns fifteen identical closed bands into a to-do list.
+   */
+  empty?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -1139,7 +1240,14 @@ function Group({
           {step}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-ui-sm font-bold text-zup-ink">{title}</span>
+          <span className="block text-ui-sm font-bold text-zup-ink">
+            {title}
+            {empty ? (
+              <span className="ml-2 rounded-full bg-secondary px-2 py-0.5 text-ui-micro font-bold uppercase tracking-[0.04em] text-zup-soft">
+                empty
+              </span>
+            ) : null}
+          </span>
           <span className="mt-0.5 block text-ui-micro leading-snug text-zup-soft">{hint}</span>
         </span>
         <span
