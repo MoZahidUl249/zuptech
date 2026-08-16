@@ -8,6 +8,7 @@ import { formatBDT, site , jsonLd } from "@/lib/site";
 import { ProductActions } from "@/components/product-actions";
 import { ProductCard, ProductImagePlaceholder } from "@/components/product-card";
 import { ProductVideo } from "@/components/product-video";
+import { ProductPhotoZoom } from "@/components/product-photo-zoom";
 import { parseProductVideo } from "@/lib/video";
 
 export async function generateMetadata({
@@ -182,11 +183,10 @@ export default async function ProductPage({
           {product.photos?.[0] ? (
             // Backend-hosted product photos (admin uploads) — arbitrary
             // origins, so next/image optimization doesn't apply.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <ProductPhotoZoom
               src={product.photos[0]}
               alt={`${product.name} — main photo`}
-              className="w-full rounded-[2px] border border-zup-body/6 object-cover [aspect-ratio:1]"
+              className="w-full rounded-[2px] border border-zup-body/6 [aspect-ratio:1]"
             />
           ) : (
             <ProductImagePlaceholder
