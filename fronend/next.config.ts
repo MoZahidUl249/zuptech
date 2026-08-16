@@ -5,6 +5,45 @@ const CLOUDINARY_ORIGIN = "https://res.cloudinary.com";
 /** Cookie-free YouTube host — see lib/video.ts. */
 const YOUTUBE_EMBED_ORIGIN = "https://www.youtube-nocookie.com";
 
+/*
+ * Google Tag Manager, GA4 and Tag Assistant.
+ *
+ * Split by what each directive actually needs, because "add googletagmanager"
+ * is only a third of the story and the missing two thirds fail silently — the
+ * container loads, the tags report themselves as present, and the hits never
+ * arrive. Tag Assistant flagged exactly that on the live site.
+ *
+ * SCRIPT: the container and the gtag loader both come from googletagmanager.
+ * tagassistant is the debug client, loaded only while previewing a container.
+ *
+ * COLLECT: GA4 does NOT post to www.google-analytics.com in most regions — it
+ * posts to a REGIONAL endpoint (region1.google-analytics.com and friends), so
+ * naming the bare host blocks the very requests that carry the data. The
+ * analytics.google.com wildcard covers the newer collection paths, and the
+ * googletagmanager wildcard covers server-side containers and custom domains.
+ *
+ * ADS: a GTM container almost always ends up carrying a Google Ads
+ * conversion or remarketing tag, which pixels google.com and doubleclick.
+ * Harmless if unused; without them, conversions silently never record. Drop
+ * these two lines if this business never runs Google Ads.
+ */
+const GOOGLE_TAG_SCRIPT_ORIGINS = [
+  "https://www.googletagmanager.com",
+  "https://tagassistant.google.com",
+];
+const GOOGLE_COLLECT_ORIGINS = [
+  "https://www.google-analytics.com",
+  "https://*.google-analytics.com",
+  "https://*.analytics.google.com",
+  "https://*.googletagmanager.com",
+];
+const GOOGLE_ADS_PIXEL_ORIGINS = [
+  "https://www.google.com",
+  "https://stats.g.doubleclick.net",
+  "https://googleads.g.doubleclick.net",
+];
+const list = (origins: string[]) => origins.join(" ");
+
 const securityHeaders = [
   // Prevent MIME-type sniffing
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -42,18 +81,22 @@ function contentSecurityPolicy(): string {
   return [
     "default-src 'self'",
     // 'unsafe-inline'/'unsafe-eval': Next's bootstrap + the GTM loader.
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${list(GOOGLE_TAG_SCRIPT_ORIGINS)}`,
     "style-src 'self' 'unsafe-inline'",
     // i.ytimg.com: the poster frame for a YouTube product video, shown before
     // the viewer clicks play (components/product-video.tsx).
-    `img-src 'self' data: blob: ${CLOUDINARY_ORIGIN} https://i.ytimg.com https://www.googletagmanager.com`,
+    // GA4 and Ads still fall back to pixel requests for some hits, so the
+    // collection hosts belong here as well as in connect-src.
+    `img-src 'self' data: blob: ${CLOUDINARY_ORIGIN} https://i.ytimg.com ${list(GOOGLE_TAG_SCRIPT_ORIGINS)} ${list(GOOGLE_COLLECT_ORIGINS)} ${list(GOOGLE_ADS_PIXEL_ORIGINS)}`,
     `media-src 'self' ${CLOUDINARY_ORIGIN}`,
     // Only reached once someone actually plays a YouTube product video — the
     // page embeds no iframe until then.
-    `frame-src ${YOUTUBE_EMBED_ORIGIN}`,
+    // googletagmanager/tagassistant: the container preview iframe. Without
+    // them "Preview" in GTM connects and then shows nothing.
+    `frame-src ${YOUTUBE_EMBED_ORIGIN} ${list(GOOGLE_TAG_SCRIPT_ORIGINS)}`,
     "font-src 'self' data:",
     // The browser talks to the API same-origin through the rewrites below.
-    "connect-src 'self' https://www.google-analytics.com",
+    `connect-src 'self' ${list(GOOGLE_COLLECT_ORIGINS)} ${list(GOOGLE_TAG_SCRIPT_ORIGINS)} ${list(GOOGLE_ADS_PIXEL_ORIGINS)}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
