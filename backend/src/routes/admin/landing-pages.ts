@@ -4,12 +4,14 @@ import {
   createLandingPageDto,
   listLandingPagesQueryDto,
   updateLandingPageDto,
+  uploadLandingImageDto,
 } from "../../dtos/landing-pages.dto";
 import { prisma } from "../../lib/db";
 import { LIST_CAP } from "../../lib/rules";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { landingPageInclude, toLandingPage } from "../../lib/serialize";
+import { deleteMediaByUrl, uploadMedia } from "../../lib/storage";
 import { staffGuard } from "./guard";
 
 /**
@@ -162,11 +164,42 @@ export const adminLandingPages = new Elysia({
     { body: updateLandingPageDto },
   )
 
+  /**
+   * The quality block's picture.
+   *
+   * Same shape as every other image upload here — validated, re-uploaded with
+   * our own Cloudinary credentials, and the previous file deleted only after
+   * the row points at the new one, so a failed write never leaves the campaign
+   * showing a picture that no longer exists.
+   */
+  .post(
+    "/admin/api/landing-pages/:id/image",
+    async ({ params, body, staffCtx }) => {
+      assertCan(staffCtx, "landingpages", "manage");
+      const existing = await prisma.landingPage.findUnique({ where: { id: params.id } });
+      if (!existing) throw notFound("Landing page");
+
+      const media = await uploadMedia(body.file, "landing", existing.id, 0);
+      const page = await prisma.landingPage.update({
+        where: { id: existing.id },
+        data: { qcImage: media.url },
+        include: landingPageInclude,
+      });
+      if (existing.qcImage) await deleteMediaByUrl(existing.qcImage);
+      return toLandingPage(page);
+    },
+    { body: uploadLandingImageDto },
+  )
+
   .delete("/admin/api/landing-pages/:id", async ({ params, staffCtx }) => {
     assertCan(staffCtx, "landingpages", "manage");
     const existing = await prisma.landingPage.findUnique({ where: { id: params.id } });
     if (!existing) throw notFound("Landing page");
     await prisma.landingPage.delete({ where: { id: params.id } });
+    // The row is gone, so nothing can point at its picture any more — drop it
+    // rather than leave a paid-for file nobody can reach. Same order as the
+    // upload above: the database write first, the file second.
+    if (existing.qcImage) await deleteMediaByUrl(existing.qcImage);
     return { ok: true };
   })
 

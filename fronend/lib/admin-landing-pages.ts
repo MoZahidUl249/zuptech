@@ -66,6 +66,8 @@ export interface LandingPage {
   qcTitle: string;
   qcBody: string;
   qcPoints: string[];
+  /** Cloudinary URL for the quality block. "" shows the placeholder. */
+  qcImage: string;
   qcImageHint: string;
   countdownTitle: string;
   countdownNote: string;
@@ -195,6 +197,8 @@ export type LandingPageDraft = Omit<
   | "viewCount"
   | "orderCount"
   | "revenue"
+  /* Written only by POST …/image, never by a PATCH of the form. */
+  | "qcImage"
   | "productName"
   | "productSlug"
   | "productVisible"
@@ -408,3 +412,10 @@ export function datetimeLocalValue(v: string | Date | null | undefined): string 
   const d = v instanceof Date ? v : new Date(v);
   return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 16);
 }
+
+/** Upload the quality block's picture. Returns the campaign with the new URL. */
+export const uploadLandingImage = (id: string, file: File) =>
+  unwrap(
+    api.admin.api["landing-pages"]({ id }).image.post({ file }),
+    "POST /admin/api/landing-pages/:id/image",
+  );

@@ -187,3 +187,9 @@ export const listLandingPagesQueryDto = t.Object({
 export type CreateLandingPageDto = typeof createLandingPageDto.static;
 export type UpdateLandingPageDto = typeof updateLandingPageDto.static;
 export type ListLandingPagesQueryDto = typeof listLandingPagesQueryDto.static;
+
+/** The quality block's picture. Same 8 MB image ceiling as every other upload. */
+export const uploadLandingImageDto = t.Object({
+  file: t.File({ type: "image", maxSize: "8m" }),
+});
+export type UploadLandingImageDto = typeof uploadLandingImageDto.static;

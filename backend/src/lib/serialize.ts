@@ -479,6 +479,7 @@ function campaignContent(lp: LandingPageRow) {
     qcTitle: lp.qcTitle,
     qcBody: lp.qcBody,
     qcPoints: lp.qcPoints,
+    qcImage: lp.qcImage,
     qcImageHint: lp.qcImageHint,
     countdownTitle: lp.countdownTitle,
     countdownNote: lp.countdownNote,

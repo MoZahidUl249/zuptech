@@ -498,11 +498,23 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
       {pub.qcTitle || pub.qcBody ? (
         <Section bg={theme.tintBg}>
           <Inner>
-            <div className="flex aspect-[16/9] items-center justify-center rounded-2xl border border-zup-line bg-[repeating-linear-gradient(135deg,#f4f5f7_0_12px,#eceef1_12px_24px)]">
-              <span className="rounded-full bg-white/80 px-3 py-1 text-[12px] text-zup-soft">
-                {pub.qcImageHint}
-              </span>
-            </div>
+            {/* The uploaded picture when the campaign has one; the striped
+                wireframe, captioned with the art direction, until it does. */}
+            {pub.qcImage ? (
+              <Image
+                src={pub.qcImage}
+                alt={pub.qcImageHint || pub.qcTitle || product.name}
+                width={720}
+                height={405}
+                className="h-auto w-full rounded-2xl border border-zup-line object-cover"
+              />
+            ) : (
+              <div className="flex aspect-[16/9] items-center justify-center rounded-2xl border border-zup-line bg-[repeating-linear-gradient(135deg,#f4f5f7_0_12px,#eceef1_12px_24px)]">
+                <span className="rounded-full bg-white/80 px-3 py-1 text-[12px] text-zup-soft">
+                  {pub.qcImageHint}
+                </span>
+              </div>
+            )}
             {pub.qcTitle ? (
               <h2 className="mt-5 text-[21px] font-bold leading-snug">{pub.qcTitle}</h2>
             ) : null}

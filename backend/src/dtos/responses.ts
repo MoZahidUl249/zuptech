@@ -341,6 +341,7 @@ export interface CampaignContentDto {
   qcTitle: string;
   qcBody: string;
   qcPoints: string[];
+  qcImage: string;
   qcImageHint: string;
   countdownTitle: string;
   countdownNote: string;

@@ -480,6 +480,15 @@ model LandingPage {
   qcTitle     String   @default("")
   qcBody      String   @default("")
   qcPoints    String[] @default([])
+  /// A Cloudinary URL, uploaded per campaign. Blank falls back to the striped
+  /// placeholder captioned with `qcImageHint` below.
+  ///
+  /// Landing pages had no image of their own at all: `qcImageHint` was only a
+  /// note describing the art that belonged there, so this block rendered a
+  /// grey wireframe on every published campaign and nothing could change it.
+  qcImage     String   @default("")
+  /// What the picture should show. Art direction for whoever uploads it, and
+  /// the caption on the placeholder until they do.
   qcImageHint String   @default("")
 
   /// Urgency block. `countdownEndsAt` null hides the timer but keeps the copy.

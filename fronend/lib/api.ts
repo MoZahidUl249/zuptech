@@ -495,6 +495,8 @@ export interface PublicLandingPage {
   qcTitle: string;
   qcBody: string;
   qcPoints: string[];
+  /** Cloudinary URL for the quality block. "" shows the placeholder. */
+  qcImage: string;
   qcImageHint: string;
   countdownTitle: string;
   countdownNote: string;

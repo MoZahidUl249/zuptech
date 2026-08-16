@@ -14,6 +14,7 @@ import {
   duplicateLandingPage,
   campaignProblems,
   datetimeLocalValue,
+  uploadLandingImage,
   BUNDLE_MAX_ROWS,
   type ColorKey,
   type LandingPage,
@@ -312,7 +313,7 @@ function LandingPageEditor({
     features: !filled(draft.featuresTitle, blocks.features),
     specs: !filled(draft.specTitle, draft.specMeta, blocks.specs),
     bundles: !filled(draft.bundlesTitle, draft.bundlesSubtitle, draft.bundleUnitLabel),
-    quality: !filled(draft.qcTitle, draft.qcBody, lists.qcPoints),
+    quality: !filled(draft.qcTitle, draft.qcBody, lists.qcPoints, draft.qcImage),
     countdown: !filled(draft.countdownTitle, draft.countdownNote, draft.countdownCtaLabel, draft.countdownEndsAt),
     testimonials: !filled(draft.testimonialsTitle, blocks.testimonials),
     form: !filled(draft.formTitle, draft.formIntro, draft.formLabels?.submit),
@@ -321,6 +322,29 @@ function LandingPageEditor({
 
   /** Nothing a visitor would read is set — the page is a price and a photo. */
   const wordless = empty.hero && empty.features && empty.specs && empty.quality && empty.form;
+
+  /*
+   * The quality block's picture.
+   *
+   * Uploaded on its own request rather than carried in the form's PATCH: it is
+   * a multipart file, the server stores it and hands back a URL, and the URL
+   * is never something this screen should be able to type. Same split every
+   * other image on the site uses — the button IS the save.
+   */
+  const [uploading, setUploading] = useState(false);
+  const uploadQcImage = async (file: File) => {
+    setUploading(true);
+    try {
+      const updated = await uploadLandingImage(page.id, file);
+      set("qcImage", updated.qcImage);
+      await onChanged();
+      toast.success("Picture uploaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't upload the picture");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const groupsRef = useRef<HTMLDivElement>(null);
   const setAllOpen = (open: boolean) =>
@@ -984,9 +1008,51 @@ function LandingPageEditor({
               <Input value={draft.qcTitle ?? ""} disabled={readOnly}
                 onChange={(e) => set("qcTitle", e.target.value)} />
             </Field>
-            <Field label="Quality image hint">
+            <Field label="Quality picture">
+              {draft.qcImage ? (
+                <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a
+                      remote Cloudinary URL in an admin preview; next/image
+                      would need this host in the config for no benefit here. */}
+                  <img
+                    src={draft.qcImage}
+                    alt=""
+                    className="h-16 w-28 flex-none rounded-lg border border-zup-line object-cover"
+                  />
+                  <p className="text-ui-micro leading-snug text-zup-soft">
+                    Showing on the page. Upload another to replace it.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-ui-micro leading-snug text-zup-soft">
+                  No picture yet — the page shows a grey placeholder with the
+                  description below written on it.
+                </p>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                disabled={readOnly || uploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  // Clear the input so re-picking the same file fires again.
+                  e.target.value = "";
+                  if (file) void uploadQcImage(file);
+                }}
+                className="mt-2 block w-full text-ui-sm file:mr-3 file:rounded-lg file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-ui-sm file:font-semibold"
+              />
+              {uploading ? (
+                <p className="mt-1 text-ui-micro font-semibold text-zup-soft">Uploading…</p>
+              ) : null}
+            </Field>
+            <Field label="What the picture should show">
               <Input value={draft.qcImageHint ?? ""} disabled={readOnly}
-                onChange={(e) => set("qcImageHint", e.target.value)} />
+                onChange={(e) => set("qcImageHint", e.target.value)}
+                placeholder="e.g. box open, all tools laid out" />
+              <p className="mt-1 text-ui-micro leading-snug text-zup-soft">
+                Art direction for whoever takes the photo, and the caption on
+                the placeholder until one is uploaded.
+              </p>
             </Field>
           </div>
           <Field label="Quality section body">
