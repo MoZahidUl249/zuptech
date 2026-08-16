@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { Check, Phone, Play } from "lucide-react";
+import { Check, Phone } from "lucide-react";
 import { getLandingPage, getProductsByIds, getSiteConfig } from "@/lib/api";
 import { formatBDTBangla as formatBDT, toBanglaDigits } from "@/lib/site";
 import { LandingPageGtm } from "@/components/marketing/landing-page-gtm";
@@ -386,16 +386,18 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
                 {pub.videoTitle}
               </h2>
             ) : null}
-            <a
-              href={pub.videoUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex aspect-video items-center justify-center rounded-2xl border border-zup-line bg-zup-mist"
-            >
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-zup-blue text-white">
-                <Play className="h-6 w-6 fill-current" aria-hidden />
-              </span>
-            </a>
+            {/*
+              The real player, not a picture of one.
+             
+              This was an <a> wrapping a grey box and a play glyph: it opened
+              YouTube in a new tab and could never play on the page, so a
+              campaign that set a video sent its traffic away at the moment it
+              was most engaged. ProductVideo is what the product page and the
+              hero above already use — a genuine thumbnail, and the iframe only
+              after a click, so the embed still costs nothing to the visitors
+              who never press play.
+            */}
+            <ProductVideo url={pub.videoUrl} />
           </Inner>
         </Section>
       ) : null}
