@@ -6,6 +6,7 @@ import { getProductBySlug, getProductsByIds } from "@/lib/api";
 import { isUnavailable, type Product } from "@/lib/products";
 import { formatBDT, site , jsonLd } from "@/lib/site";
 import { ProductActions } from "@/components/product-actions";
+import { TrackViewItem } from "@/components/track-view-item";
 import { ProductCard, ProductImagePlaceholder } from "@/components/product-card";
 import { ProductVideo } from "@/components/product-video";
 import { ProductPhotoZoom } from "@/components/product-photo-zoom";
@@ -161,6 +162,14 @@ export default async function ProductPage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbJsonLd) }}
+      />
+
+      {/* Reports that this product was actually viewed — a client island, so
+          the page itself stays server-rendered. */}
+      <TrackViewItem
+        id={product.id}
+        name={product.name}
+        price={product.salePrice ?? product.price}
       />
 
       <nav aria-label="Breadcrumb" className="mb-1.5">

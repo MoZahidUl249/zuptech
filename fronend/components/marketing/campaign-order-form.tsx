@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
 import { formatBDTBangla as formatBDT, toBanglaDigits } from "@/lib/site";
 import type { CampaignBundle, CampaignFormLabels } from "@/lib/api";
 
@@ -25,6 +26,7 @@ export function CampaignOrderForm({
   unitLabel,
   campaignSlug,
   payMethod,
+  productName,
 }: {
   productId: string;
   bundles: CampaignBundle[];
@@ -35,6 +37,8 @@ export function CampaignOrderForm({
   unitLabel: string;
   /** Attributes the order to this campaign, so its sales can be counted. */
   campaignSlug: string;
+  /** For analytics only — an id in a GA4 report is unreadable. */
+  productName: string;
   /**
    * The payment method to place the order under, resolved on the server from
    * the enabled list.
@@ -70,6 +74,10 @@ export function CampaignOrderForm({
 
     setError(null);
     setBusy(true);
+    trackBeginCheckout(
+      [{ item_id: productId, item_name: productName, price: chosen.unitPrice, quantity: qty }],
+      chosen.total,
+    );
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -91,6 +99,12 @@ export function CampaignOrderForm({
         setError(body?.error ?? "Something went wrong");
         return;
       }
+      /* The campaign's own funnel. Same event names as the storefront, so a
+         GA4 report covers both without a second set of tags — the campaign is
+         distinguishable by page_location, not by a different vocabulary. */
+      trackPurchase(String(body.orderId), Number(body.total ?? chosen.total), [
+        { item_id: productId, item_name: productName, price: chosen.unitPrice, quantity: qty },
+      ]);
       setDone(body.orderId as string);
     } catch {
       setError("Network error");

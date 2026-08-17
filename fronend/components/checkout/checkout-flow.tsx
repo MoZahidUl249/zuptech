@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { composeAddress, stripComposedAddress } from "@/lib/address";
@@ -16,7 +16,9 @@ import {
 } from "@/lib/checkout-draft";
 import { useCustomer } from "@/lib/customer";
 import { setAuthPhone } from "@/lib/orders";
+import type { Product } from "@/lib/products";
 import { cartToItems, useQuote } from "@/lib/quote";
+import { trackBeginCheckout, trackPurchase, type TrackedItem } from "@/lib/analytics";
 import { formatBDT } from "@/lib/site";
 import { useDeliveryZone } from "@/lib/zone";
 import { CustomerFields, normalizePhone, validateCustomer } from "./customer-fields";
@@ -41,7 +43,7 @@ import { SavedDetailsCard } from "./saved-details-card";
  *   Guest — three labelled blocks on one scrolling page, drafted to
  *     localStorage so leaving and coming back is safe.
  */
-export function CheckoutFlow() {
+export function CheckoutFlow({ products = [] }: { products?: Product[] }) {
   const { cart, count, clear } = useCart();
   const router = useRouter();
   const customer = useCustomer(); // undefined = still checking the session
@@ -113,6 +115,33 @@ export function CheckoutFlow() {
 
   const { quote, error: quoteError } = useQuote(cartToItems(cart), insideDhaka);
 
+  /*
+   * The line items for GA4, taken from the QUOTE rather than the cart.
+   *
+   * The cart is only {productId: qty} — it has no prices, and the price the
+   * customer is actually charged is decided server-side (sale vs quantity
+   * tier, whichever is cheaper). Reporting anything else would put a number
+   * in the analytics that the till never took.
+   */
+  const trackedItems = (): TrackedItem[] =>
+    (quote?.lines ?? []).map((l) => ({
+      item_id: l.productId,
+      item_name: products.find((p) => p.id === l.productId)?.name ?? l.productId,
+      price: l.unitPrice,
+      quantity: l.qty,
+    }));
+
+  /* begin_checkout once per visit to this screen, once the quote has priced.
+     Keyed on having a total so it does not fire against an empty quote, and
+     guarded by a ref so re-renders (zone changes, typing) do not repeat it. */
+  const beganCheckout = useRef(false);
+  useEffect(() => {
+    if (beganCheckout.current || quote?.total == null || count === 0) return;
+    beganCheckout.current = true;
+    trackBeginCheckout(trackedItems(), quote.total);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires once
+  }, [quote?.total, count]);
+
   const submit = async () => {
     // Validate what the customer can actually change. A signed-in customer's
     // phone is the login identity — not editable here, and the server takes it
@@ -150,6 +179,13 @@ export function CheckoutFlow() {
       // Remember the phone locally only to prefill the account sign-in form.
       setAuthPhone(usedPhone);
       clearDraft();
+      // The one event the whole funnel is measured against. Pushed before the
+      // cart is cleared, because the items come from the quote that priced it.
+      trackPurchase(order.orderId, order.total, trackedItems(), {
+        payment_type: pay,
+        // The quote is what priced this order, and it is still in hand here.
+        shipping: quote?.deliveryFee ?? 0,
+      });
       setDone({
         orderId: order.orderId,
         total: order.total,

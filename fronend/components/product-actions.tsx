@@ -7,6 +7,7 @@ import { Wrench } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { isUnavailable, type Product } from "@/lib/products";
 import { formatBDT } from "@/lib/site";
+import { trackAddToCart } from "@/lib/analytics";
 import { OfferLadder } from "./offer-ladder";
 
 export function ProductActions({
@@ -44,13 +45,27 @@ export function ProductActions({
     product.installationFeeInsideDhaka || product.installationFeeOutsideDhaka,
   );
 
+  /* One shape for both buttons — GA4 wants item_id/name/price/quantity. */
+  const trackedItem = () => ({
+    item_id: product.id,
+    item_name: product.name,
+    price: effectivePrice,
+    quantity: qty,
+  });
+
   const addToCart = () => {
     add(product.id, qty);
+    trackAddToCart(trackedItem());
     toast.success("Added to cart ✓");
   };
 
   const buyNow = () => {
     add(product.id, qty);
+    // Only add_to_cart here. Buy Now does navigate to checkout, but the
+    // checkout screen fires begin_checkout on arrival — pushing it from both
+    // places double-counted the step, which showed up as a funnel where
+    // begin_checkout exceeded the number of people who reached the page.
+    trackAddToCart(trackedItem());
     router.push("/checkout");
   };
 

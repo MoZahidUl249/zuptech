@@ -612,6 +612,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             deliveryFee={product.deliveryFeeInsideDhaka ?? 0}
             unitLabel={pub.bundleUnitLabel}
             campaignSlug={slug}
+            productName={product.name}
             payMethod={payMethod}
           />
         </Inner>
