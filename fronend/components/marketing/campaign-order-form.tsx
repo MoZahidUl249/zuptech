@@ -226,6 +226,7 @@ export function CampaignOrderForm({
       <button
         type="submit"
         disabled={busy || !payMethod}
+        data-cta="order_form"
         className="mt-4 w-full rounded-full bg-zup-orange px-5 py-3.5 text-[16px] font-bold text-white transition-colors hover:bg-zup-orange-dark disabled:opacity-60"
       >
         {busy ? "…" : labels.submit}

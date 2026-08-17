@@ -42,6 +42,56 @@ const GOOGLE_ADS_PIXEL_ORIGINS = [
   "https://stats.g.doubleclick.net",
   "https://googleads.g.doubleclick.net",
 ];
+/*
+ * Marketing and session-replay vendors, added through GTM.
+ *
+ * A container is only as useful as the network requests the page allows, and
+ * CSP failures here are silent in exactly the way that wastes ad budget: the
+ * tag fires, GTM's preview shows it green, and the request never leaves the
+ * browser. That is the failure Tag Assistant caught for Google, and every
+ * vendor below fails the same way for the same reason.
+ *
+ * Each is listed as the origins that vendor actually uses — script host,
+ * collection host, and for replay tools a websocket. Trim this list to what is
+ * genuinely in the container: every origin here is somewhere a page is
+ * permitted to send data, which is the thing a CSP exists to constrain.
+ *
+ *   Meta Pixel        connect.facebook.net, facebook.com
+ *   TikTok Pixel      analytics.tiktok.com
+ *   Microsoft Clarity clarity.ms  (heatmaps + session replay, free)
+ *   Hotjar            hotjar.com / hotjar.io  (heatmaps, needs the wss)
+ */
+const MARKETING_SCRIPT_ORIGINS = [
+  "https://connect.facebook.net",
+  "https://analytics.tiktok.com",
+  "https://www.clarity.ms",
+  "https://*.clarity.ms",
+  "https://static.hotjar.com",
+  "https://script.hotjar.com",
+];
+const MARKETING_CONNECT_ORIGINS = [
+  "https://www.facebook.com",
+  "https://connect.facebook.net",
+  "https://analytics.tiktok.com",
+  "https://*.clarity.ms",
+  "https://*.hotjar.com",
+  "https://*.hotjar.io",
+  // Hotjar streams a recording over a socket; without this replay silently
+  // records nothing while the script itself loads perfectly happily.
+  "wss://*.hotjar.com",
+];
+const MARKETING_IMG_ORIGINS = [
+  "https://www.facebook.com",
+  "https://analytics.tiktok.com",
+  "https://*.clarity.ms",
+  "https://*.hotjar.com",
+];
+/** Meta and Hotjar both open iframes for consent/preview flows. */
+const MARKETING_FRAME_ORIGINS = [
+  "https://www.facebook.com",
+  "https://*.hotjar.com",
+];
+
 const list = (origins: string[]) => origins.join(" ");
 
 const securityHeaders = [
@@ -81,22 +131,22 @@ function contentSecurityPolicy(): string {
   return [
     "default-src 'self'",
     // 'unsafe-inline'/'unsafe-eval': Next's bootstrap + the GTM loader.
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${list(GOOGLE_TAG_SCRIPT_ORIGINS)}`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${list(GOOGLE_TAG_SCRIPT_ORIGINS)} ${list(MARKETING_SCRIPT_ORIGINS)}`,
     "style-src 'self' 'unsafe-inline'",
     // i.ytimg.com: the poster frame for a YouTube product video, shown before
     // the viewer clicks play (components/product-video.tsx).
     // GA4 and Ads still fall back to pixel requests for some hits, so the
     // collection hosts belong here as well as in connect-src.
-    `img-src 'self' data: blob: ${CLOUDINARY_ORIGIN} https://i.ytimg.com ${list(GOOGLE_TAG_SCRIPT_ORIGINS)} ${list(GOOGLE_COLLECT_ORIGINS)} ${list(GOOGLE_ADS_PIXEL_ORIGINS)}`,
+    `img-src 'self' data: blob: ${CLOUDINARY_ORIGIN} https://i.ytimg.com ${list(GOOGLE_TAG_SCRIPT_ORIGINS)} ${list(GOOGLE_COLLECT_ORIGINS)} ${list(GOOGLE_ADS_PIXEL_ORIGINS)} ${list(MARKETING_IMG_ORIGINS)}`,
     `media-src 'self' ${CLOUDINARY_ORIGIN}`,
     // Only reached once someone actually plays a YouTube product video — the
     // page embeds no iframe until then.
     // googletagmanager/tagassistant: the container preview iframe. Without
     // them "Preview" in GTM connects and then shows nothing.
-    `frame-src ${YOUTUBE_EMBED_ORIGIN} ${list(GOOGLE_TAG_SCRIPT_ORIGINS)}`,
+    `frame-src ${YOUTUBE_EMBED_ORIGIN} ${list(GOOGLE_TAG_SCRIPT_ORIGINS)} ${list(MARKETING_FRAME_ORIGINS)}`,
     "font-src 'self' data:",
     // The browser talks to the API same-origin through the rewrites below.
-    `connect-src 'self' ${list(GOOGLE_COLLECT_ORIGINS)} ${list(GOOGLE_TAG_SCRIPT_ORIGINS)} ${list(GOOGLE_ADS_PIXEL_ORIGINS)}`,
+    `connect-src 'self' ${list(GOOGLE_COLLECT_ORIGINS)} ${list(GOOGLE_TAG_SCRIPT_ORIGINS)} ${list(GOOGLE_ADS_PIXEL_ORIGINS)} ${list(MARKETING_CONNECT_ORIGINS)}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

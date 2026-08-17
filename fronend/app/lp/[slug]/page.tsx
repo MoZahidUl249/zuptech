@@ -10,6 +10,7 @@ import { CampaignOrderForm } from "@/components/marketing/campaign-order-form";
 import { ProductVideo } from "@/components/product-video";
 import { parseProductVideo } from "@/lib/video";
 import { CampaignCountdown } from "@/components/marketing/campaign-countdown";
+import { CampaignTracking } from "@/components/marketing/campaign-tracking";
 
 export async function generateMetadata({
   params,
@@ -169,6 +170,14 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
   return (
     <div style={{ backgroundColor: theme.pageBg, color: theme.pageText }}>
       <LandingPageGtm gtmId={pub.gtmId} />
+      {/* Which campaign, which product, and which CTA — the things a raw
+          click trigger cannot tell apart on this page. */}
+      <CampaignTracking
+        slug={slug}
+        productId={product.id}
+        productName={product.name}
+        price={one?.unitPrice ?? pub.offerPrice}
+      />
 
       {/* ── 1. Header: the site's own mark, hotline, and a jump to the form ── */}
       <header
@@ -203,6 +212,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             {pub.headerCtaLabel ? (
               <a
                 href={orderHref}
+                data-cta="header"
                 className="rounded-[2px] px-4 py-2 text-[13.5px] font-semibold"
                 style={{ backgroundColor: theme.ctaBg, color: theme.ctaText }}
               >
@@ -306,6 +316,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
 
           <a
             href={orderHref}
+            data-cta="hero"
             className="mt-5 block rounded-[2px] px-5 py-3.5 text-center text-[clamp(16px,3.6vw,22px)] font-extrabold"
             style={{ backgroundColor: theme.ctaBg, color: theme.ctaText }}
           >
@@ -349,6 +360,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
           ) : null}
           <a
             href={orderHref}
+            data-cta="price_band"
             className="mt-5 inline-flex items-center justify-center rounded-[2px] px-8 py-3.5 text-[clamp(16px,3.4vw,22px)] font-extrabold"
             style={{ backgroundColor: theme.ctaBg, color: theme.ctaText }}
           >
@@ -556,6 +568,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             {pub.countdownCtaLabel ? (
               <a
                 href={orderHref}
+                data-cta="countdown"
                 className="mx-auto mt-5 block max-w-[360px] rounded-[2px] px-5 py-3.5 text-center text-[16px] font-extrabold"
                 style={{ backgroundColor: theme.ctaBg, color: theme.ctaText }}
               >
