@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Truck } from "lucide-react";
 import { useCart } from "@/lib/cart";
+import { usePaymentOptions } from "@/lib/admin-bridge";
 import type { Product } from "@/lib/products";
 import { formatBDT } from "@/lib/site";
 import { cartToItems, useQuote, type QuoteLine } from "@/lib/quote";
@@ -18,6 +19,7 @@ import {
 
 export function CartView({ products }: { products: Product[] }) {
   const { cart, count, change } = useCart();
+  const payOptions = usePaymentOptions();
   const items = Object.entries(cart)
     .map(([id, qty]) => ({ product: products.find((p) => p.id === id), qty }))
     .filter((x): x is { product: Product; qty: number } => !!x.product);
@@ -164,17 +166,25 @@ export function CartView({ products }: { products: Product[] }) {
             Checkout
           </Link>
 
-          <div className="mt-3.5 flex items-center justify-center gap-2">
-            <span className="rounded-[2px] bg-[rgba(194,24,91,.07)] px-2.5 py-[5px] text-[11.5px] font-bold text-[#C2185B]">
-              bKash
-            </span>
-            <span className="rounded-[2px] bg-[rgba(230,81,0,.07)] px-2.5 py-[5px] text-[11.5px] font-bold text-[#E65100]">
-              Nagad
-            </span>
-            <span className="rounded-[2px] bg-zup-body/6 px-2.5 py-[5px] text-[11.5px] font-bold text-zup-mid">
-              COD
-            </span>
-          </div>
+          {/*
+            What checkout will actually accept, read from the same enabled list
+            the payment picker uses. These were three hardcoded badges — bKash,
+            Nagad, COD — which kept promising wallets months after they were
+            switched off, so the cart advertised a payment method the next
+            screen would refuse.
+          */}
+          {payOptions.length > 0 ? (
+            <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
+              {payOptions.map((o) => (
+                <span
+                  key={o.label}
+                  className="rounded-[2px] bg-zup-body/6 px-2.5 py-[5px] text-[11.5px] font-bold text-zup-mid"
+                >
+                  {o.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </>
       )}
       <div className="h-24" />
