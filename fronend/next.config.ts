@@ -86,6 +86,9 @@ const MARKETING_IMG_ORIGINS = [
   "https://*.clarity.ms",
   "https://*.hotjar.com",
 ];
+/** Where a form may POST. Only Meta needs this, and only for /tr. */
+const MARKETING_FORM_ORIGINS = ["https://www.facebook.com"];
+
 /** Meta and Hotjar both open iframes for consent/preview flows. */
 const MARKETING_FRAME_ORIGINS = [
   "https://www.facebook.com",
@@ -149,7 +152,16 @@ function contentSecurityPolicy(): string {
     `connect-src 'self' ${list(GOOGLE_COLLECT_ORIGINS)} ${list(GOOGLE_TAG_SCRIPT_ORIGINS)} ${list(GOOGLE_ADS_PIXEL_ORIGINS)} ${list(MARKETING_CONNECT_ORIGINS)}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    /*
+     * Meta's Pixel does not only use image beacons. For payloads too big for a
+     * GET — a Purchase carrying `contents`, which is exactly the event that
+     * matters most — it falls back to POSTing a hidden form to
+     * facebook.com/tr. With `form-action 'self'` the browser blocks that
+     * silently: measured on the live site, four /tr attempts produced two
+     * form-action violations, so the small events arrived and the valuable
+     * ones did not. Everything else still may only submit to this origin.
+     */
+    `form-action 'self' ${list(MARKETING_FORM_ORIGINS)}`,
     "object-src 'none'",
   ].join("; ");
 }
