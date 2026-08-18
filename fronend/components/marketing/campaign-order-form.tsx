@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
+import { useQuote } from "@/lib/quote";
 import { formatBDTBangla as formatBDT, toBanglaDigits } from "@/lib/site";
 import type { CampaignBundle, CampaignFormLabels } from "@/lib/api";
 
@@ -63,8 +64,27 @@ export function CampaignOrderForm({
     () => bundles.find((b) => b.qty === qty) ?? bundles[0],
     [bundles, qty],
   );
-  const delivery = deliveryFee * qty;
-  const total = (chosen?.total ?? 0) + delivery;
+  /*
+   * The total the server will actually charge, not one assembled here.
+   *
+   * This used to be `bundle total + deliveryFee * qty`, which silently omitted
+   * the INSTALLATION fee. On a product carrying one that is not a rounding
+   * difference: the form promised 38,400 and the order came to 38,900. The
+   * customer sees one number on the page they ordered from and another on the
+   * invoice, which is the single thing this codebase is built not to do.
+   *
+   * The campaign always orders inside Dhaka (that is what it posts), so the
+   * quote is asked the same question the order will ask. While it is loading,
+   * the derived figures below fall back to the bundle price alone, which is
+   * the one number that is already server-derived.
+   */
+  const { quote } = useQuote(
+    chosen ? [{ productId, qty }] : [],
+    true,
+  );
+  const delivery = quote?.deliveryFee ?? deliveryFee * qty;
+  const installation = quote?.installationFee ?? 0;
+  const total = quote?.total ?? (chosen?.total ?? 0) + delivery;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,6 +230,14 @@ export function CampaignOrderForm({
         <div className="flex justify-between">
           <dt className="text-zup-gray">{labels.deliveryLabel}</dt>
           <dd className="font-semibold text-zup-body">{formatBDT(delivery)}</dd>
+          {/* Only when the product carries one. Shown as its own line because a
+              total that does not visibly add up reads as a mistake. */}
+          {installation > 0 ? (
+            <>
+              <dt className="text-zup-gray">ইনস্টলেশন</dt>
+              <dd className="font-semibold text-zup-body">{formatBDT(installation)}</dd>
+            </>
+          ) : null}
         </div>
         <div className="flex justify-between text-[17px]">
           <dt className="font-bold text-zup-ink">{labels.totalLabel}</dt>
