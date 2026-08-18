@@ -52,21 +52,59 @@ export function track(event: string, payload: Record<string, unknown> = {}): voi
 /** Money is integer BDT everywhere in this codebase; GA4 wants a currency. */
 export const CURRENCY = "BDT";
 
+/**
+ * The same event, in the shape Meta's Pixel expects.
+ *
+ * GA4 and Meta disagree about names for identical facts: GA4 says
+ * `items[].item_id`, Meta says `content_ids` — a flat array — plus `contents`
+ * with `item_price`. GTM cannot bridge that with field mapping alone; it needs
+ * a Custom JavaScript variable per field, which is where most Pixel setups
+ * quietly go wrong. The usual symptom is a Pixel that reports Purchases with a
+ * value but no content_ids, so the numbers look fine in Events Manager while
+ * dynamic-ads retargeting never matches a single product.
+ *
+ * Emitting both shapes costs a few bytes per event and turns the Meta tag into
+ * plain field mapping: point content_ids at `meta.content_ids` and stop.
+ * Additive, so nothing about the GA4 payload changes.
+ */
+function metaBlock(items: TrackedItem[], value: number) {
+  return {
+    content_type: "product",
+    content_ids: items.map((i) => i.item_id),
+    contents: items.map((i) => ({
+      id: i.item_id,
+      quantity: i.quantity,
+      item_price: i.price,
+    })),
+    num_items: items.reduce((n, i) => n + i.quantity, 0),
+    value,
+    currency: CURRENCY,
+  };
+}
+
 export const trackViewItem = (item: TrackedItem) =>
-  track("view_item", { ecommerce: { currency: CURRENCY, value: item.price, items: [item] } });
+  track("view_item", {
+    ecommerce: { currency: CURRENCY, value: item.price, items: [item] },
+    meta: metaBlock([item], item.price),
+  });
 
 export const trackAddToCart = (item: TrackedItem) =>
   track("add_to_cart", {
     ecommerce: { currency: CURRENCY, value: item.price * item.quantity, items: [item] },
+    meta: metaBlock([item], item.price * item.quantity),
   });
 
 export const trackRemoveFromCart = (item: TrackedItem) =>
   track("remove_from_cart", {
     ecommerce: { currency: CURRENCY, value: item.price * item.quantity, items: [item] },
+    meta: metaBlock([item], item.price * item.quantity),
   });
 
 export const trackBeginCheckout = (items: TrackedItem[], value: number) =>
-  track("begin_checkout", { ecommerce: { currency: CURRENCY, value, items } });
+  track("begin_checkout", {
+    ecommerce: { currency: CURRENCY, value, items },
+    meta: metaBlock(items, value),
+  });
 
 export const trackPurchase = (
   transaction_id: string,
@@ -76,4 +114,6 @@ export const trackPurchase = (
 ) =>
   track("purchase", {
     ecommerce: { transaction_id, currency: CURRENCY, value, items, ...extra },
+    // Meta dedupes on this when the Conversions API is added server-side later.
+    meta: { ...metaBlock(items, value), order_id: transaction_id },
   });
