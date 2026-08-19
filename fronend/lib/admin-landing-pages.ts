@@ -53,7 +53,12 @@ export interface LandingPage {
   /** Shown in the hero in place of the pack shot. "" keeps the photo. */
   heroVideoUrl: string;
   videoTitle: string;
+  /** The block's single demo video, before it became a gallery. Superseded by
+   *  `galleryItems`; kept so nothing was destroyed. */
   videoUrl: string;
+  /** The "what's in the box" slides, ordered. `kind` is set by the server from
+   *  the uploaded bytes — a pasted link is always "video". */
+  galleryItems: { url: string; kind: "image" | "video"; alt: string }[];
   featuresTitle: string;
   features: { title: string; body: string }[];
   specTitle: string;
@@ -66,8 +71,10 @@ export interface LandingPage {
   qcTitle: string;
   qcBody: string;
   qcPoints: string[];
-  /** Cloudinary URL for the quality block. "" shows the placeholder. */
+  /** Cloudinary URL for the quality block, superseded by `qcImages`. */
   qcImage: string;
+  /** The quality block's photos, ordered. */
+  qcImages: string[];
   qcImageHint: string;
   countdownTitle: string;
   countdownNote: string;
@@ -156,11 +163,11 @@ type CampaignKey =
   | "hotlineLabel" | "hotlineNumber" | "headerCtaLabel"
   | "trustBadges" | "subheadline" | "discountBadge" | "heroCtaNote"
   | "brandStripTitle" | "brandLogos"
-  | "heroVideoUrl" | "videoTitle" | "videoUrl"
+  | "heroVideoUrl" | "videoTitle" | "videoUrl" | "galleryItems"
   | "featuresTitle" | "features"
   | "specTitle" | "specMeta" | "specs"
   | "bundlesTitle" | "bundlesSubtitle" | "bundleUnitLabel" | "bundleMaxQty"
-  | "qcTitle" | "qcBody" | "qcPoints" | "qcImageHint"
+  | "qcTitle" | "qcBody" | "qcPoints" | "qcImages" | "qcImageHint"
   | "countdownTitle" | "countdownNote" | "countdownEndsAt"
   | "countdownCtaLabel" | "countdownAssurance"
   | "testimonialsTitle" | "testimonials"
@@ -256,7 +263,18 @@ export const CAMPAIGN_LIMITS: { key: keyof LandingPage; label: string; max: numb
   { key: "footerLines", label: "Footer contact lines", max: 8 },
   { key: "productRowIds", label: "Product row", max: 12 },
   { key: "benefitBullets", label: "Benefit bullets", max: 10 },
+  { key: "galleryItems", label: "Gallery items", max: 12 },
+  { key: "qcImages", label: "Quality photos", max: 8 },
 ];
+
+/*
+ * `brandLogos` and `features` stay in the list above even though the editor no
+ * longer offers a control for either — see the note in
+ * components/admin/section-landing-pages.tsx. They mirror server rules that
+ * are still enforced, and with no input able to grow those lists they can no
+ * longer fire. Removing them would only mean a hand-written PATCH gets the
+ * schema dump instead of a sentence.
+ */
 
 export const BUNDLE_MAX_ROWS = 10;
 
@@ -413,9 +431,40 @@ export function datetimeLocalValue(v: string | Date | null | undefined): string 
   return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 16);
 }
 
-/** Upload the quality block's picture. Returns the campaign with the new URL. */
-export const uploadLandingImage = (id: string, file: File) =>
+/*
+ * Campaign media.
+ *
+ * Each of these posts immediately — the button IS the save, the same split as
+ * every other image on the site — and returns the whole campaign, so the
+ * caller writes the returned array straight into its draft rather than
+ * guessing what the server stored. Order and alt text are ordinary draft
+ * fields and go with the page's Save button.
+ */
+
+/** Append one slide to the gallery. Photo or clip; the server decides which. */
+export const uploadLandingGalleryItem = (id: string, file: File) =>
   unwrap(
-    api.admin.api["landing-pages"]({ id }).image.post({ file }),
-    "POST /admin/api/landing-pages/:id/image",
+    api.admin.api["landing-pages"]({ id }).gallery.post({ file }),
+    "POST /admin/api/landing-pages/:id/gallery",
+  );
+
+/** Remove one gallery slide by position. Later slides shift down. */
+export const deleteLandingGalleryItem = (id: string, index: number) =>
+  unwrap(
+    api.admin.api["landing-pages"]({ id }).gallery({ index: String(index) }).delete(),
+    "DELETE /admin/api/landing-pages/:id/gallery/:index",
+  );
+
+/** Append one photo to the quality block. */
+export const uploadLandingQcImage = (id: string, file: File) =>
+  unwrap(
+    api.admin.api["landing-pages"]({ id })["qc-images"].post({ file }),
+    "POST /admin/api/landing-pages/:id/qc-images",
+  );
+
+/** Remove one quality photo by position. Later photos shift down. */
+export const deleteLandingQcImage = (id: string, index: number) =>
+  unwrap(
+    api.admin.api["landing-pages"]({ id })["qc-images"]({ index: String(index) }).delete(),
+    "DELETE /admin/api/landing-pages/:id/qc-images/:index",
   );

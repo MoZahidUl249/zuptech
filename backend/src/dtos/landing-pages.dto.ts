@@ -77,6 +77,16 @@ const landingPageFields = {
    *
    * Nothing here is money. The bundle block stores only wording; every price
    * it shows is derived from the product's quantity offers at render time. */
+/**
+ * Media caps.
+ *
+ * Declared here rather than in the route file — unlike MAX_PRODUCT_PHOTOS,
+ * which lives beside its handler and can drift from the schema's own maxItems,
+ * the guard and the validator below read the same constant.
+ */
+export const MAX_CAMPAIGN_GALLERY = 12;
+export const MAX_CAMPAIGN_QC_IMAGES = 8;
+
 const campaignFields = {
   hotlineLabel: t.String({ maxLength: 120 }),
   hotlineNumber: t.String({ maxLength: 60 }),
@@ -96,6 +106,23 @@ const campaignFields = {
   heroVideoUrl: t.String({ maxLength: 500, pattern: "^$|^https?://\\S+$" }),
   videoTitle: t.String({ maxLength: 200 }),
   videoUrl: t.String({ maxLength: 500, pattern: "^$|^https?://\\S+$" }),
+
+  /* The "what's in the box" gallery — ordered, mixed photos and clips.
+
+     `url` carries the same pattern as `videoUrl`: the renderer feeds it
+     straight to next/image and to <video src>, so this is the boundary that
+     decides what may reach them. `kind` is a closed union because the renderer
+     branches on it — an unrecognised value would put a photo in a <video>. The
+     upload route sets it from the sniffed bytes; a client can only ever
+     restate what the server already decided. */
+  galleryItems: t.Array(
+    t.Object({
+      url: t.String({ maxLength: 500, pattern: "^https?://\\S+$" }),
+      kind: t.Union([t.Literal("image"), t.Literal("video")]),
+      alt: t.String({ maxLength: 200 }),
+    }),
+    { maxItems: MAX_CAMPAIGN_GALLERY },
+  ),
 
   featuresTitle: t.String({ maxLength: 200 }),
   features: t.Array(
@@ -124,6 +151,11 @@ const campaignFields = {
   qcTitle: t.String({ maxLength: 200 }),
   qcBody: t.String({ maxLength: 1200 }),
   qcPoints: t.Array(t.String({ maxLength: 300 }), { maxItems: 8 }),
+  /* Ordered quality-block photos. Homogeneous, so a plain URL array. */
+  qcImages: t.Array(
+    t.String({ maxLength: 500, pattern: "^https?://\\S+$" }),
+    { maxItems: MAX_CAMPAIGN_QC_IMAGES },
+  ),
   qcImageHint: t.String({ maxLength: 200 }),
 
   countdownTitle: t.String({ maxLength: 200 }),
@@ -188,8 +220,22 @@ export type CreateLandingPageDto = typeof createLandingPageDto.static;
 export type UpdateLandingPageDto = typeof updateLandingPageDto.static;
 export type ListLandingPagesQueryDto = typeof listLandingPagesQueryDto.static;
 
-/** The quality block's picture. Same 8 MB image ceiling as every other upload. */
-export const uploadLandingImageDto = t.Object({
+/**
+ * One gallery slide — a photo OR a clip, so no `type` constraint here.
+ *
+ * See the note on `uploadSlideImageDto` in content.dto.ts: a t.Union of two
+ * t.File stops Elysia recognising the field as a file at all. Nothing is lost
+ * by leaving it off — `uploadMedia` runs `classifyAndValidate`, which
+ * allow-lists the MIME types AND sniffs the magic bytes, and it is that call
+ * which decides the stored `kind`.
+ */
+export const uploadLandingGalleryDto = t.Object({
+  file: t.File({ maxSize: "60m" }),
+});
+export type UploadLandingGalleryDto = typeof uploadLandingGalleryDto.static;
+
+/** One quality photo. Same 8 MB image ceiling as every other picture upload. */
+export const uploadLandingQcImageDto = t.Object({
   file: t.File({ type: "image", maxSize: "8m" }),
 });
-export type UploadLandingImageDto = typeof uploadLandingImageDto.static;
+export type UploadLandingQcImageDto = typeof uploadLandingQcImageDto.static;

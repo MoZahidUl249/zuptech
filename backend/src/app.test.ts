@@ -422,6 +422,10 @@ const SOURCE = {
   brandLogos: ["bKash"],
   videoTitle: "ভিডিও",
   videoUrl: "https://example.test/v",
+  galleryItems: [
+    { url: "https://cdn.example/g-1.jpg", kind: "image", alt: "a" },
+    { url: "https://youtu.be/abc", kind: "video", alt: "" },
+  ],
   featuresTitle: "ফিচার",
   features: [{ title: "t", body: "b" }],
   specTitle: "স্পেক",
@@ -434,6 +438,7 @@ const SOURCE = {
   qcTitle: "মান",
   qcBody: "body",
   qcPoints: ["p"],
+  qcImages: ["https://cdn.example/qc-1.jpg", "https://cdn.example/qc-2.jpg"],
   qcImageHint: "hint",
   countdownTitle: "শেষ",
   countdownNote: "note",

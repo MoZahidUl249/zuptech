@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Check, Phone } from "lucide-react";
 import { getLandingPage, getProductsByIds, getSiteConfig } from "@/lib/api";
 import { formatBDTBangla as formatBDT, toBanglaDigits } from "@/lib/site";
+import { cn } from "@/lib/utils";
 import { LandingPageGtm } from "@/components/marketing/landing-page-gtm";
 import { ProductCard } from "@/components/product-card";
 import { CampaignOrderForm } from "@/components/marketing/campaign-order-form";
@@ -11,6 +12,10 @@ import { ProductVideo } from "@/components/product-video";
 import { parseProductVideo } from "@/lib/video";
 import { CampaignCountdown } from "@/components/marketing/campaign-countdown";
 import { CampaignTracking } from "@/components/marketing/campaign-tracking";
+import {
+  CampaignMediaCarousel,
+  type CampaignMediaItem,
+} from "@/components/marketing/campaign-media-carousel";
 
 export async function generateMetadata({
   params,
@@ -26,6 +31,45 @@ export async function generateMetadata({
   };
 }
 
+/** Every CTA on the page scrolls to the same form. */
+const ORDER_HREF = "#order";
+
+/*
+ * ── The page's spacing scale ──────────────────────────────────────────────
+ *
+ * One scale, applied by the two helpers below and by every band that uses
+ * them. Written down because the page had drifted: three callers passed
+ * padding overrides that silently lost to the helper's own classes (see the
+ * cn() note on `Section`), so the rhythm on screen was not the rhythm in the
+ * source.
+ *
+ *   Band padding     py-10 sm:py-12          — Section, every band
+ *   Reading column   max-w-[720px] px-5      — Inner, every band, no exceptions
+ *   Heading → body   mt-3
+ *   Body → media     mt-6
+ *   Media → price    mt-5
+ *   Price → CTA      mt-5                    — OrderCta owns this
+ *   CTA → note       mt-2.5
+ *   Section heading  mb-6
+ *   Card list gap    gap-3.5
+ *   Bullet list gap  gap-2
+ *   CTA              block px-5 py-3.5, clamp(16px,3.6vw,22px), extrabold
+ *   Radii            rounded-[2px] throughout. globals.css flattens the whole
+ *                    --radius scale to 2px anyway, so `rounded-2xl` here was
+ *                    spelling, not appearance.
+ */
+
+/**
+ * The reading column every band shares.
+ *
+ * Horizontal padding lives HERE rather than on the band, so the column is
+ * defined in exactly one place — a band that wants full-bleed colour and
+ * inset text gets both without doing arithmetic.
+ */
+function Inner({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn("mx-auto w-full max-w-[720px] px-5", className)}>{children}</div>;
+}
+
 /**
  * One band of the page.
  *
@@ -35,12 +79,18 @@ export async function generateMetadata({
  * (`hexColor` in landing-pages.dto.ts), which is what makes interpolating them
  * here safe; nothing else in this file re-checks them.
  *
+ * `cn()`, not a template literal. Concatenating meant a caller's `py-4` was
+ * emitted alongside the helper's `py-7` and the winner was decided by
+ * stylesheet order rather than by the caller — measured on the live page, the
+ * override lost every time. twMerge makes the last word win, which is the only
+ * thing a caller passing padding could have meant.
+ *
  * Declared at module scope so React keeps the same component identity across
  * renders instead of remounting the whole section.
  */
 function Section({
   children,
-  className = "",
+  className,
   bg,
   color,
 }: {
@@ -50,44 +100,56 @@ function Section({
   color?: string;
 }) {
   return (
-    <section
-      className={`px-5 py-10 sm:py-12 ${className}`}
-      style={{ backgroundColor: bg, color }}
-    >
+    <section className={cn("py-10 sm:py-12", className)} style={{ backgroundColor: bg, color }}>
       {children}
     </section>
   );
 }
 
 /**
- * A full-width band of flat colour carrying one loud line.
+ * One order button.
  *
- * The reference design leans on these hard — the price, the bundle saving and
- * the product statement each get their own coloured strip rather than sitting
- * in a card. That is what makes the page read as a direct-response page rather
- * than a catalogue page, so it is a component here rather than a one-off.
+ * Every media block on the page is followed by one: a visitor who has just
+ * watched the demo or looked through the box shots should not have to scroll
+ * to find the form. Each carries its own `data-cta`, because five identical
+ * buttons all pointing at #order are otherwise a single undifferentiated
+ * trigger in GTM — `campaign-tracking.tsx` reads this attribute to say which
+ * one was pressed.
  */
-function ColourBand({
-  children,
-  bg,
-  color,
-  className = "",
+function OrderCta({
+  label,
+  note,
+  at,
+  ctaBg,
+  ctaText,
+  className,
 }: {
-  children: React.ReactNode;
-  bg: string;
-  color: string;
+  label: string;
+  /** Small print under the button, e.g. "no advance payment". */
+  note?: string;
+  /** The `data-cta` value. See CampaignTracking. */
+  at: "hero" | "gallery" | "quality" | "countdown";
+  ctaBg: string;
+  ctaText: string;
   className?: string;
 }) {
+  if (!label) return null;
   return (
-    <section className={`px-5 py-7 text-center ${className}`} style={{ backgroundColor: bg, color }}>
-      <div className="mx-auto w-full max-w-[720px]">{children}</div>
-    </section>
+    <>
+      <a
+        href={ORDER_HREF}
+        data-cta={at}
+        className={cn(
+          "mt-5 block rounded-[2px] px-5 py-3.5 text-center text-[clamp(16px,3.6vw,22px)] font-extrabold",
+          className,
+        )}
+        style={{ backgroundColor: ctaBg, color: ctaText }}
+      >
+        {label}
+      </a>
+      {note ? <p className="mt-2.5 text-center text-[12.5px] opacity-80">{note}</p> : null}
+    </>
   );
-}
-
-/** The reading column every band shares. */
-function Inner({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto w-full max-w-[720px]">{children}</div>;
 }
 
 /**
@@ -113,7 +175,6 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
 
   const product = pub.product;
   const one = pub.bundles[0];
-  const orderHref = "#order";
 
   /*
    * The campaign's palette, with a fallback per role.
@@ -158,6 +219,39 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
   // Parsed, not just non-empty: an unusable URL must fall back to the photo.
   const heroVideo = parseProductVideo(pub.heroVideoUrl);
 
+  /*
+   * The struck-through price beside the live one.
+   *
+   * ONE struck price, never two. `compareAtPrice` is the campaign's own
+   * advertised reference and wins when it is set; otherwise the bundle's
+   * `wasTotal` stands in, which is what the hero showed before the coloured
+   * price bands were removed. Zero hides the left-hand side entirely rather
+   * than printing a struck ৳0.
+   */
+  const struckPrice =
+    pub.compareAtPrice > 0
+      ? pub.compareAtPrice
+      : one && one.wasTotal > one.total
+        ? one.wasTotal
+        : 0;
+
+  /*
+   * The "what's in the box" gallery.
+   *
+   * The migration backfilled the old single `videoUrl` into `galleryItems`,
+   * so the fallback below only fires for a row written by an older admin
+   * client mid-rollout — but a campaign silently losing its demo video for
+   * the length of a deploy is not something to leave to timing.
+   */
+  const galleryItems: CampaignMediaItem[] = pub.galleryItems?.length
+    ? pub.galleryItems
+    : pub.videoUrl
+      ? [{ url: pub.videoUrl, kind: "video", alt: "" }]
+      : [];
+
+  /* Same shape of fallback for the quality block's photos. */
+  const qcPhotos = pub.qcImages?.length ? pub.qcImages : pub.qcImage ? [pub.qcImage] : [];
+
   /* The row shown above the footer — resolved and re-sorted into the admin's
    * order, dropping ids that no longer resolve, exactly as the home rows and a
    * product's recommendations do. */
@@ -184,7 +278,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
         className="sticky top-0 z-30 border-b border-zup-line backdrop-blur"
         style={{ backgroundColor: theme.tintBg }}
       >
-        <div className="mx-auto flex w-full max-w-[720px] items-center justify-between gap-3 px-5 py-2.5">
+        <Inner className="flex items-center justify-between gap-3 py-2.5">
           <div className="flex items-center gap-2.5">
             <Image
               src="/images/zup-mark.png"
@@ -192,7 +286,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
               width={30}
               height={30}
               className="h-[30px] w-[30px] object-contain"
-              priority
+              preload
             />
             <span className="text-[15px] font-extrabold leading-none tracking-[0.05em] text-zup-body">
               ZUP TECH
@@ -211,7 +305,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             ) : null}
             {pub.headerCtaLabel ? (
               <a
-                href={orderHref}
+                href={ORDER_HREF}
                 data-cta="header"
                 className="rounded-[2px] px-4 py-2 text-[13.5px] font-semibold"
                 style={{ backgroundColor: theme.ctaBg, color: theme.ctaText }}
@@ -220,7 +314,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
               </a>
             ) : null}
           </div>
-        </div>
+        </Inner>
       </header>
 
       {/* ── 2. Hero ─────────────────────────────────────────────────────── */}
@@ -228,7 +322,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
           the reference design — clamp tops out near 44px rather than 34px,
           because on a direct-response page the headline is the argument, not a
           label above one. */}
-      <Section className="pt-8" bg={theme.heroBg} color={theme.heroText}>
+      <Section bg={theme.heroBg} color={theme.heroText}>
         <Inner>
           {pub.trustBadges.length ? (
             <ul className="mb-4 flex flex-wrap gap-2">
@@ -257,8 +351,8 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
 
             Video wins because a campaign that bothers to set one is selling
             with it, and stacking both puts the fold's most valuable space
-            under two competing things. The longer demo section further down
-            is unaffected — a campaign can run either, both, or neither.
+            under two competing things. The gallery further down is
+            unaffected — a campaign can run either, both, or neither.
 
             ProductVideo renders a thumbnail and only swaps in the iframe on
             click, so a hero video costs no YouTube script, connection or
@@ -271,21 +365,24 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             the parsed value rather than the raw string only because
             `parseProductVideo` also rejects a non-http URL outright, and a
             null there must not leave an empty frame in the hero.
+
+            One wrapper for both branches, so `discountBadge` sits on the
+            media whichever it is. It used to live inside the photo branch
+            alone, which meant setting a hero video silently dropped the
+            badge — a campaign losing its "16%" for a reason nothing on the
+            page could explain.
           */}
-          {heroVideo ? (
-            <div className="relative mt-6 overflow-hidden rounded-[2px] border border-white/15">
-              <ProductVideo url={pub.heroVideoUrl} />
-            </div>
-          ) : (
           <div className="relative mt-6 overflow-hidden rounded-[2px] border border-white/15">
-            {product.photos?.[0] ? (
+            {heroVideo ? (
+              <ProductVideo url={pub.heroVideoUrl} />
+            ) : product.photos?.[0] ? (
               <Image
                 src={product.photos[0]!}
                 alt={product.name}
                 width={720}
                 height={540}
                 className="h-auto w-full object-cover"
-                priority
+                preload
               />
             ) : (
               <div className="flex aspect-[4/3] items-center justify-center bg-[repeating-linear-gradient(135deg,#f4f5f7_0_12px,#eceef1_12px_24px)]">
@@ -296,152 +393,79 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             )}
             {pub.discountBadge ? (
               <span
-                className="absolute right-3 top-3 rounded-[2px] px-3 py-1 text-[12.5px] font-extrabold"
+                className="absolute right-3 top-3 z-10 rounded-[2px] px-3 py-1 text-[12.5px] font-extrabold"
                 style={{ backgroundColor: theme.highlight, color: theme.pageText }}
               >
                 {pub.discountBadge}
               </span>
             ) : null}
           </div>
+
+          {/*
+            The price, directly under the media: what it used to cost on the
+            left, struck; what it costs now on the right.
+
+            The right-hand number is `one.total` — the bundle ladder's own
+            first row, which the server derived from the product's quantity
+            offers — NOT the campaign's `offerPrice` copy. Checkout reprices
+            through priceCart(), so taking the number from the same place the
+            cart does is what keeps the price on screen and the price charged
+            from ever disagreeing.
+          */}
+          {struckPrice > 0 ? (
+            <div className="mt-5 flex items-baseline justify-between gap-4">
+              <span className="text-[clamp(17px,4vw,22px)] opacity-70 line-through">
+                {formatBDT(struckPrice)}
+              </span>
+              <span className="text-[clamp(30px,8vw,40px)] font-bold leading-none">
+                {formatBDT(one?.total ?? 0)}
+              </span>
+            </div>
+          ) : (
+            <p className="mt-5 text-[clamp(30px,8vw,40px)] font-bold leading-none">
+              {formatBDT(one?.total ?? 0)}
+            </p>
           )}
 
-          <div className="mt-5 flex flex-wrap items-baseline gap-3">
-            <span className="text-[34px] font-bold leading-none">{formatBDT(one?.total ?? 0)}</span>
-            {one && one.wasTotal > one.total ? (
-              <span className="text-[19px] opacity-70 line-through">
-                {formatBDT(one.wasTotal)}
-              </span>
-            ) : null}
-          </div>
-
-          <a
-            href={orderHref}
-            data-cta="hero"
-            className="mt-5 block rounded-[2px] px-5 py-3.5 text-center text-[clamp(16px,3.6vw,22px)] font-extrabold"
-            style={{ backgroundColor: theme.ctaBg, color: theme.ctaText }}
-          >
-            {pub.buttonLabel}
-          </a>
-          {pub.heroCtaNote ? (
-            <p className="mt-2.5 text-center text-[12.5px] opacity-80">{pub.heroCtaNote}</p>
-          ) : null}
+          <OrderCta
+            label={pub.buttonLabel}
+            note={pub.heroCtaNote}
+            at="hero"
+            ctaBg={theme.ctaBg}
+            ctaText={theme.ctaText}
+          />
         </Inner>
       </Section>
 
-      {/* ── 2b. Price bands ───────────────────────────────────────────────
-          Two coloured strips: what it used to cost, then what it costs now,
-          the second set several times larger. The reference design gives the
-          offer price a line of its own at roughly twice the heading size —
-          on a direct-response page the price IS the headline, and burying it
-          in a card beside the copy is what makes a campaign page read like a
-          catalogue page. Both numbers are campaign copy; the cart still
-          reprices through priceCart(). */}
-      {pub.compareAtPrice > 0 ? (
-        <ColourBand bg={theme.bandBg} color={theme.bandText} className="py-4">
-          <p className="text-[clamp(17px,3.4vw,24px)] font-bold">
-            {pub.priceCompareLabel || "Previous price"}{" "}
-            <span className="line-through">{formatBDT(pub.compareAtPrice)}</span>
-          </p>
-        </ColourBand>
-      ) : null}
-
-      {pub.offerPrice > 0 ? (
-        <ColourBand bg={theme.bandBg} color={theme.bandText}>
-          <p className="text-[clamp(15px,2.8vw,20px)] font-bold uppercase tracking-[0.08em] opacity-90">
-            {pub.priceOfferLabel || "Offer price"}
-          </p>
-          <p className="mt-1 text-[clamp(38px,9vw,72px)] font-extrabold leading-none tracking-[-0.02em]">
-            {formatBDT(pub.offerPrice)}
-          </p>
-          {pub.ribbonText ? (
-            <p className="mt-3 text-[clamp(17px,3.6vw,26px)] font-extrabold" style={{ color: theme.highlight }}>
-              {pub.ribbonText}
-            </p>
-          ) : null}
-          <a
-            href={orderHref}
-            data-cta="price_band"
-            className="mt-5 inline-flex items-center justify-center rounded-[2px] px-8 py-3.5 text-[clamp(16px,3.4vw,22px)] font-extrabold"
-            style={{ backgroundColor: theme.ctaBg, color: theme.ctaText }}
-          >
-            {pub.buttonLabel || "Order now"}
-          </a>
-        </ColourBand>
-      ) : null}
-
-      {/* ── 3. Brand strip ──────────────────────────────────────────────── */}
-      {pub.brandLogos.length ? (
-        <Section className="border-y border-zup-line py-7" bg={theme.tintBg}>
-          <Inner>
-            {pub.brandStripTitle ? (
-              <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-zup-soft">
-                {pub.brandStripTitle}
-              </p>
-            ) : null}
-            <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
-              {pub.brandLogos.map((b) => (
-                <li key={b} className="text-[13px] font-semibold text-zup-gray">
-                  {b}
-                </li>
-              ))}
-            </ul>
-          </Inner>
-        </Section>
-      ) : null}
-
-      {/* ── 4. Video ────────────────────────────────────────────────────── */}
-      {pub.videoUrl ? (
+      {/* ── 3. What's in the box — photos and clips ─────────────────────── */}
+      {/* Was a single video slot. A campaign selling a 38-piece toolset has
+          more than one thing to show, and one embed could only ever show the
+          one. `videoTitle` stays the heading, so every campaign's existing
+          Bengali wording carries across untouched. */}
+      {galleryItems.length ? (
         <Section>
           <Inner>
             {pub.videoTitle ? (
-              <h2 className="mb-4 text-center text-[21px] font-bold leading-snug">
+              <h2 className="mb-6 text-center text-[21px] font-bold leading-snug">
                 {pub.videoTitle}
               </h2>
             ) : null}
-            {/*
-              The real player, not a picture of one.
-             
-              This was an <a> wrapping a grey box and a play glyph: it opened
-              YouTube in a new tab and could never play on the page, so a
-              campaign that set a video sent its traffic away at the moment it
-              was most engaged. ProductVideo is what the product page and the
-              hero above already use — a genuine thumbnail, and the iframe only
-              after a click, so the embed still costs nothing to the visitors
-              who never press play.
-            */}
-            <ProductVideo url={pub.videoUrl} />
+            <CampaignMediaCarousel
+              items={galleryItems}
+              label={pub.videoTitle || product.name}
+              fallbackAlt={product.name}
+            />
+            <OrderCta
+              label={pub.buttonLabel}
+              at="gallery"
+              ctaBg={theme.ctaBg}
+              ctaText={theme.ctaText}
+            />
           </Inner>
         </Section>
       ) : null}
 
-      {/* ── 5. Numbered features ────────────────────────────────────────── */}
-      {pub.features.length ? (
-        <Section bg={theme.tintBg}>
-          <Inner>
-            {pub.featuresTitle ? (
-              <h2 className="mb-6 text-center text-[22px] font-bold">{pub.featuresTitle}</h2>
-            ) : null}
-            <ol className="flex flex-col gap-3.5">
-              {pub.features.map((f, i) => (
-                <li
-                  key={`${f.title}-${i}`}
-                  className="rounded-2xl border border-zup-line bg-white p-4 sm:p-5"
-                >
-                  <span className="font-mono text-[12.5px] font-bold text-zup-blue">
-                    {toBanglaDigits(String(i + 1).padStart(2, "0"))}
-                  </span>
-                  <h3 className="mt-1 text-[16.5px] font-bold leading-snug">{f.title}</h3>
-                  {f.body ? (
-                    <p className="mt-1.5 text-[14.5px] leading-relaxed text-zup-gray">{f.body}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          </Inner>
-        </Section>
-      ) : null}
-
-      {/* ── 6. Spec sheet ───────────────────────────────────────────────── */}
+      {/* ── 4. Spec sheet ───────────────────────────────────────────────── */}
       {pub.specs.length ? (
         <Section bg={theme.heroBg} color={theme.heroText}>
           <Inner>
@@ -455,7 +479,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             </div>
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {pub.specs.map((s, i) => (
-                <div key={`${s.label}-${i}`} className="rounded-xl bg-white/5 p-4">
+                <div key={`${s.label}-${i}`} className="rounded-[2px] bg-white/5 p-4">
                   <dt className="font-mono text-[22px] font-bold leading-none">{s.value}</dt>
                   <dd className="mt-1.5 text-[12.5px] text-white/60">{s.label}</dd>
                 </div>
@@ -465,7 +489,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
         </Section>
       ) : null}
 
-      {/* ── 7. Bundle ladder — priced from the product, never from copy ─── */}
+      {/* ── 5. Bundle ladder — priced from the product, never from copy ─── */}
       {pub.bundles.length > 1 ? (
         <Section>
           <Inner>
@@ -473,13 +497,13 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
               <h2 className="text-center text-[22px] font-bold">{pub.bundlesTitle}</h2>
             ) : null}
             {pub.bundlesSubtitle ? (
-              <p className="mt-2 text-center text-[14.5px] text-zup-gray">{pub.bundlesSubtitle}</p>
+              <p className="mt-3 text-center text-[14.5px] text-zup-gray">{pub.bundlesSubtitle}</p>
             ) : null}
             <ul className="mt-6 flex flex-col gap-3">
               {pub.bundles.map((b) => (
                 <li
                   key={b.qty}
-                  className="flex items-center justify-between gap-4 rounded-2xl border border-zup-line bg-white p-4"
+                  className="flex items-center justify-between gap-4 rounded-[2px] border border-zup-line bg-white p-4"
                 >
                   <div>
                     <p className="text-[16px] font-bold">
@@ -506,22 +530,35 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
         </Section>
       ) : null}
 
-      {/* ── 8. Quality control / anti-counterfeit ───────────────────────── */}
-      {pub.qcTitle || pub.qcBody ? (
+      {/* ── 6. Quality control / anti-counterfeit ───────────────────────── */}
+      {pub.qcTitle || pub.qcBody || qcPhotos.length ? (
         <Section bg={theme.tintBg}>
           <Inner>
-            {/* The uploaded picture when the campaign has one; the striped
-                wireframe, captioned with the art direction, until it does. */}
-            {pub.qcImage ? (
+            {/* The uploaded pictures when the campaign has any; the striped
+                wireframe, captioned with the art direction, until it does.
+                One photo renders as a plain image — a carousel of one is a
+                slider that cannot slide, and it would ship client JS to say
+                so. */}
+            {qcPhotos.length > 1 ? (
+              <CampaignMediaCarousel
+                items={qcPhotos.map((url) => ({
+                  url,
+                  kind: "image" as const,
+                  alt: pub.qcImageHint,
+                }))}
+                label={pub.qcTitle || product.name}
+                fallbackAlt={pub.qcTitle || product.name}
+              />
+            ) : qcPhotos[0] ? (
               <Image
-                src={pub.qcImage}
+                src={qcPhotos[0]}
                 alt={pub.qcImageHint || pub.qcTitle || product.name}
                 width={720}
                 height={405}
-                className="h-auto w-full rounded-2xl border border-zup-line object-cover"
+                className="h-auto w-full rounded-[2px] border border-zup-line object-cover"
               />
             ) : (
-              <div className="flex aspect-[16/9] items-center justify-center rounded-2xl border border-zup-line bg-[repeating-linear-gradient(135deg,#f4f5f7_0_12px,#eceef1_12px_24px)]">
+              <div className="flex aspect-[16/9] items-center justify-center rounded-[2px] border border-zup-line bg-[repeating-linear-gradient(135deg,#f4f5f7_0_12px,#eceef1_12px_24px)]">
                 <span className="rounded-full bg-white/80 px-3 py-1 text-[12px] text-zup-soft">
                   {pub.qcImageHint}
                 </span>
@@ -531,7 +568,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
               <h2 className="mt-5 text-[21px] font-bold leading-snug">{pub.qcTitle}</h2>
             ) : null}
             {pub.qcBody ? (
-              <p className="mt-2.5 text-[14.5px] leading-relaxed text-zup-gray">{pub.qcBody}</p>
+              <p className="mt-3 text-[14.5px] leading-relaxed text-zup-gray">{pub.qcBody}</p>
             ) : null}
             {pub.qcPoints.length ? (
               <ul className="mt-4 flex flex-col gap-2">
@@ -543,11 +580,17 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
                 ))}
               </ul>
             ) : null}
+            <OrderCta
+              label={pub.buttonLabel}
+              at="quality"
+              ctaBg={theme.ctaBg}
+              ctaText={theme.ctaText}
+            />
           </Inner>
         </Section>
       ) : null}
 
-      {/* ── 9. Urgency ──────────────────────────────────────────────────── */}
+      {/* ── 7. Urgency ──────────────────────────────────────────────────── */}
       {pub.countdownTitle ? (
         <Section bg={theme.bandBg} color={theme.bandText}>
           <Inner>
@@ -565,26 +608,19 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
                 {pub.countdownNote}
               </p>
             ) : null}
-            {pub.countdownCtaLabel ? (
-              <a
-                href={orderHref}
-                data-cta="countdown"
-                className="mx-auto mt-5 block max-w-[360px] rounded-[2px] px-5 py-3.5 text-center text-[16px] font-extrabold"
-                style={{ backgroundColor: theme.ctaBg, color: theme.ctaText }}
-              >
-                {pub.countdownCtaLabel}
-              </a>
-            ) : null}
-            {pub.countdownAssurance ? (
-              <p className="mt-3 text-center text-[12.5px] text-white/70">
-                {pub.countdownAssurance}
-              </p>
-            ) : null}
+            <OrderCta
+              label={pub.countdownCtaLabel}
+              note={pub.countdownAssurance}
+              at="countdown"
+              ctaBg={theme.ctaBg}
+              ctaText={theme.ctaText}
+              className="mx-auto max-w-[360px]"
+            />
           </Inner>
         </Section>
       ) : null}
 
-      {/* ── 10. Testimonials ────────────────────────────────────────────── */}
+      {/* ── 8. Testimonials ─────────────────────────────────────────────── */}
       {pub.testimonials.length ? (
         <Section>
           <Inner>
@@ -595,7 +631,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
               {pub.testimonials.map((t, i) => (
                 <li
                   key={`${t.name}-${i}`}
-                  className="rounded-2xl border border-zup-line bg-white p-4 sm:p-5"
+                  className="rounded-[2px] border border-zup-line bg-white p-4 sm:p-5"
                 >
                   <p className="text-[13px] text-zup-orange" aria-label="5 out of 5">
                     ★★★★★
@@ -612,7 +648,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
         </Section>
       ) : null}
 
-      {/* ── 11. Order form ──────────────────────────────────────────────── */}
+      {/* ── 9. Order form ───────────────────────────────────────────────── */}
       <Section bg={theme.tintBg}>
         <Inner>
           <div id="order" className="scroll-mt-20" />
@@ -627,11 +663,12 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             campaignSlug={slug}
             productName={product.name}
             payMethod={payMethod}
+            theme={{ ctaBg: theme.ctaBg, ctaText: theme.ctaText }}
           />
         </Inner>
       </Section>
 
-      {/* ── 11b. Product row ──────────────────────────────────────────────
+      {/* ── 9b. Product row ───────────────────────────────────────────────
           Other products, after the order form and above the footer.
 
           It sat above the page body until now, which put a rack of exits
@@ -642,19 +679,19 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
           stays single-product by default — which is the point of one. */}
       {productRow.length > 0 ? (
         <Section bg={theme.tintBg}>
-          <div className="mx-auto w-full max-w-[1120px]">
+          <Inner>
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] sm:gap-3">
               {productRow.map((p) => (
                 <ProductCard key={p.id} product={p} />
               ))}
             </div>
-          </div>
+          </Inner>
         </Section>
       ) : null}
 
-      {/* ── 12. Footer ──────────────────────────────────────────────────── */}
-      <footer className="bg-zup-ink px-5 py-10 text-white">
-        <div className="mx-auto w-full max-w-[720px]">
+      {/* ── 10. Footer ──────────────────────────────────────────────────── */}
+      <footer className="bg-zup-ink py-10 text-white">
+        <Inner>
           <div className="flex items-center gap-2.5">
             <Image
               src="/images/zup-mark.png"
@@ -674,7 +711,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             <p className="mt-4 text-[14px] leading-relaxed text-white/70">{pub.footerAbout}</p>
           ) : null}
           {pub.footerLines.length ? (
-            <ul className="mt-4 flex flex-col gap-1.5 text-[14px] text-white/70">
+            <ul className="mt-4 flex flex-col gap-2 text-[14px] text-white/70">
               {pub.footerLines.map((l) => (
                 <li key={l} className="flex gap-2">
                   <Phone className="mt-1 h-3.5 w-3.5 flex-none text-white/40" aria-hidden />
@@ -688,7 +725,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
               {pub.footerNote}
             </p>
           ) : null}
-        </div>
+        </Inner>
       </footer>
     </div>
   );

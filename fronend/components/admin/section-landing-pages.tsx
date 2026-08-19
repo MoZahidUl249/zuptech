@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Eye, Copy, ExternalLink } from "lucide-react";
+import { Plus, Eye, Copy, ExternalLink, Film, X } from "lucide-react";
 import { isUnsaved, useAdmin, taka, tempId, type AdminProduct } from "@/lib/admin";
 import {
   useLandingPages,
@@ -14,7 +14,10 @@ import {
   duplicateLandingPage,
   campaignProblems,
   datetimeLocalValue,
-  uploadLandingImage,
+  uploadLandingGalleryItem,
+  deleteLandingGalleryItem,
+  uploadLandingQcImage,
+  deleteLandingQcImage,
   BUNDLE_MAX_ROWS,
   type ColorKey,
   type LandingPage,
@@ -22,6 +25,7 @@ import {
 } from "@/lib/admin-landing-pages";
 import { site } from "@/lib/site";
 import { numberInput } from "@/lib/utils";
+import { IMAGE_ACCEPT } from "@/lib/image-upload";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -304,16 +308,16 @@ function LandingPageEditor({
   const empty = {
     productRow: !filled(draft.productRowIds),
     header: !filled(draft.hotlineLabel, draft.hotlineNumber, draft.headerCtaLabel),
+    /* `ribbonText` is gone from here with the price band that rendered it —
+       a page whose only hero content was a ribbon is now genuinely wordless. */
     hero: !filled(
       draft.headline, draft.subheadline, lists.trustBadges, draft.discountBadge,
-      draft.ribbonText, draft.heroCtaNote, draft.imageHint, draft.heroVideoUrl,
+      draft.heroCtaNote, draft.imageHint, draft.heroVideoUrl,
     ),
-    brand: !filled(draft.brandStripTitle, lists.brandLogos),
-    video: !filled(draft.videoUrl, draft.videoTitle),
-    features: !filled(draft.featuresTitle, blocks.features),
+    gallery: !filled(draft.videoTitle, draft.galleryItems),
     specs: !filled(draft.specTitle, draft.specMeta, blocks.specs),
     bundles: !filled(draft.bundlesTitle, draft.bundlesSubtitle, draft.bundleUnitLabel),
-    quality: !filled(draft.qcTitle, draft.qcBody, lists.qcPoints, draft.qcImage),
+    quality: !filled(draft.qcTitle, draft.qcBody, lists.qcPoints, draft.qcImages),
     countdown: !filled(draft.countdownTitle, draft.countdownNote, draft.countdownCtaLabel, draft.countdownEndsAt),
     testimonials: !filled(draft.testimonialsTitle, blocks.testimonials),
     form: !filled(draft.formTitle, draft.formIntro, draft.formLabels?.submit),
@@ -321,29 +325,75 @@ function LandingPageEditor({
   };
 
   /** Nothing a visitor would read is set — the page is a price and a photo. */
-  const wordless = empty.hero && empty.features && empty.specs && empty.quality && empty.form;
+  const wordless = empty.hero && empty.specs && empty.quality && empty.form;
 
   /*
-   * The quality block's picture.
+   * The campaign's pictures and clips.
    *
-   * Uploaded on its own request rather than carried in the form's PATCH: it is
-   * a multipart file, the server stores it and hands back a URL, and the URL
-   * is never something this screen should be able to type. Same split every
-   * other image on the site uses — the button IS the save.
+   * Uploaded and deleted on their own requests rather than carried in the
+   * form's PATCH: they are multipart files, the server stores them and hands
+   * back URLs, and a URL is never something this screen should be able to
+   * type. Same split every other image on the site uses — the button IS the
+   * save. Order and alt text are ordinary draft fields and go with Save.
+   *
+   * Each handler writes the array the server returned straight into the
+   * draft, so a Save that lands right after an upload cannot clobber it with
+   * a stale list.
    */
   const [uploading, setUploading] = useState(false);
-  const uploadQcImage = async (file: File) => {
+
+  const runMedia = async (
+    work: () => Promise<LandingPage>,
+    apply: (updated: LandingPage) => void,
+    failure: string,
+  ) => {
     setUploading(true);
     try {
-      const updated = await uploadLandingImage(page.id, file);
-      set("qcImage", updated.qcImage);
+      const updated = await work();
+      apply(updated);
       await onChanged();
-      toast.success("Picture uploaded");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't upload the picture");
+      toast.error(err instanceof Error ? err.message : failure);
     } finally {
       setUploading(false);
     }
+  };
+
+  const addGalleryItem = (file: File) =>
+    runMedia(
+      () => uploadLandingGalleryItem(page.id, file) as Promise<LandingPage>,
+      (u) => set("galleryItems", u.galleryItems),
+      "Couldn't upload that file",
+    );
+
+  const removeGalleryItem = (index: number) =>
+    runMedia(
+      () => deleteLandingGalleryItem(page.id, index) as Promise<LandingPage>,
+      (u) => set("galleryItems", u.galleryItems),
+      "Couldn't remove that item",
+    );
+
+  const addQcImage = (file: File) =>
+    runMedia(
+      () => uploadLandingQcImage(page.id, file) as Promise<LandingPage>,
+      (u) => set("qcImages", u.qcImages),
+      "Couldn't upload the picture",
+    );
+
+  const removeQcImage = (index: number) =>
+    runMedia(
+      () => deleteLandingQcImage(page.id, index) as Promise<LandingPage>,
+      (u) => set("qcImages", u.qcImages),
+      "Couldn't remove that picture",
+    );
+
+  /** Move one item of a draft list, for the ◀ ▶ buttons. Saved with the page. */
+  const moveItem = <T,>(list: T[], from: number, to: number): T[] | null => {
+    if (to < 0 || to >= list.length) return null;
+    const next = [...list];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item!);
+    return next;
   };
 
   const groupsRef = useRef<HTMLDivElement>(null);
@@ -390,6 +440,7 @@ function LandingPageEditor({
       heroVideoUrl: draft.heroVideoUrl,
       videoTitle: draft.videoTitle,
       videoUrl: draft.videoUrl,
+      galleryItems: draft.galleryItems ?? [],
       featuresTitle: draft.featuresTitle,
       features: parsePairs(blocks.features, "title", "body"),
       specTitle: draft.specTitle,
@@ -402,6 +453,9 @@ function LandingPageEditor({
       qcTitle: draft.qcTitle,
       qcBody: draft.qcBody,
       qcPoints: toLines(lists.qcPoints),
+      /* Order (and, for the gallery, alt text) is draft state — the uploads
+         themselves already wrote their URLs server-side. */
+      qcImages: draft.qcImages ?? [],
       qcImageHint: draft.qcImageHint,
       countdownTitle: draft.countdownTitle,
       countdownNote: draft.countdownNote,
@@ -592,11 +646,19 @@ function LandingPageEditor({
         The page, section by section, in the order a visitor meets them.
 
         Each band says what it controls and opens on its own; the first is open
-        because a new campaign always starts there. "Benefit bullets" is
-        deliberately absent — the rebuilt template renders `features` instead
-        and never read that column, so the control was copy going nowhere. The
-        stored value still round-trips on save, so nothing is lost if the
-        column comes back.
+        because a new campaign always starts there.
+
+        Eight fields deliberately have no control here: `benefitBullets`, and
+        then `ribbonText`, `priceCompareLabel`, `priceOfferLabel`,
+        `brandStripTitle`, `brandLogos`, `featuresTitle` and `features`, whose
+        sections — the two coloured price bands, the payment strip and the
+        numbered feature cards — were taken off the page. Every one of them
+        would be copy going nowhere, which is the worst thing to leave on a
+        screen whose job is to say what each line changes.
+
+        Their columns and their stored values are untouched and still
+        round-trip on every save, so no Bengali copy was destroyed and putting
+        any section back is a Group and a render away.
       */}
       {/*
         A campaign with no words in it still saves, still publishes, and still
@@ -778,13 +840,6 @@ function LandingPageEditor({
                 onChange={(e) => set("discountBadge", e.target.value)}
                 placeholder="৩৩% ছাড়" />
             </Field>
-            <Field label="Ribbon / urgency badge">
-              <Input
-                value={draft.ribbonText}
-                disabled={readOnly}
-                onChange={(e) => set("ribbonText", e.target.value)}
-              />
-            </Field>
             <Field label="Main button label">
               <Input
                 value={draft.buttonLabel}
@@ -806,8 +861,8 @@ function LandingPageEditor({
             />
             <p className="mt-1 text-ui-micro leading-snug text-zup-soft">
               Replaces the photo at the top of the page. It loads as a
-              thumbnail and only plays when tapped. The longer video in step 7
-              is separate — a campaign can use either, both or neither.
+              thumbnail and only plays when tapped. The gallery in step 6 is
+              separate — a campaign can use either, both or neither.
             </p>
           </Field>
           <Field label="Image placeholder hint">
@@ -823,7 +878,7 @@ function LandingPageEditor({
         <Group
           step={5}
           title="Prices"
-          hint="The two figures in the coloured bands — advertising copy, not what the cart charges."
+          hint="The pair of figures under the hero picture — advertising copy, not what the cart charges."
         >
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Offer price (৳)">
@@ -844,6 +899,11 @@ function LandingPageEditor({
                   another.
                 </p>
               ) : null}
+              <p className="mt-1 text-ui-micro leading-snug text-zup-soft">
+                No longer printed on the page — the price under the hero comes
+                from what the cart will charge, so the two can never disagree.
+                Still used for ad tracking, and by the warning above.
+              </p>
             </Field>
             <Field label="Compare-at price (৳)">
               <Input
@@ -852,70 +912,72 @@ function LandingPageEditor({
                 disabled={readOnly}
                 onChange={(e) => set("compareAtPrice", numberInput(e.target.value))}
               />
-            </Field>
-            <Field label="Label for the compare-at price">
-              <Input value={draft.priceCompareLabel ?? ""} disabled={readOnly}
-                onChange={(e) => set("priceCompareLabel", e.target.value)}
-                placeholder="পূর্বের দাম" />
               <p className="mt-1 text-ui-micro leading-snug text-zup-soft">
-                Blank shows English wording.
+                Shown struck through, to the left of the live price. Blank or 0
+                hides it.
               </p>
-            </Field>
-            <Field label="Label for the offer price">
-              <Input value={draft.priceOfferLabel ?? ""} disabled={readOnly}
-                onChange={(e) => set("priceOfferLabel", e.target.value)}
-                placeholder="অফার প্রাইস" />
-            </Field>
-          </div>
-        </Group>
-
-        <Group step={6} title="Brand strip"
-          empty={empty.brand} hint="The logos row: payment and courier partners.">
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="Brand strip title">
-              <Input value={draft.brandStripTitle ?? ""} disabled={readOnly}
-                onChange={(e) => set("brandStripTitle", e.target.value)}
-                placeholder="যাদের সাথে আমরা কাজ করি" />
-            </Field>
-            <Field label="Brand names (one per line)">
-              <Textarea value={lists.brandLogos} disabled={readOnly} rows={3}
-                onChange={(e) => setLists({ ...lists, brandLogos: e.target.value })}
-                placeholder={"bKash\nNagad\nSteadFast"} />
-              <LimitNote count={toLines(lists.brandLogos).length} max={10} />
+              {/* It is the number on screen now, not just a reference in a
+                  band — a value at or below what the cart charges renders a
+                  struck price LOWER than the price beside it. */}
+              {Number(draft.compareAtPrice) > 0
+                && Number(draft.compareAtPrice) <= page.productSellingPrice ? (
+                <p className="mt-1 text-ui-micro font-semibold leading-snug text-warn-fg">
+                  This is not above {taka(page.productSellingPrice)}, so the page
+                  shows a crossed-out price that is lower than the one being
+                  charged.
+                </p>
+              ) : null}
             </Field>
           </div>
         </Group>
 
-        <Group step={7} title="Video"
-          empty={empty.video} hint="Leave the URL blank and the whole section disappears.">
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="Video section title">
-              <Input value={draft.videoTitle ?? ""} disabled={readOnly}
-                onChange={(e) => set("videoTitle", e.target.value)} />
-            </Field>
-            <Field label="Video URL">
-              <Input value={draft.videoUrl ?? ""} disabled={readOnly}
-                onChange={(e) => set("videoUrl", e.target.value)}
-                placeholder="https://youtube.com/watch?v=…" />
-            </Field>
-          </div>
-        </Group>
-
-        <Group step={8} title="Features"
-          empty={empty.features} hint="The numbered selling points down the page.">
-          <Field label="Features title">
-            <Input value={draft.featuresTitle ?? ""} disabled={readOnly}
-              onChange={(e) => set("featuresTitle", e.target.value)} />
+        <Group step={6} title="Media gallery"
+          empty={empty.gallery}
+          hint="The “what’s in the box” slider. Empty and the whole section disappears.">
+          <Field label="Section title">
+            <Input value={draft.videoTitle ?? ""} disabled={readOnly}
+              onChange={(e) => set("videoTitle", e.target.value)}
+              placeholder="সেটটিতে কী কী আছে দেখে নিন" />
           </Field>
-          <Field label="Features — one per line, “title | description”">
-            <Textarea value={blocks.features} disabled={readOnly} rows={5}
-              onChange={(e) => setBlocks({ ...blocks, features: e.target.value })}
-              placeholder={"২২.৫ W সুপার ফাস্ট চার্জ | ৩০ মিনিটে ফোনে ৬০% চার্জ"} />
-            <LimitNote count={toLines(blocks.features).length} max={12} />
-          </Field>
+          <MediaRepeater
+            items={(draft.galleryItems ?? []).map((it) => ({
+              url: it.url,
+              kind: it.kind,
+              alt: it.alt,
+            }))}
+            max={12}
+            /* Photos and clips, so the picker is not image-only. */
+            accept="image/*,video/*"
+            maxBytes={60_000_000}
+            disabled={readOnly || uploading}
+            busy={uploading}
+            emptyNote="Nothing added yet — the whole section is hidden on the page until there is."
+            onUpload={(f) => void addGalleryItem(f)}
+            onDelete={(i) => void removeGalleryItem(i)}
+            onMove={(from, to) => {
+              const next = moveItem(draft.galleryItems ?? [], from, to);
+              if (next) set("galleryItems", next);
+            }}
+            onAlt={(i, value) => {
+              const next = [...(draft.galleryItems ?? [])];
+              const item = next[i];
+              if (!item) return;
+              next[i] = { ...item, alt: value };
+              set("galleryItems", next);
+            }}
+            onAddUrl={(url) => {
+              /* A pasted link is always a video — a photo would have been
+                 uploaded. This is how YouTube links keep working now that the
+                 single "Video URL" box is gone. */
+              set("galleryItems", [
+                ...(draft.galleryItems ?? []),
+                { url, kind: "video" as const, alt: "" },
+              ]);
+            }}
+          />
         </Group>
 
-        <Group step={9} title="Spec sheet"
+        <Group step={7} title="Spec sheet"
           empty={empty.specs} hint="The grid of numbers under the features.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Spec sheet title">
@@ -937,7 +999,7 @@ function LandingPageEditor({
         </Group>
 
         <Group
-          step={10}
+          step={8}
           title="Bundles"
           empty={empty.bundles}
           hint="Buy-more rows. Only the wording is here — every price comes from the product's quantity offers."
@@ -1001,60 +1063,47 @@ function LandingPageEditor({
           ) : null}
         </Group>
 
-        <Group step={11} title="Quality / anti-counterfeit"
+        <Group step={9} title="Quality / anti-counterfeit"
           empty={empty.quality} hint="The reassurance block with the photo.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Quality section title">
               <Input value={draft.qcTitle ?? ""} disabled={readOnly}
                 onChange={(e) => set("qcTitle", e.target.value)} />
             </Field>
-            <Field label="Quality picture">
-              {draft.qcImage ? (
-                <div className="flex items-center gap-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- a
-                      remote Cloudinary URL in an admin preview; next/image
-                      would need this host in the config for no benefit here. */}
-                  <img
-                    src={draft.qcImage}
-                    alt=""
-                    className="h-16 w-28 flex-none rounded-lg border border-zup-line object-cover"
-                  />
-                  <p className="text-ui-micro leading-snug text-zup-soft">
-                    Showing on the page. Upload another to replace it.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-ui-micro leading-snug text-zup-soft">
-                  No picture yet — the page shows a grey placeholder with the
-                  description below written on it.
-                </p>
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                disabled={readOnly || uploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  // Clear the input so re-picking the same file fires again.
-                  e.target.value = "";
-                  if (file) void uploadQcImage(file);
-                }}
-                className="mt-2 block w-full text-ui-sm file:mr-3 file:rounded-lg file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-ui-sm file:font-semibold"
-              />
-              {uploading ? (
-                <p className="mt-1 text-ui-micro font-semibold text-zup-soft">Uploading…</p>
-              ) : null}
-            </Field>
-            <Field label="What the picture should show">
+            <Field label="What the pictures should show">
               <Input value={draft.qcImageHint ?? ""} disabled={readOnly}
                 onChange={(e) => set("qcImageHint", e.target.value)}
                 placeholder="e.g. box open, all tools laid out" />
               <p className="mt-1 text-ui-micro leading-snug text-zup-soft">
-                Art direction for whoever takes the photo, and the caption on
-                the placeholder until one is uploaded.
+                Art direction for whoever takes the photos, the alt text on
+                each, and the caption on the placeholder until there are any.
               </p>
             </Field>
           </div>
+          <Field label="Quality pictures">
+            <MediaRepeater
+              items={(draft.qcImages ?? []).map((url) => ({
+                url,
+                kind: "image" as const,
+                alt: "",
+              }))}
+              max={8}
+              accept={IMAGE_ACCEPT}
+              maxBytes={8_000_000}
+              disabled={readOnly || uploading}
+              busy={uploading}
+              emptyNote="No pictures yet — the page shows a grey placeholder with the description above written on it."
+              onUpload={(f) => void addQcImage(f)}
+              onDelete={(i) => void removeQcImage(i)}
+              onMove={(from, to) => {
+                const next = moveItem(draft.qcImages ?? [], from, to);
+                if (next) set("qcImages", next);
+              }}
+            />
+            <p className="mt-1 text-ui-micro leading-snug text-zup-soft">
+              One picture shows on its own; two or more become a slider.
+            </p>
+          </Field>
           <Field label="Quality section body">
             <Textarea value={draft.qcBody ?? ""} disabled={readOnly} rows={4}
               onChange={(e) => set("qcBody", e.target.value)} />
@@ -1066,7 +1115,7 @@ function LandingPageEditor({
           </Field>
         </Group>
 
-        <Group step={12} title="Countdown"
+        <Group step={10} title="Countdown"
           empty={empty.countdown} hint="Urgency block. Leave the deadline blank to keep the copy without a clock.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Countdown title">
@@ -1096,7 +1145,7 @@ function LandingPageEditor({
           </Field>
         </Group>
 
-        <Group step={13} title="Testimonials"
+        <Group step={11} title="Testimonials"
           empty={empty.testimonials} hint="Customer quotes.">
           <Field label="Testimonials title">
             <Input value={draft.testimonialsTitle ?? ""} disabled={readOnly}
@@ -1110,7 +1159,7 @@ function LandingPageEditor({
           </Field>
         </Group>
 
-        <Group step={14} title="Order form"
+        <Group step={12} title="Order form"
           empty={empty.form} hint="The cash-on-delivery form. Every label is yours, including the button.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Order form title">
@@ -1153,7 +1202,7 @@ function LandingPageEditor({
           </div>
         </Group>
 
-        <Group step={15} title="Footer"
+        <Group step={13} title="Footer"
           empty={empty.footer} hint="The last block on the page.">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Footer tagline">
@@ -1181,7 +1230,7 @@ function LandingPageEditor({
         </Group>
 
         <Group
-          step={16}
+          step={14}
           title="Colours"
           hint="The whole palette, for this campaign only. Nothing here touches the main site."
         >
@@ -1194,11 +1243,11 @@ function LandingPageEditor({
             {([
               ["colorPageBg", "Page background", "Behind everything."],
               ["colorPageText", "Body text", "Ordinary paragraph text."],
-              ["colorHeroBg", "Hero band", "The deep block behind the headline, and the quality section."],
+              ["colorHeroBg", "Hero band", "The deep block behind the headline, and the spec sheet."],
               ["colorHeroText", "Hero text", "Text sitting on the hero band."],
-              ["colorBandBg", "Price bands", "The price strips and the countdown block."],
-              ["colorBandText", "Price band text", "Text on those strips."],
-              ["colorTintBg", "Quiet sections", "The soft alternating background: video, specs, testimonials."],
+              ["colorBandBg", "Badges and countdown", "The trust badges under the headline, and the countdown block."],
+              ["colorBandText", "Badge and countdown text", "Text on those."],
+              ["colorTintBg", "Quiet sections", "The soft alternating background: header, quality, order form."],
               ["colorAccent", "Accent", "Links, ticks and emphasis."],
               ["colorHighlight", "Highlight", "The bundle saving line — the one figure meant to catch the eye."],
               ["colorCtaBg", "Order button", "Every order button on the page."],
@@ -1235,6 +1284,186 @@ function LandingPageEditor({
 }
 
 /** "3 of 6" under a list, turning red once the server would refuse it. */
+/** One tile in a MediaRepeater. */
+interface RepeaterItem {
+  url: string;
+  kind: "image" | "video";
+  alt?: string;
+}
+
+/**
+ * A repeatable media list with per-item delete, ordering and (optionally) alt
+ * text.
+ *
+ * Uploads and deletes post immediately — the button IS the save, the same
+ * split every other image on the site uses, because a multipart file cannot
+ * ride along in the form's PATCH. ORDER and alt text are ordinary draft state
+ * and save with the page's Save button; the note under the grid says so,
+ * because the two halves behaving differently is otherwise invisible.
+ *
+ * The file is checked at pick time, so one the server would refuse never
+ * leaves the browser.
+ */
+function MediaRepeater({
+  items,
+  max,
+  accept,
+  maxBytes,
+  disabled,
+  busy,
+  emptyNote,
+  onUpload,
+  onDelete,
+  onMove,
+  onAlt,
+  onAddUrl,
+}: {
+  items: RepeaterItem[];
+  max: number;
+  accept: string;
+  maxBytes: number;
+  disabled?: boolean;
+  busy?: boolean;
+  /** Shown in place of the grid when there is nothing yet. */
+  emptyNote: string;
+  onUpload: (file: File) => void;
+  onDelete: (index: number) => void;
+  onMove: (from: number, to: number) => void;
+  /** Omitted for lists whose alt text comes from one shared field. */
+  onAlt?: (index: number, value: string) => void;
+  /** Omitted for photo-only lists — there is nothing useful to paste. */
+  onAddUrl?: (url: string) => void;
+}) {
+  const [urlDraft, setUrlDraft] = useState("");
+  const full = items.length >= max;
+
+  const commitUrl = () => {
+    const url = urlDraft.trim();
+    if (!url) return;
+    // Same rule as the DTO's `url` pattern — checked here so the message is a
+    // sentence rather than a schema dump after a save.
+    if (!/^https?:\/\/\S+$/.test(url)) {
+      toast("Paste a full link starting with http:// or https://");
+      return;
+    }
+    onAddUrl?.(url);
+    setUrlDraft("");
+  };
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {items.length === 0 ? (
+        <p className="text-ui-micro leading-snug text-zup-soft">{emptyNote}</p>
+      ) : (
+        <ul className="flex flex-wrap gap-2.5">
+          {items.map((item, i) => (
+            <li key={`${item.url}-${i}`} className="flex w-28 flex-col gap-1">
+              <div className="relative h-28 w-28 overflow-hidden rounded-xl border border-dashed border-zup-body/20 bg-white">
+                {item.kind === "image" ? (
+                  /* eslint-disable-next-line @next/next/no-img-element -- a
+                     remote Cloudinary URL in an admin preview; next/image
+                     would need this host configured for no benefit here. */
+                  <img src={item.url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 text-center">
+                    <Film className="h-6 w-6 text-zup-soft" aria-hidden />
+                    <span className="text-ui-micro leading-tight text-zup-soft">Video</span>
+                  </span>
+                )}
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onDelete(i)}
+                  aria-label={`Remove item ${i + 1}`}
+                  className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80 disabled:opacity-50"
+                >
+                  <X className="h-3 w-3" aria-hidden />
+                </button>
+              </div>
+              <div className="flex justify-between gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={disabled || i === 0}
+                  onClick={() => onMove(i, i - 1)}
+                  aria-label={`Move item ${i + 1} earlier`}
+                >
+                  ◀
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={disabled || i === items.length - 1}
+                  onClick={() => onMove(i, i + 1)}
+                  aria-label={`Move item ${i + 1} later`}
+                >
+                  ▶
+                </Button>
+              </div>
+              {onAlt && item.kind === "image" ? (
+                <Input
+                  value={item.alt ?? ""}
+                  disabled={disabled}
+                  onChange={(e) => onAlt(i, e.target.value)}
+                  placeholder="Alt text"
+                  className="h-7 text-ui-micro"
+                />
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <input
+        type="file"
+        accept={accept}
+        disabled={disabled || full}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          // Clear the input so re-picking the same file fires again.
+          e.target.value = "";
+          if (!file) return;
+          if (file.size > maxBytes) {
+            toast(`That file is over ${Math.round(maxBytes / 1_000_000)} MB.`);
+            return;
+          }
+          onUpload(file);
+        }}
+        className="block w-full text-ui-sm file:mr-3 file:rounded-lg file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-ui-sm file:font-semibold disabled:opacity-50"
+      />
+
+      {onAddUrl ? (
+        <div className="flex gap-2">
+          <Input
+            value={urlDraft}
+            disabled={disabled || full}
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitUrl();
+              }
+            }}
+            placeholder="…or paste a video link (YouTube)"
+          />
+          <Button variant="outline" size="sm" disabled={disabled || full} onClick={commitUrl}>
+            Add
+          </Button>
+        </div>
+      ) : null}
+
+      <LimitNote count={items.length} max={max} />
+      {busy ? (
+        <p className="text-ui-micro font-semibold text-zup-soft">Working…</p>
+      ) : null}
+      <p className="text-ui-micro leading-snug text-zup-soft">
+        Uploading and removing happen straight away. The order{onAlt ? " and alt text" : ""} save
+        with the page.
+      </p>
+    </div>
+  );
+}
+
 function LimitNote({ count, max }: { count: number; max: number }) {
   const over = count > max;
   return (

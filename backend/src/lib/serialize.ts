@@ -425,6 +425,33 @@ export const landingPageInclude = { product: { include: productInclude } };
 
 type LandingPageRow = LandingPage & { product: ProductWithRelations };
 
+/** One slide of a campaign's "what's in the box" gallery. */
+export type CampaignGalleryItem = { url: string; kind: "image" | "video"; alt: string };
+
+/**
+ * Coerce a stored `galleryItems` column to the shape the page renders.
+ *
+ * Exported because the upload routes read the current list through this too —
+ * one coercion, so the route and the payload can never disagree about what is
+ * already stored.
+ *
+ * Items with no url are DROPPED rather than emptied: a hand-edited row must
+ * not be able to hand next/image a `src` of "", which throws, where an empty
+ * feature title merely renders nothing. Anything that is not "video" is an
+ * image, so an unrecognised kind degrades to the safe branch.
+ */
+export function campaignGallery(value: unknown): CampaignGalleryItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((o): o is Record<string, unknown> => Boolean(o) && typeof o === "object")
+    .map((o) => ({
+      url: typeof o.url === "string" ? o.url : "",
+      kind: o.kind === "video" ? ("video" as const) : ("image" as const),
+      alt: typeof o.alt === "string" ? o.alt : "",
+    }))
+    .filter((m) => m.url !== "");
+}
+
 /**
  * The campaign content block, shared by the admin and public payloads.
  *
@@ -467,6 +494,7 @@ function campaignContent(lp: LandingPageRow) {
     heroVideoUrl: lp.heroVideoUrl,
     videoTitle: lp.videoTitle,
     videoUrl: lp.videoUrl,
+    galleryItems: campaignGallery(lp.galleryItems),
     featuresTitle: lp.featuresTitle,
     features: list(lp.features, (o) => ({ title: str(o.title), body: str(o.body) })),
     specTitle: lp.specTitle,
@@ -480,6 +508,7 @@ function campaignContent(lp: LandingPageRow) {
     qcBody: lp.qcBody,
     qcPoints: lp.qcPoints,
     qcImage: lp.qcImage,
+    qcImages: lp.qcImages,
     qcImageHint: lp.qcImageHint,
     countdownTitle: lp.countdownTitle,
     countdownNote: lp.countdownNote,

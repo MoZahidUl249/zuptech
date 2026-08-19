@@ -329,6 +329,8 @@ export interface CampaignContentDto {
   heroVideoUrl: string;
   videoTitle: string;
   videoUrl: string;
+  /** Ordered mixed-media gallery. `kind` is server-decided at upload time. */
+  galleryItems: { url: string; kind: "image" | "video"; alt: string }[];
   featuresTitle: string;
   features: { title: string; body: string }[];
   specTitle: string;
@@ -342,6 +344,8 @@ export interface CampaignContentDto {
   qcBody: string;
   qcPoints: string[];
   qcImage: string;
+  /** Ordered quality-block photos; supersedes `qcImage`, now always "". */
+  qcImages: string[];
   qcImageHint: string;
   countdownTitle: string;
   countdownNote: string;

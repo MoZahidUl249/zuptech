@@ -481,8 +481,14 @@ export interface PublicLandingPage {
   brandLogos: string[];
   /** Shown in the hero in place of the pack shot. "" keeps the photo. */
   heroVideoUrl: string;
+  /** Heading over the "what's in the box" gallery. */
   videoTitle: string;
+  /** The block's single demo video, before it became a gallery. Superseded by
+   *  `galleryItems`; the migration backfilled and blanked it. */
   videoUrl: string;
+  /** The gallery's slides, ordered. `kind` is server-decided at upload time —
+   *  a URL alone cannot say whether it is a picture or a clip. */
+  galleryItems?: { url: string; kind: "image" | "video"; alt: string }[];
   featuresTitle: string;
   features: { title: string; body: string }[];
   specTitle: string;
@@ -495,8 +501,14 @@ export interface PublicLandingPage {
   qcTitle: string;
   qcBody: string;
   qcPoints: string[];
-  /** Cloudinary URL for the quality block. "" shows the placeholder. */
+  /** Cloudinary URL for the quality block. Superseded by `qcImages`; the
+   *  migration blanked it, so it only carries a value on a row written by an
+   *  older admin client. */
   qcImage: string;
+  /** The quality block's photos, ordered. Optional for the same reason the
+   *  theme colours below are: a payload from a backend predating the column
+   *  must degrade, not crash. */
+  qcImages?: string[];
   qcImageHint: string;
   countdownTitle: string;
   countdownNote: string;

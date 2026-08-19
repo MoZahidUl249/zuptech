@@ -1,5 +1,6 @@
 import { Value } from "@sinclair/typebox/value";
 import { describe, expect, test } from "bun:test";
+import { updateLandingPageDto } from "./landing-pages.dto";
 import { createLeadDto } from "./leads.dto";
 import { createOrderDto, updateOrderDto } from "./orders.dto";
 import { updatePaymentMethodDto } from "./payments.dto";
@@ -241,5 +242,48 @@ describe("createLeadDto", () => {
 
   test("rejects a body with no customer", () => {
     expect(Value.Check(createLeadDto, { serviceId: "svc_1" })).toBe(false);
+  });
+});
+
+describe("updateLandingPageDto — the campaign gallery", () => {
+  /*
+   * A t.Union of t.Literal, inside a t.Array, inside a t.Partial is the one
+   * construct in this DTO worth pinning down: the renderer branches on `kind`,
+   * so a value that slips through would put a photo inside a <video>.
+   */
+  test("accepts a mixed gallery", () => {
+    expect(
+      Value.Check(updateLandingPageDto, {
+        galleryItems: [
+          { url: "https://cdn.example/a.jpg", kind: "image", alt: "টুল সেট" },
+          { url: "https://youtu.be/abc", kind: "video", alt: "" },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  test("rejects a kind outside the union", () => {
+    expect(
+      Value.Check(updateLandingPageDto, {
+        galleryItems: [{ url: "https://cdn.example/a.gif", kind: "gif", alt: "" }],
+      }),
+    ).toBe(false);
+  });
+
+  test("rejects a url with no scheme — it reaches next/image and <video src>", () => {
+    expect(
+      Value.Check(updateLandingPageDto, {
+        galleryItems: [{ url: "cdn.example/a.jpg", kind: "image", alt: "" }],
+      }),
+    ).toBe(false);
+    expect(Value.Check(updateLandingPageDto, { qcImages: ["cdn.example/a.jpg"] })).toBe(false);
+  });
+
+  test("accepts quality photos as plain URLs", () => {
+    expect(
+      Value.Check(updateLandingPageDto, {
+        qcImages: ["https://cdn.example/1.jpg", "https://cdn.example/2.jpg"],
+      }),
+    ).toBe(true);
   });
 });

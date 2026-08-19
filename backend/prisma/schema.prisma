@@ -444,9 +444,29 @@ model LandingPage {
   brandStripTitle String   @default("")
   brandLogos      String[] @default([])
 
-  /// Product video block. `videoUrl` blank hides the whole section.
+  /// The "what's in the box" block. `videoTitle` is its heading; the media
+  /// itself lives in `galleryItems` below.
+  ///
+  /// `videoUrl` held the block's single demo video before it became a
+  /// gallery. Superseded by `galleryItems`, into which the
+  /// `landing_media_gallery` migration backfilled it before blanking this
+  /// column. Kept rather than dropped so nothing is destroyed and a rollback
+  /// still has somewhere to put the value back.
   videoTitle String @default("")
   videoUrl   String @default("")
+
+  /// The "what's in the box" gallery — ordered, mixed photos and clips.
+  ///
+  /// Json rather than String[] because this list is HETEROGENEOUS: a bare URL
+  /// cannot say whether it is a picture or a clip — `parseProductVideo`
+  /// answers "file" for both, so a photo would render inside a <video> — and
+  /// two parallel arrays are one bad write from desynchronising. Shape:
+  ///   [{ url: string, kind: "image" | "video", alt: string }]
+  ///
+  /// `kind` is decided by the SERVER at upload time from the sniffed bytes
+  /// (lib/media-validate.ts), never asserted by the client. A pasted link is
+  /// always "video", which is the only thing a link can usefully be here.
+  galleryItems Json @default("[]")
 
   /// A video in the hero, in place of the pack shot. Blank falls back to the
   /// product photo, so a campaign without one looks exactly as it did.
@@ -486,9 +506,20 @@ model LandingPage {
   /// Landing pages had no image of their own at all: `qcImageHint` was only a
   /// note describing the art that belonged there, so this block rendered a
   /// grey wireframe on every published campaign and nothing could change it.
+  ///
+  /// Superseded by `qcImages` below, into which the `landing_media_gallery`
+  /// migration backfilled it before blanking this column — same reasoning as
+  /// `videoUrl`: exactly one row owns each Cloudinary URL, or deleting one
+  /// frees a file the other still points at.
   qcImage     String   @default("")
-  /// What the picture should show. Art direction for whoever uploads it, and
-  /// the caption on the placeholder until they do.
+  /// The quality block's pictures, ordered.
+  ///
+  /// String[] rather than Json because this list is HOMOGENEOUS — it is
+  /// literally `Product.photos`, so the upload and delete-by-index handlers
+  /// are the same two handlers with the entity swapped.
+  qcImages    String[] @default([])
+  /// What the pictures should show. Art direction for whoever uploads them,
+  /// and the caption on the placeholder until they do.
   qcImageHint String   @default("")
 
   /// Urgency block. `countdownEndsAt` null hides the timer but keeps the copy.

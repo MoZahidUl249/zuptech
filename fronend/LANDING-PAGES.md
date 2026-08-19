@@ -52,12 +52,19 @@ LandingPage
   title             String   — internal name, shown in the admin list
   slug              String   unique — the /lp/:slug path segment
   productId         String   FK → Product
-  offerPrice        Int      — admin-entered, BDT
-  compareAtPrice    Int      — admin-entered, BDT (struck-through reference price)
-  ribbonText        String   — urgency banner, e.g. "Limited stock — offer ends today"
+  offerPrice        Int      — admin-entered, BDT. NOT rendered any more (§2.1)
+  compareAtPrice    Int      — admin-entered, BDT. The struck price beside the live one
+  ribbonText        String   — retained, no longer rendered (§2.1)
   buttonLabel       String   — overrides the default "Buy Now" label
   footerNote        String   — small print under the order button
-  benefitBullets    String[] — checklist shown above the order button
+  benefitBullets    String[] — retained, no longer rendered (§2.1)
+  galleryItems      Json     — [{url, kind:"image"|"video", alt}] — the
+                               "what's in the box" slider. Ordered. `kind` is
+                               set server-side from the sniffed bytes
+  qcImages          String[] — the quality block's photos, ordered. One renders
+                               on its own; two or more become a slider
+  qcImage           String   — superseded by qcImages, backfilled and blanked
+  videoUrl          String   — superseded by galleryItems, ditto
   imageHint         String   — placeholder label (no real image pipeline yet)
   gtmId             String   — this page's own GTM-XXXXXXX container id
   published         Boolean  — false = 404 on the public route
@@ -66,6 +73,38 @@ LandingPage
   createdAt         DateTime
   updatedAt         DateTime
 ```
+
+### 2.1 Fields kept but no longer rendered
+
+Four sections came off the page in the 2026-08-20 restructure — the two
+coloured price bands, the payment/brand strip, and the numbered feature cards.
+The price now sits directly under the hero media instead: `compareAtPrice`
+struck through on the left, and on the right the **bundle total the cart will
+actually charge**, not `offerPrice`. Taking the live number from the same place
+checkout does is what stops the two disagreeing.
+
+These columns keep their data and still round-trip on every save, but nothing
+renders them and the admin editor no longer offers a control:
+
+`ribbonText` · `priceCompareLabel` · `priceOfferLabel` · `brandStripTitle` ·
+`brandLogos` · `featuresTitle` · `features` · `benefitBullets`
+
+Restoring any of them is a `<Group>` in `components/admin/section-landing-pages.tsx`
+plus a block in the page — no migration, no lost Bengali copy. `offerPrice`
+also stops rendering but stays in use by `CampaignTracking` and by the admin's
+"checkout will charge X" warning.
+
+### 2.2 CTA tracking
+
+Every order button anchors to `#order` and carries a `data-cta`, read by one
+delegated listener in `components/marketing/campaign-tracking.tsx`. The full
+inventory after the restructure:
+
+`header` · `hero` · `gallery` · `quality` · `countdown` · `order_form`
+
+**`price_band` is gone** — it died with the offer-price band. Any GTM trigger
+or report keyed on it stops firing, and `gallery` / `quality` are new values
+that need adding to the container.
 
 ## 3. Endpoints the backend must serve (exact contract)
 
@@ -80,6 +119,26 @@ keep the paths:
 - `app/api/landing-pages/[slug]/route.ts` — `GET` (public)
 - `lib/landing-pages-store.ts` — the reference "business logic" (slug
   uniqueness, discount computation) to port into the real backend
+
+### 3.0 Media endpoints
+
+Files never ride in the form's PATCH — they are multipart, the server stores
+them and hands back a URL, so each has its own request (the button IS the
+save). Order and alt text are ordinary PATCH fields.
+
+- `POST   /admin/api/landing-pages/:id/gallery` — append one slide, photo or
+  clip. `kind` comes from `uploadMedia`'s magic-byte sniffing, never from the
+  client. Capped at `MAX_CAMPAIGN_GALLERY`.
+- `DELETE /admin/api/landing-pages/:id/gallery/:index` — later slides shift down
+- `POST   /admin/api/landing-pages/:id/qc-images` — append one quality photo
+- `DELETE /admin/api/landing-pages/:id/qc-images/:index`
+
+`POST …/:id/image` (the old single quality picture) is **gone**.
+
+Deleting a campaign releases its files through `campaignMediaToRelease`, which
+subtracts every URL another campaign still points at. `duplicate` copies media
+URLs rather than re-uploading them, so two rows can legitimately share a file —
+without the check, deleting either one broke the other's pictures.
 
 ### 3.1 Admin CRUD (`/admin/api/landing-pages*`)
 

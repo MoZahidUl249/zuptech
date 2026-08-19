@@ -1,16 +1,19 @@
 import { Elysia } from "elysia";
 import { Prisma } from "../../generated/client";
 import {
+  MAX_CAMPAIGN_GALLERY,
+  MAX_CAMPAIGN_QC_IMAGES,
   createLandingPageDto,
   listLandingPagesQueryDto,
   updateLandingPageDto,
-  uploadLandingImageDto,
+  uploadLandingGalleryDto,
+  uploadLandingQcImageDto,
 } from "../../dtos/landing-pages.dto";
 import { prisma } from "../../lib/db";
 import { LIST_CAP } from "../../lib/rules";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
-import { landingPageInclude, toLandingPage } from "../../lib/serialize";
+import { campaignGallery, landingPageInclude, toLandingPage } from "../../lib/serialize";
 import { deleteMediaByUrl, uploadMedia } from "../../lib/storage";
 import { staffGuard } from "./guard";
 
@@ -61,6 +64,62 @@ async function assertSlugFree(slug: string, exceptId?: string) {
   if (clash && clash.id !== exceptId) {
     throw conflict(`Slug "${slug}" is already used by another landing page`);
   }
+}
+
+
+/**
+ * Every file this campaign owns, minus anything another campaign still uses.
+ *
+ * `duplicate` copies media URLs rather than re-uploading them, so two rows can
+ * legitimately point at one file. Deleting either used to free it for both —
+ * the copy kept a URL that 404s, with nothing on the page to say why. One
+ * query over a table with tens of rows buys the check.
+ *
+ * The two superseded columns are included on purpose: the migration blanked
+ * them, but a row written by an older admin client mid-rollout can still carry
+ * one, and an orphan on Cloudinary is billed forever.
+ *
+ * Call this BEFORE deleting the row — the query excludes `lp.id`, and after
+ * the delete there is no id left to exclude.
+ */
+async function campaignMediaToRelease(lp: {
+  id: string;
+  galleryItems: unknown;
+  qcImages: string[];
+  qcImage: string;
+  videoUrl: string;
+  heroVideoUrl: string;
+}): Promise<string[]> {
+  const urlsOf = (row: {
+    galleryItems: unknown;
+    qcImages: string[];
+    qcImage: string;
+    videoUrl: string;
+    heroVideoUrl: string;
+  }) =>
+    [
+      ...campaignGallery(row.galleryItems).map((m) => m.url),
+      ...row.qcImages,
+      row.qcImage,
+      row.videoUrl,
+      row.heroVideoUrl,
+    ].filter(Boolean);
+
+  const mine = new Set(urlsOf(lp));
+  if (mine.size === 0) return [];
+
+  const others = await prisma.landingPage.findMany({
+    where: { id: { not: lp.id } },
+    select: {
+      galleryItems: true,
+      qcImages: true,
+      qcImage: true,
+      videoUrl: true,
+      heroVideoUrl: true,
+    },
+  });
+  for (const other of others) for (const url of urlsOf(other)) mine.delete(url);
+  return [...mine];
 }
 
 export const adminLandingPages = new Elysia({
@@ -165,41 +224,121 @@ export const adminLandingPages = new Elysia({
   )
 
   /**
-   * The quality block's picture.
+   * Append one slide to the "what's in the box" gallery.
    *
-   * Same shape as every other image upload here — validated, re-uploaded with
-   * our own Cloudinary credentials, and the previous file deleted only after
-   * the row points at the new one, so a failed write never leaves the campaign
-   * showing a picture that no longer exists.
+   * A photo or a clip — `kind` comes from `uploadMedia`, which sniffs the
+   * magic bytes, so the client never gets to assert what it uploaded. Same
+   * shape as the product gallery: validated, re-uploaded with our own
+   * Cloudinary credentials, appended to the end.
    */
   .post(
-    "/admin/api/landing-pages/:id/image",
+    "/admin/api/landing-pages/:id/gallery",
     async ({ params, body, staffCtx }) => {
       assertCan(staffCtx, "landingpages", "manage");
       const existing = await prisma.landingPage.findUnique({ where: { id: params.id } });
       if (!existing) throw notFound("Landing page");
 
-      const media = await uploadMedia(body.file, "landing", existing.id, 0);
+      const items = campaignGallery(existing.galleryItems);
+      if (items.length >= MAX_CAMPAIGN_GALLERY) {
+        throw badRequest(`A campaign gallery holds at most ${MAX_CAMPAIGN_GALLERY} items`);
+      }
+
+      const media = await uploadMedia(body.file, "landing", existing.id, items.length);
+      const next = [...items, { url: media.url, kind: media.mediaType, alt: "" }];
       const page = await prisma.landingPage.update({
         where: { id: existing.id },
-        data: { qcImage: media.url },
+        data: { galleryItems: next as unknown as Prisma.InputJsonValue },
         include: landingPageInclude,
       });
-      if (existing.qcImage) await deleteMediaByUrl(existing.qcImage);
       return toLandingPage(page);
     },
-    { body: uploadLandingImageDto },
+    { body: uploadLandingGalleryDto },
   )
+
+  /** Remove one slide by its position — later slides shift down. */
+  .delete("/admin/api/landing-pages/:id/gallery/:index", async ({ params, staffCtx }) => {
+    assertCan(staffCtx, "landingpages", "manage");
+    const existing = await prisma.landingPage.findUnique({ where: { id: params.id } });
+    if (!existing) throw notFound("Landing page");
+
+    const items = campaignGallery(existing.galleryItems);
+    const index = Number(params.index);
+    if (!Number.isInteger(index) || index < 0 || index >= items.length) {
+      throw badRequest("No gallery item at that position");
+    }
+
+    const next = [...items];
+    const [removed] = next.splice(index, 1);
+    const page = await prisma.landingPage.update({
+      where: { id: existing.id },
+      data: { galleryItems: next as unknown as Prisma.InputJsonValue },
+      include: landingPageInclude,
+    });
+    // The row stops pointing at the file before the file goes: a failed write
+    // must never leave a campaign showing a picture that no longer exists.
+    // A pasted YouTube link is passed in too — deleteMediaByUrl no-ops on
+    // anything that is not one of ours.
+    if (removed?.url) await deleteMediaByUrl(removed.url);
+    return toLandingPage(page);
+  })
+
+  /** Append one photo to the quality block. */
+  .post(
+    "/admin/api/landing-pages/:id/qc-images",
+    async ({ params, body, staffCtx }) => {
+      assertCan(staffCtx, "landingpages", "manage");
+      const existing = await prisma.landingPage.findUnique({ where: { id: params.id } });
+      if (!existing) throw notFound("Landing page");
+
+      if (existing.qcImages.length >= MAX_CAMPAIGN_QC_IMAGES) {
+        throw badRequest(`The quality block holds at most ${MAX_CAMPAIGN_QC_IMAGES} photos`);
+      }
+
+      const media = await uploadMedia(body.file, "landing", existing.id, existing.qcImages.length);
+      const page = await prisma.landingPage.update({
+        where: { id: existing.id },
+        data: { qcImages: [...existing.qcImages, media.url] },
+        include: landingPageInclude,
+      });
+      return toLandingPage(page);
+    },
+    { body: uploadLandingQcImageDto },
+  )
+
+  /** Remove one quality photo by its position — later photos shift down. */
+  .delete("/admin/api/landing-pages/:id/qc-images/:index", async ({ params, staffCtx }) => {
+    assertCan(staffCtx, "landingpages", "manage");
+    const existing = await prisma.landingPage.findUnique({ where: { id: params.id } });
+    if (!existing) throw notFound("Landing page");
+
+    const index = Number(params.index);
+    if (!Number.isInteger(index) || index < 0 || index >= existing.qcImages.length) {
+      throw badRequest("No quality photo at that position");
+    }
+
+    const qcImages = [...existing.qcImages];
+    const [oldUrl] = qcImages.splice(index, 1);
+    const page = await prisma.landingPage.update({
+      where: { id: existing.id },
+      data: { qcImages },
+      include: landingPageInclude,
+    });
+    if (oldUrl) await deleteMediaByUrl(oldUrl);
+    return toLandingPage(page);
+  })
 
   .delete("/admin/api/landing-pages/:id", async ({ params, staffCtx }) => {
     assertCan(staffCtx, "landingpages", "manage");
     const existing = await prisma.landingPage.findUnique({ where: { id: params.id } });
     if (!existing) throw notFound("Landing page");
+    // Resolved before the delete, while the row is still there to exclude
+    // itself from the "does anyone else use this file" query.
+    const release = await campaignMediaToRelease(existing);
     await prisma.landingPage.delete({ where: { id: params.id } });
-    // The row is gone, so nothing can point at its picture any more — drop it
-    // rather than leave a paid-for file nobody can reach. Same order as the
-    // upload above: the database write first, the file second.
-    if (existing.qcImage) await deleteMediaByUrl(existing.qcImage);
+    // The row is gone, so nothing of ours can point at these files any more —
+    // drop them rather than leave paid-for storage nobody can reach. Same
+    // order as the uploads above: the database write first, the files second.
+    await Promise.all(release.map(deleteMediaByUrl));
     return { ok: true };
   })
 
@@ -289,6 +428,7 @@ export const adminLandingPages = new Elysia({
       specs,
       testimonials,
       formLabels,
+      galleryItems,
       ...copyable
     } = source;
 
@@ -299,6 +439,7 @@ export const adminLandingPages = new Elysia({
         specs: specs as Prisma.InputJsonValue,
         testimonials: testimonials as Prisma.InputJsonValue,
         formLabels: formLabels as Prisma.InputJsonValue,
+        galleryItems: galleryItems as Prisma.InputJsonValue,
         title: `${title} (copy)`,
         slug,
         published: false,

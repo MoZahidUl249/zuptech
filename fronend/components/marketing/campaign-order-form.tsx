@@ -28,6 +28,7 @@ export function CampaignOrderForm({
   campaignSlug,
   payMethod,
   productName,
+  theme,
 }: {
   productId: string;
   bundles: CampaignBundle[];
@@ -51,6 +52,15 @@ export function CampaignOrderForm({
    * nothing is enabled, and the form says so instead of posting a guess.
    */
   payMethod: string;
+  /**
+   * The campaign's CTA colours, so the submit button matches every other
+   * button on the page.
+   *
+   * It was `bg-zup-orange` hardcoded, which meant the one button that
+   * actually places the order was the only one ignoring the campaign's
+   * palette. Defaulted so the component still renders standalone.
+   */
+  theme?: { ctaBg: string; ctaText: string };
 }) {
   // Default to the best-value row the campaign offers, not the smallest — the
   // bundle ladder exists to lift order value and the page already argues for it.
@@ -255,7 +265,10 @@ export function CampaignOrderForm({
         type="submit"
         disabled={busy || !payMethod}
         data-cta="order_form"
-        className="mt-4 w-full rounded-full bg-zup-orange px-5 py-3.5 text-[16px] font-bold text-white transition-colors hover:bg-zup-orange-dark disabled:opacity-60"
+        // hover:opacity-90 rather than a darker shade: the colour arrives as a
+        // runtime hex in `style`, and a hover variant cannot be built from one.
+        className="mt-4 w-full rounded-[2px] px-5 py-3.5 text-[16px] font-bold transition-opacity hover:opacity-90 disabled:opacity-60"
+        style={{ backgroundColor: theme?.ctaBg ?? "#E85320", color: theme?.ctaText ?? "#FFFFFF" }}
       >
         {busy ? "…" : labels.submit}
       </button>

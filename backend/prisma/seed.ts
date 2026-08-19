@@ -469,7 +469,15 @@ const landingPages = [
     // The same placeholder URL the product row already carries. Replace it
     // with a real one and the section starts working; blank it and the whole
     // section disappears.
+    //
+    // Deliberately left on the superseded column rather than moved into
+    // `galleryItems`: a fresh seed then exercises BOTH the migration's
+    // backfill and the renderer's empty-gallery fallback, which is the pair of
+    // paths a published campaign takes across this deploy.
     videoUrl: "https://www.youtube.com/watch?v=ips1000demo",
+    // Empty because a seed cannot invent Cloudinary files — the gallery and
+    // the quality photos are uploaded per campaign from the admin.
+    galleryItems: [],
 
     featuresTitle: "কেন এই আইপিএসটি নেবেন",
     features: [
@@ -502,6 +510,7 @@ const landingPages = [
       "ইনস্টলেশনের সময় ইঞ্জিনিয়ারের কাছ থেকে সার্ভিস কার্ড বুঝে নিন",
       "যেকোনো সন্দেহে ডেলিভারির আগেই হটলাইনে কল করুন",
     ],
+    qcImages: [],
     qcImageHint: "হলোগ্রাম ও ওয়ারেন্টি কার্ডের ছবি",
 
     countdownTitle: "অফার শেষ হতে বাকি",
