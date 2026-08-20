@@ -88,6 +88,56 @@ compose() {
 # ---------- Preflight ----------
 [ -f "$ENV_FILE" ] || fail "$ENV_FILE not found — copy .env.production.example and fill it in (DEPLOYMENT.md §3)"
 
+# ---------- Disk ----------
+# A deploy that does not fit must refuse, not half-run.
+#
+# On 2026-08-20 this script filled the VPS disk to zero and took the site down
+# for three and a half minutes. Postgres could not write its checkpoint, PANICked,
+# and crash-looped: `/api/site-config` 500'd and every campaign page 404'd until
+# space was freed by hand. Nothing was lost, but only because crash recovery did
+# its job.
+#
+# Two things caused it, and both are fixed here:
+#
+#  1. `docker image prune -f` at the END of this script only removes DANGLING
+#     images. Every image published by CI carries a SHA tag, so it is never
+#     dangling and was never collected — nine pairs had piled up, ~2.1 GB each.
+#     The reclaim below is `-a`, which is what actually collects them, and it
+#     runs BEFORE the pull rather than after, so the space is free when the pull
+#     needs it. Images still in use by a running container are never touched, so
+#     the stack you are replacing survives this.
+#
+#  2. There was no space check at all. A deploy would happily pull into a full
+#     disk and take the database with it. It now measures first and stops.
+#
+# The threshold covers the compressed pull plus its extraction plus headroom for
+# Postgres to keep checkpointing throughout. Override for a smaller box.
+REQUIRED_FREE_MB="${REQUIRED_FREE_MB:-6000}"
+
+# Docker's data root can be on a different filesystem to the checkout, and it
+# is the one that matters here.
+DOCKER_ROOT="$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)"
+free_mb() { df -Pm "$1" 2>/dev/null | awk 'NR==2 {print $4}'; }
+
+before_mb="$(free_mb "$DOCKER_ROOT")"
+if [ -n "${before_mb:-}" ] && [ "$before_mb" -lt "$REQUIRED_FREE_MB" ]; then
+  log "Only ${before_mb} MB free on $DOCKER_ROOT — reclaiming unused images"
+  # -a, not the dangling-only prune: SHA-tagged images from previous deploys
+  # are the whole problem. Running containers hold their images, so this
+  # cannot pull the live stack out from under itself.
+  docker image prune -af >/dev/null 2>&1 || true
+  after_mb="$(free_mb "$DOCKER_ROOT")"
+  log "Reclaimed — ${after_mb:-?} MB free"
+
+  if [ -n "${after_mb:-}" ] && [ "$after_mb" -lt "$REQUIRED_FREE_MB" ]; then
+    fail "Still only ${after_mb} MB free on $DOCKER_ROOT, need ${REQUIRED_FREE_MB} MB.
+     Refusing to deploy: pulling into a full disk stops Postgres writing its
+     checkpoint, which crash-loops the database and takes the site down.
+     Free space (old backups in /backup, docker volume ls, journalctl --vacuum-size=200M)
+     and re-run. Set REQUIRED_FREE_MB to override on a smaller box."
+  fi
+fi
+
 # ---------- Images ----------
 if [ "$MODE" = build ]; then
   log "Building images on this host"
@@ -231,8 +281,14 @@ else
 fi
 
 # ---------- Cleanup ----------
-# Without this the VPS disk fills up after a few dozen deploys.
-log "Pruning old image layers"
+# Dangling layers only — the SHA-tagged images this deploy replaced are left
+# in place on purpose, so a rollback is a TAG change rather than a re-pull.
+# They are collected by the reclaim at the top of the next deploy that
+# actually needs the room, which is where that belongs: a deploy that dies
+# before reaching this line used to leave its images behind forever.
+log "Pruning dangling image layers"
 docker image prune -f >/dev/null
+
+log "Disk: $(free_mb "$DOCKER_ROOT") MB free on $DOCKER_ROOT"
 
 log "Deployed."

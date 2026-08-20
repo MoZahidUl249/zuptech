@@ -34,7 +34,7 @@
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.1",
-    "bun-types": "latest",
+    "bun-types": "^1.4.0",
     "prisma": "^7.8.0"
   }
 }

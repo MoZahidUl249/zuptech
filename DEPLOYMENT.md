@@ -338,6 +338,25 @@ tooling in the Console.
 Those backups sit on the same disk as the app, which does not survive losing
 the VPS. Copy them off-box (`rsync`/`rclone` to object storage).
 
+### Disk space
+
+**A full disk takes the database down, not just the deploy.** On 2026-08-20 a
+rollout filled the VPS to zero bytes: Postgres could not write its checkpoint,
+PANICked and crash-looped, and the storefront 500'd for three and a half
+minutes until space was freed. Nothing was lost — crash recovery replayed the
+WAL — but that was luck, not design.
+
+Every CI image carries a SHA tag, so it is never *dangling*, and the
+`docker image prune -f` this script used to run at the end never collected
+one: nine image pairs at ~2.1 GB each had accumulated. `scripts/deploy.sh` now
+measures free space on Docker's data root **before** pulling, reclaims unused
+images with `-a` when it is short (running containers keep theirs), and
+**refuses to deploy** if it still cannot fit rather than pulling into a full
+disk. Override the 6 GB floor with `REQUIRED_FREE_MB=…` on a smaller box.
+
+If a deploy ever does refuse: `df -h /`, then old dumps in `/backup`,
+`docker volume ls` for orphaned volumes, and `journalctl --vacuum-size=200M`.
+
 **Restoring.** The dump is `pg_dumpall` output, so it replays into an empty
 cluster with plain `psql` — no `pg_restore`, and no database to create first.
 Verified end to end against a scratch container: row counts came back identical
