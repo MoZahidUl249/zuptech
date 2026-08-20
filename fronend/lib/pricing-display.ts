@@ -185,7 +185,10 @@ export interface OfferRung {
   kind: "sale" | "qty" | "delivery";
   /** Quantity that unlocks this rung; null for the flat sale, which always applies. */
   minQty: number | null;
-  /** What the rung is worth, in Taka. For delivery, an amount at or above the
+  /** What the rung is worth to the customer, in Taka — for a quantity tier
+   *  that is the drop from the price currently shown, NOT the tier's stored
+   *  amount (which is measured off the list price and may be partly or wholly
+   *  swallowed by an existing sale). For delivery, an amount at or above the
    *  zone fee means it ships free. */
   amount: number;
   /** Short headline, e.g. "Buy 3+" or "Sale". */
@@ -220,14 +223,35 @@ export function offerLadder(product: Product, qty?: number): OfferRung[] {
     });
   }
 
+  /*
+   * A tier's stored `amount` is taka off the LIST price, and the backend then
+   * charges min(sellingPrice, price - amount) — tiers and sales never stack,
+   * the cheaper wins (rules.ts `effectiveUnitPrice`). So on a product that is
+   * ALSO on sale, `amount` is not what the customer saves: they are already
+   * paying the sale price, and only the part of the tier that goes below it is
+   * worth anything.
+   *
+   * Printing the raw amount claimed a discount that was not given — a ৳600
+   * tier on a product listed at ৳2,600 and on sale at ৳2,184 says "Save ৳600"
+   * while the basket falls by ৳184. Worse, a tier that does not reach the sale
+   * price at all is worth exactly nothing and still advertised itself.
+   *
+   * So: state the saving against the price actually shown, and drop rungs that
+   * are worth nothing rather than promise a discount the cart will not give.
+   */
+  const shownUnitPrice = product.price - saleOff;
   for (const offer of [...(product.quantityOffers ?? [])].sort((a, b) => a.minQty - b.minQty)) {
+    const tierUnitPrice = Math.max(0, product.price - offer.amount);
+    const realSaving = Math.max(0, shownUnitPrice - tierUnitPrice);
+    if (realSaving === 0) continue;
     const earned = qty !== undefined && qty >= offer.minQty;
     rungs.push({
       kind: "qty",
       minQty: offer.minQty,
-      amount: offer.amount,
+      // The rung's worth, which is what every caller renders and totals.
+      amount: realSaving,
       label: `Buy ${offer.minQty}+`,
-      detail: `Save ${formatBDT(offer.amount)} per unit`,
+      detail: `Save ${formatBDT(realSaving)} per unit`,
       state: earned ? "active" : "locked",
       unitsAway: qty !== undefined && !earned ? offer.minQty - qty : null,
     });

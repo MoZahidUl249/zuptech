@@ -8,15 +8,19 @@ import { track, trackViewItem } from "@/lib/analytics";
  *
  * A landing page is one document with no client-side navigation, so the
  * container's initial page_view already covers the visit. What it does NOT
- * cover is which campaign, which product, and which of the four identical
+ * cover is which campaign, which product, and which of the six identical
  * "order" buttons a visitor actually pressed — and on an ad landing page that
- * last one is the whole question. Four CTAs all point at #order, so a raw
- * Click Text trigger reports the same label for every one of them and cannot
- * tell you whether the hero converts or only the countdown does.
+ * last one is the whole question. Every CTA points at #order, so a raw Click
+ * Text trigger reports the same label for all of them and cannot tell you
+ * whether the hero converts or only the countdown does.
  *
  * Clicks are caught by one delegated listener rather than handlers on each
  * anchor: the page is a server component, and this keeps it that way instead
- * of turning four buttons into four client islands.
+ * of turning six buttons into six client islands.
+ *
+ * `cta_location` is read straight off the attribute, so adding a button to the
+ * page needs nothing here — but the container has to learn the new value
+ * before it shows up in a report.
  *
  * Heatmap and session-replay tools (Clarity, Hotjar) need nothing from here —
  * they attach their own listeners once GTM loads them, and the CSP now allows
@@ -46,7 +50,9 @@ export function CampaignTracking({
       if (!el) return;
       track("cta_click", {
         campaign_slug: slug,
-        // Which band of the page it sits in — hero, price, countdown, form.
+        /* Which band of the page it sits in. The full vocabulary, in page
+           order: header, hero, gallery, quality, countdown, order_form.
+           `price_band` retired with the offer-price band it lived in. */
         cta_location: el.dataset.cta,
         cta_text: (el.textContent ?? "").trim().slice(0, 80),
       });
