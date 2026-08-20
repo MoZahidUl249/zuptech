@@ -148,6 +148,9 @@ let deletedMovementsFor: string[] = [];
 /** Same, for the purchase orders it cleared alongside the product. */
 let deletedPosFor: string[] = [];
 
+/** Campaign ids whose price ladder the PATCH replaced, in order. */
+let clearedTiersFor: string[] = [];
+
 /** The subset of the client the delete route's transaction touches. Handed to
  *  the callback as `tx`, so what the route does inside the transaction is
  *  observable — the ledger clearing in particular. */
@@ -168,6 +171,21 @@ const txClient = {
   siteConfig: {
     findUniqueOrThrow: async () => ({ featuredIds: [] }),
     update: async () => ({ featuredIds: [] }),
+  },
+  /* The campaign PATCH runs inside a transaction now, because a ladder is
+     replace-all: the old tiers are deleted and the new ones written together
+     or not at all. Both halves are observable here. */
+  landingPageTier: {
+    deleteMany: async ({ where }: { where: { landingPageId: string } }) => {
+      clearedTiersFor.push(where.landingPageId);
+      return { count: 0 };
+    },
+  },
+  landingPage: {
+    update: async ({ data }: { data: Record<string, unknown> }) => {
+      capturedLandingUpdate = data;
+      return { ...landingSource, ...data, product: CATALOG[0], tiers: [] };
+    },
   },
 };
 
@@ -211,12 +229,18 @@ mock.module("./lib/db", () => ({
         where?.slug !== undefined ? null : landingSource,
       update: async ({ data }: { data: Record<string, unknown> }) => {
         capturedLandingUpdate = data;
-        return { ...landingSource, ...data, product: CATALOG[0] };
+        return { ...landingSource, ...data, product: CATALOG[0], tiers: [] };
       },
       create: async ({ data }: { data: Record<string, unknown> }) => {
         capturedLandingCreate = data;
+        /* `tiers` arrives as Prisma's nested-write shape `{ create: [...] }`;
+           the real client hands back the created ROWS, and toLandingPage maps
+           over them. Resolving it here is what makes the duplicate test able
+           to assert the copy inherited the ladder. */
+        const nested = data.tiers as { create?: unknown[] } | undefined;
         return {
           ...data,
+          tiers: nested?.create ?? [],
           id: "lp-copy",
           viewCount: 0,
           orderCount: 0,
@@ -275,6 +299,7 @@ beforeEach(() => {
   landingSource = null;
   capturedLandingCreate = null;
   capturedLandingUpdate = null;
+  clearedTiersFor = [];
 });
 
 /* ========================================================================
@@ -422,6 +447,13 @@ const SOURCE = {
   brandLogos: ["bKash"],
   videoTitle: "ভিডিও",
   videoUrl: "https://example.test/v",
+  /* A ladder on the source, so the duplicate test proves the copy inherits
+     the campaign's own prices rather than silently reverting to catalogue
+     ones. */
+  tiers: [
+    { id: 1, landingPageId: "lp_src", minQty: 2, unitPrice: 2000 },
+    { id: 2, landingPageId: "lp_src", minQty: 3, unitPrice: 1900 },
+  ],
   galleryItems: [
     { url: "https://cdn.example/g-1.jpg", kind: "image", alt: "a" },
     { url: "https://youtu.be/abc", kind: "video", alt: "" },
@@ -520,11 +552,82 @@ describe("POST /admin/api/landing-pages/:id/duplicate", () => {
     expect(data.viewCount).toBeUndefined();
   });
 
+  test("carries the campaign's own price ladder, stripped of the original's row ids", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    await call("POST", "/admin/api/landing-pages/lp1/duplicate");
+
+    /* A duplicate is the next campaign. One that silently reverted to
+       catalogue prices would be the same failure as the blank-page bug the
+       exclusion-list rewrite exists to prevent — and it would be invisible
+       until someone compared the two pages' totals. */
+    expect(capturedLandingCreate?.tiers).toEqual({
+      create: [
+        { minQty: 2, unitPrice: 2000 },
+        { minQty: 3, unitPrice: 1900 },
+      ],
+    });
+  });
+
   test("refuses a staff member who may only look at campaigns", async () => {
     signInAs({ landingpages: "view" });
     landingSource = SOURCE;
     const { status } = await call("POST", "/admin/api/landing-pages/lp1/duplicate");
     expect(status).toBe(403);
+  });
+});
+
+describe("PATCH /admin/api/landing-pages/:id — the price ladder", () => {
+  test("sending a ladder replaces the whole thing", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    const { status } = await call("PATCH", "/admin/api/landing-pages/lp1", {
+      tiers: [{ minQty: 2, unitPrice: 2000 }],
+    });
+
+    expect(status).toBe(200);
+    // Cleared first, then written — replace-all, inside one transaction.
+    expect(clearedTiersFor).toEqual(["lp1"]);
+    expect(capturedLandingUpdate?.tiers).toEqual({ create: [{ minQty: 2, unitPrice: 2000 }] });
+  });
+
+  test("omitting the ladder leaves it alone — absent is not the same as empty", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    await call("PATCH", "/admin/api/landing-pages/lp1", { headline: "New words" });
+
+    expect(clearedTiersFor).toEqual([]);
+    expect(capturedLandingUpdate?.tiers).toBeUndefined();
+  });
+
+  test("an empty ladder clears the campaign's prices", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    // The editor's way of saying "price like the shop again".
+    await call("PATCH", "/admin/api/landing-pages/lp1", { tiers: [] });
+
+    expect(clearedTiersFor).toEqual(["lp1"]);
+    expect(capturedLandingUpdate?.tiers).toEqual({ create: [] });
+  });
+
+  test("a repeated threshold is a 400 naming the quantity, not a constraint 500", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    const { status, body } = await call("PATCH", "/admin/api/landing-pages/lp1", {
+      tiers: [
+        { minQty: 2, unitPrice: 2000 },
+        { minQty: 2, unitPrice: 1800 },
+      ],
+    });
+
+    expect(status).toBe(400);
+    expect(JSON.stringify(body)).toContain("2");
+    expect(clearedTiersFor).toEqual([]);
   });
 });
 

@@ -24,11 +24,24 @@
 > page created from "New landing page" would advertise that literal string to
 > ad traffic.
 >
-> **Money:** `offerPrice`/`compareAtPrice` are ad copy. Checkout still reprices
-> from the catalog via `priceCart()` (cal-bk.md §3), so a landing page can
-> never move real money on its own. The admin editor shows the product's real
-> selling price and warns when the two diverge — if you want the advertised
-> price to be charged, set the product's sale price to match.
+> **Money:** `offerPrice`/`compareAtPrice` are still ad copy — `priceCart()`
+> never reads either, so a number typed beside a headline cannot move a total.
+>
+> A campaign **can** charge its own bulk prices, through `LandingPageTier`
+> (`{minQty, unitPrice}`): absolute per-unit prices the server reads, not
+> discounts and not copy. No tiers means the page prices exactly like the shop,
+> so the feature is opt-in and adds nothing to a campaign that ignores it. A
+> tier at or above the shop price is inert — ad traffic never pays more than a
+> walk-in.
+>
+> Both the advertised ladder and the charged price resolve through
+> `campaignUnitPrice()`, and `backend/src/lib/campaign-pricing.test.ts` asserts
+> the two are equal for every row the page draws. That equality is the whole
+> contract: a campaign cannot advertise a total the cart will refuse.
+>
+> Setting tiers here does **not** touch the storefront. The product keeps its
+> own sale price and its own `quantityOffers`, which is what `/products/:slug`
+> and ordinary checkout use.
 
 ## 1. What this feature is
 
@@ -58,6 +71,9 @@ LandingPage
   buttonLabel       String   — overrides the default "Buy Now" label
   footerNote        String   — small print under the order button
   benefitBullets    String[] — retained, no longer rendered (§2.1)
+  tiers             LandingPageTier[] — this campaign's own bulk ladder,
+                               {minQty, unitPrice}. ABSOLUTE per-unit prices,
+                               charged at checkout. Empty = price like the shop
   galleryItems      Json     — [{url, kind:"image"|"video", alt}] — the
                                "what's in the box" slider. Ordered. `kind` is
                                set server-side from the sniffed bytes

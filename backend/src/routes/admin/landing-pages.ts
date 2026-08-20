@@ -10,7 +10,7 @@ import {
   uploadLandingQcImageDto,
 } from "../../dtos/landing-pages.dto";
 import { prisma } from "../../lib/db";
-import { LIST_CAP } from "../../lib/rules";
+import { LIST_CAP, duplicateMinQtys } from "../../lib/rules";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { campaignGallery, landingPageInclude, toLandingPage } from "../../lib/serialize";
@@ -82,6 +82,18 @@ async function assertSlugFree(slug: string, exceptId?: string) {
  * Call this BEFORE deleting the row — the query excludes `lp.id`, and after
  * the delete there is no id left to exclude.
  */
+/**
+ * A campaign's ladder is keyed @@unique([landingPageId, minQty]), so a
+ * repeated threshold is a 400 naming the quantity rather than a Prisma
+ * constraint error nobody can act on. Same rule the product ladders enforce,
+ * through the same predicate.
+ */
+function assertNoDuplicateTierMinQty(tiers: { minQty: number }[] | undefined) {
+  if (!tiers) return;
+  const [dupe] = duplicateMinQtys(tiers);
+  if (dupe !== undefined) throw badRequest(`Two bundle tiers both start at ${dupe}`);
+}
+
 async function campaignMediaToRelease(lp: {
   id: string;
   galleryItems: unknown;
@@ -190,8 +202,16 @@ export const adminLandingPages = new Elysia({
       if (!product) throw badRequest(`Unknown product: ${body.productId}`);
       await assertSlugFree(body.slug);
 
+      // Pulled out of the spread: a relation is a nested write, not a column.
+      const { tiers, ...fields } = body;
+      assertNoDuplicateTierMinQty(tiers);
+
       const page = await prisma.landingPage.create({
-        data: { ...body, ...countdownData(body) },
+        data: {
+          ...fields,
+          ...countdownData(body),
+          ...(tiers ? { tiers: { create: tiers } } : {}),
+        },
         include: landingPageInclude,
       });
       set.status = 201;
@@ -213,10 +233,24 @@ export const adminLandingPages = new Elysia({
       }
       if (body.slug) await assertSlugFree(body.slug, params.id);
 
-      const page = await prisma.landingPage.update({
-        where: { id: params.id },
-        data: { ...body, ...countdownData(body) },
-        include: landingPageInclude,
+      const { tiers, ...fields } = body;
+      assertNoDuplicateTierMinQty(tiers);
+
+      const page = await prisma.$transaction(async (tx) => {
+        /* Replace-all semantics, same as the product's two ladders: sending a
+           ladder swaps the whole thing, omitting it leaves it alone. Both
+           halves are in one transaction so a failed create can never leave a
+           campaign with its prices deleted and none written back. */
+        if (tiers) await tx.landingPageTier.deleteMany({ where: { landingPageId: params.id } });
+        return tx.landingPage.update({
+          where: { id: params.id },
+          data: {
+            ...fields,
+            ...countdownData(body),
+            ...(tiers ? { tiers: { create: tiers } } : {}),
+          },
+          include: landingPageInclude,
+        });
       });
       return toLandingPage(page);
     },
@@ -374,7 +408,14 @@ export const adminLandingPages = new Elysia({
 
   .post("/admin/api/landing-pages/:id/duplicate", async ({ params, set, staffCtx }) => {
     assertCan(staffCtx, "landingpages", "manage");
-    const source = await prisma.landingPage.findUnique({ where: { id: params.id } });
+    /* `tiers` is included because the copy must inherit the ladder: a
+       duplicate is the next campaign, and one that silently reverted to
+       catalogue prices is the same class of failure as the blank-page bug
+       described below. */
+    const source = await prisma.landingPage.findUnique({
+      where: { id: params.id },
+      include: { tiers: true },
+    });
     if (!source) throw notFound("Landing page");
 
     // Copies start unpublished with counters reset — a duplicate is a draft
@@ -429,6 +470,10 @@ export const adminLandingPages = new Elysia({
       testimonials,
       formLabels,
       galleryItems,
+      /* A relation array is not a valid create input either, and naming it
+         here means a future relation is a compile error rather than a copy
+         that silently loses its prices. */
+      tiers,
       ...copyable
     } = source;
 
@@ -440,6 +485,9 @@ export const adminLandingPages = new Elysia({
         testimonials: testimonials as Prisma.InputJsonValue,
         formLabels: formLabels as Prisma.InputJsonValue,
         galleryItems: galleryItems as Prisma.InputJsonValue,
+        // Mapped, not spread: the source rows carry `id`/`landingPageId`,
+        // which belong to the original.
+        tiers: { create: tiers.map(({ minQty, unitPrice }) => ({ minQty, unitPrice })) },
         title: `${title} (copy)`,
         slug,
         published: false,

@@ -24,8 +24,11 @@ export interface OfferTier {
 export const MAX_OFFER_TIERS = 10;
 
 /** minQty values that appear more than once — the same check the backend runs
- *  (`assertNoDuplicateMinQty`), surfaced before the request instead of as a 400. */
-export function duplicateMinQtys(tiers: OfferTier[]): number[] {
+ *  (`duplicateMinQtys` in rules.ts), surfaced before the request instead of as
+ *  a 400. Generic over the row shape because the campaign ladder is
+ *  `{minQty, unitPrice}` and enforces the identical rule; only `minQty` is
+ *  read either way. */
+export function duplicateMinQtys<T extends { minQty: number }>(tiers: T[]): number[] {
   const seen = new Set<number>();
   const dupes = new Set<number>();
   for (const { minQty } of tiers) {

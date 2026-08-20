@@ -6,7 +6,7 @@ import { prisma } from "../../lib/db";
 import { ApiError, badRequest, unauthorized } from "../../lib/http";
 import { nextId } from "../../lib/ids";
 import { logOrderEvent } from "../../lib/order-events";
-import { orderSummary, priceCart } from "../../lib/pricing";
+import { orderSummary, priceCart, resolveCampaignPricing } from "../../lib/pricing";
 import { allowHit, clientIp } from "../../lib/rate-limit";
 import { isValidPhone, normalizePhone } from "../../lib/rules";
 import { toCheckoutOrder, toCustomerProfile, toOrder } from "../../lib/serialize";
@@ -14,9 +14,11 @@ import { toCheckoutOrder, toCustomerProfile, toOrder } from "../../lib/serialize
 /**
  * Checkout (guest or signed-in) + the signed-in customer's order history.
  *
- * Totals are ALWAYS recomputed server-side from catalog prices — the client's
- * numbers are never trusted (BACKEND.md §6). Placing an order reserves stock
- * (`reserved` += qty); physical stock only moves when the order is delivered.
+ * Totals are ALWAYS recomputed server-side — from catalog prices, and from a
+ * campaign's own ladder when the order names a published campaign. The
+ * client's numbers are never trusted either way (BACKEND.md §6). Placing an
+ * order reserves stock (`reserved` += qty); physical stock only moves when
+ * the order is delivered.
  */
 export const publicOrders = new Elysia({ name: "routes/public/orders", detail: { tags: ["Checkout"] } })
   .post(
@@ -53,9 +55,28 @@ export const publicOrders = new Elysia({ name: "routes/public/orders", detail: {
         throw new ApiError(429, "Too many orders — try again in a few minutes");
       }
 
+      /*
+       * Attribute AND price the order from one lookup.
+       *
+       * Resolved against the PUBLISHED set: an unknown or unpublished slug
+       * prices at catalogue rates and attributes nothing, rather than
+       * crediting a campaign that was not running — and never fails the
+       * order, because a broken attribution must not cost a sale.
+       *
+       * Deliberately one resolution rather than two. The campaign that priced
+       * the order is by construction the campaign credited with it; resolving
+       * separately would let those two disagree, which is a reporting bug
+       * nobody would notice until the numbers were argued over.
+       */
+      const campaign = await resolveCampaignPricing(body.landingPageSlug);
+
       // All money comes from the pricing engine: catalog prices at order
-      // time, stock enforced, unknown/hidden products rejected.
-      const cart = await priceCart(body.items, body.insideDhaka, { enforceStock: true });
+      // time — plus the campaign's ladder when there is one — stock enforced,
+      // unknown/hidden products rejected.
+      const cart = await priceCart(body.items, body.insideDhaka, {
+        enforceStock: true,
+        campaign,
+      });
       const { subtotal, deliveryFee, installationFee, total, insideDhaka } = cart;
       if (insideDhaka === null || deliveryFee === null || installationFee === null || total === null) {
         throw badRequest("Unknown delivery zone"); // unreachable — insideDhaka is required
@@ -67,22 +88,7 @@ export const publicOrders = new Elysia({ name: "routes/public/orders", detail: {
       });
       if (!method) throw badRequest(`Payment method "${body.pay}" is not available`);
 
-      /*
-       * Attribute the order to a campaign, when it came from one.
-       *
-       * Resolved against the PUBLISHED set: an unknown or unpublished slug
-       * attributes nothing rather than crediting a campaign that was not
-       * running, and never fails the order — a broken attribution must not
-       * cost a sale.
-       */
-      let landingPageId: string | null = null;
-      if (body.landingPageSlug) {
-        const lp = await prisma.landingPage.findUnique({
-          where: { slug: body.landingPageSlug },
-          select: { id: true, published: true },
-        });
-        if (lp?.published) landingPageId = lp.id;
-      }
+      const landingPageId = campaign?.id ?? null;
 
       const zoneLabel = insideDhaka ? "Inside Dhaka" : "Outside Dhaka";
 

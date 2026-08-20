@@ -39,6 +39,7 @@ import type {
   IndustrialService,
   Invoice,
   LandingPage,
+  LandingPageTier,
   Order,
   OrderEvent,
 
@@ -65,7 +66,7 @@ import {
   INDUSTRIAL_LEAD_STATUSES,
   INVOICE_STATUSES,
   isLowStock,
-  effectiveUnitPrice,
+  campaignUnitPrice,
   HERO_PAGES,
   type HeroPage,
   LEAD_STATUSES,
@@ -420,10 +421,18 @@ export function toIndustrialLead(l: IndustrialLead): IndustrialLeadDto {
 
 /* ===== Landing pages ===== */
 
-/** The relations both landing-page mappers need loaded. */
-export const landingPageInclude = { product: { include: productInclude } };
+/** The relations both landing-page mappers need loaded. Ordered so the admin
+ *  editor, the public ladder and the pricing resolver all see one sequence
+ *  without three sorts. */
+export const landingPageInclude = {
+  product: { include: productInclude },
+  tiers: { orderBy: { minQty: "asc" as const } },
+};
 
-type LandingPageRow = LandingPage & { product: ProductWithRelations };
+type LandingPageRow = LandingPage & {
+  product: ProductWithRelations;
+  tiers: LandingPageTier[];
+};
 
 /** One slide of a campaign's "what's in the box" gallery. */
 export type CampaignGalleryItem = { url: string; kind: "image" | "video"; alt: string };
@@ -571,6 +580,9 @@ export function toLandingPage(
     // for those, unpublishing this page also removes the only way to buy it.
     productVisible: lp.product.visible,
     productSellingPrice: sellingPrice(lp.product),
+    /* Mapped rather than passed through so the row's `id`/`landingPageId`
+       never reach the editor, which would only send them back. */
+    tiers: lp.tiers.map(({ minQty, unitPrice }) => ({ minQty, unitPrice })),
     offerPrice: lp.offerPrice,
     compareAtPrice: lp.compareAtPrice,
     ribbonText: lp.ribbonText,
@@ -608,12 +620,14 @@ export function toPublicLandingPage(lp: LandingPageRow): PublicLandingPageDto {
     imageHint: lp.imageHint,
     gtmId: lp.gtmId,
     ...campaignContent(lp),
-    /* The bundle ladder, priced from the product rather than typed as copy.
-     * Building it here means the number the ad shows and the number
-     * priceCart() charges come from one source and cannot drift. */
+    /* The bundle ladder, priced from stored rows rather than typed as copy —
+     * the campaign's own tiers when it has any, the product's quantity offers
+     * when it does not. Built with campaignUnitPrice(), which is the same
+     * function priceCart() charges through, so the number the ad shows and the
+     * number the cart takes cannot drift. */
     bundles: Array.from({ length: Math.max(1, lp.bundleMaxQty) }, (_, i) => {
       const qty = i + 1;
-      const unit = effectiveUnitPrice(lp.product, qty, lp.product.quantityOffers);
+      const unit = campaignUnitPrice(lp.product, qty, lp.product.quantityOffers, lp.tiers);
       return {
         qty,
         unitPrice: unit,

@@ -7,7 +7,7 @@ import {
   uploadProductVideoDto,
 } from "../../dtos/products.dto";
 import { prisma } from "../../lib/db";
-import { LIST_CAP, salePriceFrom } from "../../lib/rules";
+import { LIST_CAP, duplicateMinQtys, salePriceFrom } from "../../lib/rules";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { productInclude, toAdminProduct } from "../../lib/serialize";
@@ -44,14 +44,12 @@ async function featuredIds(): Promise<string[]> {
 }
 
 /** Both tier ladders are keyed @@unique([productId, minQty]), so a repeated
- *  threshold is a 400 rather than a Prisma constraint error. */
+ *  threshold is a 400 rather than a Prisma constraint error. The predicate
+ *  lives in rules.ts because the campaign ladder enforces the same rule. */
 function assertNoDuplicateMinQty(field: string, offers: { minQty: number }[] | undefined) {
   if (!offers) return;
-  const seen = new Set<number>();
-  for (const { minQty } of offers) {
-    if (seen.has(minQty)) throw badRequest(`Duplicate ${field} tier for minQty ${minQty}`);
-    seen.add(minQty);
-  }
+  const [dupe] = duplicateMinQtys(offers);
+  if (dupe !== undefined) throw badRequest(`Duplicate ${field} tier for minQty ${dupe}`);
 }
 
 export const adminProducts = new Elysia({ name: "routes/admin/products", detail: { tags: ["Admin · Products"] } })

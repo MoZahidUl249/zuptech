@@ -136,7 +136,9 @@ ids, reserve/decrement stock, auto-create the customer by phone
 
 ### 2.3 Pricing rules (server-side source of truth)
 
-- Unit price: from the product catalog **by `productId`** — never from the client.
+- Unit price: from the product catalog **by `productId`**, and from the
+  campaign ladder addressed by `landingPageSlug` when one is sent (resolved
+  against the *published* set server-side) — never from the client.
 - `subtotal = Σ unitPrice × qty` over validated lines.
 - Delivery fee / installation charge: the **sum of every node's own cost**
   on the root→leaf path for `areaId` (`resolveLocationPricing`); `areaId`
@@ -155,6 +157,7 @@ browser can be forged with nothing more than DevTools or `curl`.
 | Attack | Vector | Server defense |
 |---|---|---|
 | **Price tampering** | Client sends `unitPrice`/`total` in the order body (old frontend saved a client-computed `total`) | Order/quote bodies accept **only** `productId` + `qty`; prices are re-read from the catalog; extra fields ignored (verified: sending `"total": 1` still produced total 47450) |
+| **Campaign-price forgery** | Client invents a `landingPageSlug`, or sends tier prices in the body, to buy at a campaign rate | The slug is resolved against the **published** set server-side and yields only `{id, productId, tiers}` read from the database; an unknown or unpublished slug prices at catalogue rates (never a 400). Prices in the body are still ignored. Note a campaign price IS available to anyone holding a real slug — that is what an unlisted ad link is |
 | **Negative/fractional qty** | `qty: -5` or `0.5` to shrink the total or corrupt stock math | `qty` must be an integer, `1 ≤ qty ≤ 99`; else `400` |
 | **Quantity overflow** | Huge qty / thousands of lines to overflow totals or DoS | Line cap 50, qty cap 99; real backend should also validate against available stock |
 | **Delivery-fee tampering** | Claiming a cheap `areaId` (e.g. a village leaf) while shipping to an expensive one, or sending a made-up/non-leaf id | `areaId` must resolve to a real leaf `LocationNode`; fee is always recomputed by summing that leaf's actual root-to-leaf path server-side, never accepted from the client. Ops confirms address vs area by phone before dispatch |

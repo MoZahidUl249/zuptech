@@ -3,17 +3,67 @@ import { badRequest } from "./http";
 import { prisma } from "./db";
 import {
   availableStock,
+  campaignUnitPrice,
   discountedDeliveryFee,
-  effectiveUnitPrice,
   orderableProductWhere,
+  type CampaignTierLike,
 } from "./rules";
 
 /**
  * Server-side pricing engine (cal-bk.md §2) — the only place cart money is
- * computed. Clients send ids + quantities; unit prices are re-read from the
- * catalog at call time (never from the client, never from a cached quote), so
- * price tampering and stale-price replay are structurally impossible.
+ * computed. Clients send ids + quantities; unit prices are re-read at call
+ * time from the catalog, and from the named campaign's own ladder when the
+ * request carries a published campaign slug. Never from the client, never
+ * from a cached quote — so price tampering and stale-price replay remain
+ * structurally impossible.
+ *
+ * A campaign widens the INPUTS the server reads; it does not soften the rule
+ * about whose numbers are trusted. `resolveCampaignPricing()` below turns a
+ * slug into stored rows, and nothing a client sends reaches the arithmetic.
  */
+
+/**
+ * What a campaign is allowed to change about a price, resolved from its slug
+ * exactly once per request.
+ *
+ * `productId` is the fence: a campaign prices its OWN product and nothing else
+ * in the cart.
+ */
+export interface CampaignPricing {
+  id: string;
+  productId: string;
+  tiers: CampaignTierLike[];
+}
+
+/**
+ * Resolve a campaign slug to what it may price, or null.
+ *
+ * Checked against the PUBLISHED set, and null for an unknown, stale or
+ * unpublished slug — the same silent rule the order route already applied to
+ * attribution, now covering price too, because they are one decision and must
+ * never be able to disagree. A guessed slug quotes and charges catalogue
+ * prices rather than failing: a broken campaign link must not cost a sale.
+ *
+ * Deliberately a separate call rather than a lookup inside `priceCart()`, so
+ * that function still performs exactly one query and stays the single place
+ * money is computed rather than becoming a router too.
+ */
+export async function resolveCampaignPricing(
+  slug: string | undefined,
+): Promise<CampaignPricing | null> {
+  if (!slug) return null;
+  const lp = await prisma.landingPage.findUnique({
+    where: { slug },
+    select: {
+      id: true,
+      published: true,
+      productId: true,
+      tiers: { select: { minQty: true, unitPrice: true }, orderBy: { minQty: "asc" } },
+    },
+  });
+  if (!lp?.published) return null;
+  return { id: lp.id, productId: lp.productId, tiers: lp.tiers };
+}
 
 export interface PricedLine {
   product: Product & { quantityOffers: QuantityOffer[]; freeDeliveryOffers: FreeDeliveryOffer[] };
@@ -63,7 +113,10 @@ function mergeItems(items: { productId: string; qty: number }[]) {
 export async function priceCart(
   rawItems: { productId: string; qty: number }[],
   insideDhaka: boolean | undefined,
-  { enforceStock = false } = {},
+  {
+    enforceStock = false,
+    campaign = null,
+  }: { enforceStock?: boolean; campaign?: CampaignPricing | null } = {},
 ): Promise<PricedCart> {
   const items = mergeItems(rawItems);
 
@@ -100,7 +153,15 @@ export async function priceCart(
       const available = availableStock(product);
       if (qty > available) throw badRequest(`Only ${available} of "${product.name}" in stock`);
     }
-    const unitPrice = effectiveUnitPrice(product, qty, product.quantityOffers);
+    /* The campaign prices its own product only; every other line in the cart
+       is catalogue-priced, because a mixed cart is a shopper rather than an
+       attacker and refusing it would invent a new way to fail a checkout. */
+    const unitPrice = campaignUnitPrice(
+      product,
+      qty,
+      product.quantityOffers,
+      campaign && campaign.productId === product.id ? campaign.tiers : [],
+    );
     return {
       product,
       qty,

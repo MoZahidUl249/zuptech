@@ -88,9 +88,14 @@ export function CampaignOrderForm({
    * the derived figures below fall back to the bundle price alone, which is
    * the one number that is already server-derived.
    */
+  /* The slug goes to the quote as well as the order: this campaign may carry
+     its own bulk prices, and a form that quoted catalogue rates then charged
+     campaign rates would be the same class of bug as the missing installation
+     fee described above. */
   const { quote } = useQuote(
     chosen ? [{ productId, qty }] : [],
     true,
+    campaignSlug,
   );
   const delivery = quote?.deliveryFee ?? deliveryFee * qty;
   const installation = quote?.installationFee ?? 0;

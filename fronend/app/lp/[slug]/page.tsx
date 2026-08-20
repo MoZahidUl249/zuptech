@@ -162,8 +162,10 @@ function OrderCta({
  * than a page full of blank headings.
  *
  * The only numbers on the page come from `pub.bundles`, which the server
- * derived from the product's quantity offers — a campaign cannot advertise a
- * price the cart will refuse.
+ * derived from this campaign's own price ladder when it has one and from the
+ * product's quantity offers when it does not — through `campaignUnitPrice()`,
+ * the same function `priceCart()` charges with. So a campaign still cannot
+ * advertise a price the cart will refuse.
  */
 export default async function LandingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

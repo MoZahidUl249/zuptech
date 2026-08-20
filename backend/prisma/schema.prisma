@@ -47,12 +47,12 @@ model Category {
 /// with the admin extras (AdminProduct) — the API decides which fields each
 /// audience sees.
 model Product {
-  id          String  @id // storefront id, e.g. "ips1000"
-  slug        String  @unique // used in URLs + SEO, keep stable
-  name        String
-  categoryId  String
-  category    Category @relation(fields: [categoryId], references: [id])
-  price       Int // BDT
+  id            String   @id // storefront id, e.g. "ips1000"
+  slug          String   @unique // used in URLs + SEO, keep stable
+  name          String
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id])
+  price         Int // BDT
   /// Minimum down payment, as a whole percentage of price (0–100).
   ///
   /// This was the deposit in BDT until 2026-08-13, and the column deliberately
@@ -65,10 +65,10 @@ model Product {
   /// and store that number on the order. Do not recompute the percentage in the
   /// admin and again on the product page — that is precisely how a ৳999 product
   /// came to show ৳669 and charge ৳670.
-  minDepositPct Int   @default(0)
-  onSale      Boolean @default(false)
+  minDepositPct Int      @default(0)
+  onSale        Boolean  @default(false)
   /// The discount the admin types, 0–100. SOURCE of the sale as of 2026-08-13.
-  salePct     Int     @default(0)
+  salePct       Int      @default(0)
   /// What the customer pays while `onSale`, in BDT. Still the only money field
   /// any reader touches — but it is now COMPUTED from `salePct` rather than
   /// typed, by `salePriceFrom` in lib/rules.ts.
@@ -84,13 +84,13 @@ model Product {
   /// Consequence: a change to `price` MUST recompute this. The admin write
   /// path does. Anything else that edits `price` has to as well, or the
   /// advertised percentage and the charged amount drift apart again.
-  salePrice   Int     @default(0)
-  rating      Float   @default(0)
-  sold        Int     @default(0)
-  imgHint     String   @default("")
-  specs       String[] @default([]) // 4 bullet points
-  description String   @default("")
-  video       String   @default("") // promo video URL (YouTube etc.), "" = none
+  salePrice     Int      @default(0)
+  rating        Float    @default(0)
+  sold          Int      @default(0)
+  imgHint       String   @default("")
+  specs         String[] @default([]) // 4 bullet points
+  description   String   @default("")
+  video         String   @default("") // promo video URL (YouTube etc.), "" = none
 
   /// Products to show under this one, in this order. Curated per product — the
   /// storefront shows exactly these and hides the row when empty.
@@ -111,16 +111,16 @@ model Product {
   /// in-transit purchase order shows "Incoming". "Sold out" is only ever set
   /// by hand — automatically it would be indistinguishable from "Out of
   /// stock", and it exists to say a line is finished for good.
-  stockTag       String   @default("")
+  stockTag String @default("")
 
   // Admin-side extras
-  sku             String  @unique // e.g. "ZT-IPS-1000"
-  cost            Int     @default(0) // purchase cost (BDT) — drives stock value
-  stock           Int     @default(0) // on hand
-  reserved        Int     @default(0) // allocated to open orders
-  reorderAt       Int     @default(0) // low-stock threshold
-  visible         Boolean  @default(true)
-  photos          String[] @default([]) // ordered gallery URLs, first = cover photo; any count
+  sku       String   @unique // e.g. "ZT-IPS-1000"
+  cost      Int      @default(0) // purchase cost (BDT) — drives stock value
+  stock     Int      @default(0) // on hand
+  reserved  Int      @default(0) // allocated to open orders
+  reorderAt Int      @default(0) // low-stock threshold
+  visible   Boolean  @default(true)
+  photos    String[] @default([]) // ordered gallery URLs, first = cover photo; any count
 
   // Delivery + installation, BDT per unit, flat two-tier zone pricing
   deliveryFeeInsideDhaka      Int @default(0)
@@ -190,41 +190,41 @@ model FreeDeliveryOffer {
 /// ===== Orders & customers =====
 
 model Customer {
-  id       String   @id @default(cuid())
-  name     String
-  phone    String   @unique // normalized 01XXXXXXXXX — this IS the login identity
+  id          String   @id @default(cuid())
+  name        String
+  phone       String   @unique // normalized 01XXXXXXXXX — this IS the login identity
   /// Real, deliverable address — where password-reset OTPs are sent. Distinct
   /// from User.email, which holds the synthetic `{phone}@customers.zuptech.local`
   /// identifier Better Auth signs in with. Null on guest-checkout rows and on
   /// accounts created before email was collected; those can't self-reset.
-  email    String?  @unique
-  address  String   @default("") // last-used delivery address (free text) — prefills checkout
-  insideDhaka Boolean @default(true) // last-used delivery zone — drives per-product delivery/installation fee
-  joinedAt DateTime @default(now())
+  email       String?  @unique
+  address     String   @default("") // last-used delivery address (free text) — prefills checkout
+  insideDhaka Boolean  @default(true) // last-used delivery zone — drives per-product delivery/installation fee
+  joinedAt    DateTime @default(now())
 
   orders Order[]
 }
 
 model Order {
-  id              String   @id // display id, e.g. "ZT-10241"
-  number          Int      @unique // sequential part of the id, for ordering
+  id              String       @id // display id, e.g. "ZT-10241"
+  number          Int          @unique // sequential part of the id, for ordering
   customerId      String
-  customer        Customer @relation(fields: [customerId], references: [id])
+  customer        Customer     @relation(fields: [customerId], references: [id])
   name            String // recipient full name as entered at checkout
   phone           String
   address         String // free text, frozen with the delivery zone label appended at order time
   insideDhaka     Boolean // delivery zone at order time, frozen
   subtotal        Int
   deliveryFee     Int
-  installationFee Int      @default(0) // Σ product installation fee (zone-specific) × qty
+  installationFee Int          @default(0) // Σ product installation fee (zone-specific) × qty
   total           Int
   pay             String // chosen payment method name
-  status          String   @default("Processing") // Processing|Confirmed|On the way|Delivered|Cancelled
+  status          String       @default("Processing") // Processing|Confirmed|On the way|Delivered|Cancelled
   /// Staff member accountable for fulfilling this order. Null until someone
   /// claims or is assigned it; SetNull so removing a staff row never deletes
   /// order history (the OrderEvent trail keeps their name either way).
   preparedById    String?
-  preparedBy      Staff?   @relation("OrderPreparedBy", fields: [preparedById], references: [id], onDelete: SetNull)
+  preparedBy      Staff?       @relation("OrderPreparedBy", fields: [preparedById], references: [id], onDelete: SetNull)
   /// The campaign page this order came from, when it came from one.
   ///
   /// Nullable because most orders are ordinary storefront checkouts, and an
@@ -237,11 +237,11 @@ model Order {
   /// on LandingPage was a counter nothing ever incremented, so every campaign
   /// reported zero sales forever. Counting rows here cannot drift from the
   /// orders it counts.
-  landingPageId String?
-  landingPage   LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+  landingPageId   String?
+  landingPage     LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   items      OrderItem[]
   events     OrderEvent[]
@@ -251,7 +251,6 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([preparedById])
-
   /// The admin campaign list groups every order by campaign on each load.
   @@index([landingPageId])
 }
@@ -406,8 +405,14 @@ model LandingPage {
   product   Product @relation(fields: [productId], references: [id])
 
   /// Campaign price shown to the visitor, and the struck-through reference
-  /// beside it. Display only — the order still prices from the catalog via
-  /// priceCart(), so a landing page can never move real money on its own.
+  /// beside it.
+  ///
+  /// Still DISPLAY COPY — `priceCart()` never reads either of these, so a
+  /// number typed beside a headline can no more move money than it ever
+  /// could. A campaign CAN now charge its own price, but only through the
+  /// `tiers` relation below: a constrained child table the server reads,
+  /// never a copy column the admin types. That distinction is the whole
+  /// design, not an accident of history.
   offerPrice     Int
   compareAtPrice Int
 
@@ -420,18 +425,21 @@ model LandingPage {
   /// ===== Campaign page content =====
   ///
   /// Every string a visitor can read on /lp/:slug lives here, so a campaign is
-  /// written entirely from the admin — including in Bangla. Nothing below is
-  /// money: prices come from the product, and the bundle ladder is rendered
-  /// from `Product.quantityOffers`, so an advertised bundle total is by
-  /// construction the total the cart charges.
+  /// written entirely from the admin — including in Bangla. Nothing in THIS
+  /// block is money: the campaign's own prices live in `tiers`, and the bundle
+  /// ladder is rendered from those when it has any and from
+  /// `Product.quantityOffers` when it does not. Either way an advertised
+  /// bundle total is by construction the total the cart charges, because
+  /// `toPublicLandingPage()` and `priceCart()` resolve it through the same
+  /// `campaignUnitPrice()`.
   ///
   /// The repeatable blocks are Json rather than child tables because they are
   /// copy, edited as a whole page and never queried across campaigns.
 
   /// Header: hotline strip + the button beside it.
-  hotlineLabel    String @default("")
-  hotlineNumber   String @default("")
-  headerCtaLabel  String @default("")
+  hotlineLabel   String @default("")
+  hotlineNumber  String @default("")
+  headerCtaLabel String @default("")
 
   /// Hero: the badges above the headline, the standfirst under it, and the
   /// discount flag on the pack shot.
@@ -489,8 +497,13 @@ model LandingPage {
   specMeta  String @default("")
   specs     Json   @default("[]")
 
-  /// Bundle ladder. Only the wording is stored — every price shown is derived
-  /// from the product's quantity offers at render time.
+  /// Bundle ladder. Only the WORDING is stored here — the prices come from
+  /// `tiers` when the campaign has any, and from the product's quantity offers
+  /// when it does not, both resolved at render time.
+  ///
+  /// `bundleMaxQty` is how many rows the page draws, which is a display
+  /// decision: a tier above it is invisible on the page and still charged at
+  /// checkout, so the editor warns rather than the schema constraining it.
   bundlesTitle    String @default("")
   bundlesSubtitle String @default("")
   bundleUnitLabel String @default("")
@@ -540,9 +553,9 @@ model LandingPage {
   formLabels Json   @default("{}")
 
   /// Footer.
-  footerTagline String   @default("")
-  footerAbout   String   @default("")
-  footerLines   String[] @default([])
+  footerTagline  String   @default("")
+  footerAbout    String   @default("")
+  footerLines    String[] @default([])
   /// ===== Theme =====
   ///
   /// Every colour the page paints with, per campaign. A direct-response page
@@ -556,21 +569,21 @@ model LandingPage {
   ///
   /// Defaults are the reference design's palette, so a new page looks
   /// deliberate before anyone opens the colour controls.
-  colorHeroBg      String @default("#17341B") // deep band behind the headline
-  colorHeroText    String @default("#FFFFFF")
-  colorBandBg      String @default("#45712F") // the price/statement bands
-  colorBandText    String @default("#FFFFFF")
-  colorTintBg      String @default("#F2F5EC") // testimonials, quiet sections
-  colorPageBg      String @default("#FFFFFF")
-  colorPageText    String @default("#15181E")
-  colorAccent      String @default("#45712F") // links, ticks, emphasis
-  colorHighlight   String @default("#FFF306") // the bundle-saving line
-  colorCtaBg       String @default("#000000") // the order button
-  colorCtaText     String @default("#FFFFFF")
+  colorHeroBg    String   @default("#17341B") // deep band behind the headline
+  colorHeroText  String   @default("#FFFFFF")
+  colorBandBg    String   @default("#45712F") // the price/statement bands
+  colorBandText  String   @default("#FFFFFF")
+  colorTintBg    String   @default("#F2F5EC") // testimonials, quiet sections
+  colorPageBg    String   @default("#FFFFFF")
+  colorPageText  String   @default("#15181E")
+  colorAccent    String   @default("#45712F") // links, ticks, emphasis
+  colorHighlight String   @default("#FFF306") // the bundle-saving line
+  colorCtaBg     String   @default("#000000") // the order button
+  colorCtaText   String   @default("#FFFFFF")
 
   /// A product row above the page body. Ordered ids, same shape and same
   /// resolve-and-drop rules as SiteConfig.featuredIds — empty hides the row.
-  productRowIds  String[] @default([])
+  productRowIds String[] @default([])
 
   /// The two price-band labels ("Previous price", "Offer price"). Their own
   /// columns rather than entries in `formLabels`, which is the ORDER FORM's
@@ -582,20 +595,58 @@ model LandingPage {
 
   /// This page's own GTM container, so ad spend is tracked separately from
   /// the main site's.
-  gtmId          String   @default("")
+  gtmId String @default("")
 
   /// false = the public route 404s, and the product loses its landing-page
   /// route to orderability.
   published Boolean @default(false)
 
-  viewCount  Int      @default(0)
+  viewCount Int               @default(0)
+  /// This campaign's own bulk price ladder. Empty is the norm and means
+  /// "price exactly like the shop" — see LandingPageTier below.
+  tiers     LandingPageTier[]
   /// Orders attributed to this campaign, so revenue can be read off them.
-  orders     Order[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  orders    Order[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 
   @@index([productId])
   @@index([published])
+}
+
+/// A "buy N+, pay ৳P each" row on ONE campaign. The only thing on a landing
+/// page that can move money.
+///
+/// `unitPrice` is an ABSOLUTE price per unit, not a discount — and that is the
+/// point. The product's own ladder (QuantityOffer) stores taka off the LIST
+/// price and is then capped at the sale price, which makes a shallow tier
+/// silently worth nothing: a ৳200 tier on a product listed at ৳2,600 and on
+/// sale at ৳2,184 resolved to ৳2,184 and saved the customer not one taka,
+/// while the page advertised "Save ৳200 per unit". An absolute price cannot
+/// be swallowed that way, and the admin types the number the customer pays.
+///
+/// Deliberately NOT named `amount`: rules.ts resolves both discount ladders
+/// through `OfferTierLike { minQty, amount }`, and a campaign tier must not be
+/// structurally assignable to one. A price and a discount are not the same
+/// kind of number.
+///
+/// A child table rather than one more Json column on LandingPage because the
+/// Json columns there are copy — this is money, and it wants integer columns,
+/// a uniqueness constraint per quantity, and a cascade. Same shape as
+/// QuantityOffer for exactly that reason.
+///
+/// The price a customer pays is `min(shopPrice, unitPrice)`: a tier at or
+/// above what the shop charges is inert, so nobody ever pays more for
+/// arriving through an ad than for walking in the front door.
+model LandingPageTier {
+  id            Int         @id @default(autoincrement())
+  landingPageId String
+  landingPage   LandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+  minQty        Int // qty threshold, e.g. 2 = "buy 2 or more"
+  unitPrice     Int // BDT per unit at this tier
+
+  @@unique([landingPageId, minQty])
+  @@index([landingPageId])
 }
 
 /// B2B enquiry from the /industrial page. Deliberately NOT a flag on
@@ -670,18 +721,18 @@ model Role {
 /// Staff profile. Credentials (username/password) live in Better Auth's
 /// User/Account tables; this row carries the business data + role link.
 model Staff {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   name     String
-  phone    String @default("")
+  phone    String  @default("")
   /// Real, deliverable address for password-reset OTPs. User.email holds the
   /// synthetic `{username}@staff.zuptech.local` identifier instead — see
   /// Customer.email for the same split on the storefront side.
   email    String? @unique
-  username String @unique // mirrors the Better Auth username for easy lookup
+  username String  @unique // mirrors the Better Auth username for easy lookup
   roleId   String
-  role     Role   @relation(fields: [roleId], references: [id])
-  userId   String @unique // -> User.id (Better Auth)
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role    @relation(fields: [roleId], references: [id])
+  userId   String  @unique // -> User.id (Better Auth)
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   preparedOrders Order[]   @relation("OrderPreparedBy")
   issuedInvoices Invoice[] @relation("InvoiceIssuedBy")
@@ -736,11 +787,11 @@ model StockMovement {
 /// ===== Site content (admin-managed, publicly readable) =====
 
 model HeroSlide {
-  id    String  @id @default(cuid())
+  id        String  @id @default(cuid())
   /// Media URL — only active slides WITH one render. Holds an image or a
   /// video depending on `mediaType`; the column is shared because a slide
   /// carries exactly one piece of art either way.
-  image String? // URL — only active slides WITH an image render
+  image     String? // URL — only active slides WITH an image render
   /// "image" | "video". Stored rather than inferred from the URL: guessing
   /// from a file extension or a Cloudinary path shape would silently break
   /// the moment either changes, and the player differs entirely.
@@ -792,17 +843,17 @@ model TeamMember {
 /// The home page used to render the `Service` rows directly, which meant
 /// editing the front page edited /services and vice versa.
 model ShowcaseCard {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  name      String
-  dsc       String
-  image     String   @default("") // Cloudinary URL, "" = none
-  features  String[] @default([])
-  sort      Int      @default(0)
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  dsc         String
+  image       String   @default("") // Cloudinary URL, "" = none
+  features    String[] @default([])
+  sort        Int      @default(0)
   /// "left" | "right" — which half of the 50/50 storefront card the photo takes.
-  imageSide String   @default("left")
+  imageSide   String   @default("left")
   /// "tick" | "dot" | "plain" — the marker in front of each feature line.
-  bulletStyle String @default("tick")
+  bulletStyle String   @default("tick")
 }
 
 /// The /services page's engineering-service cards (Lighting Automation,
@@ -810,17 +861,17 @@ model ShowcaseCard {
 /// POST /admin/api/services/:id/image — replaced the fixed Lucide icon key
 /// the frontend's SolutionIcon component used to require.
 model Service {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  name      String
-  dsc       String
-  image     String   @default("") // Cloudinary URL, "" = none
-  features  String[] @default([])
-  sort      Int      @default(0)
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  dsc         String
+  image       String   @default("") // Cloudinary URL, "" = none
+  features    String[] @default([])
+  sort        Int      @default(0)
   /// "left" | "right" — which half of the 50/50 storefront card the photo takes.
-  imageSide String   @default("left")
+  imageSide   String   @default("left")
   /// "tick" | "dot" | "plain" — the marker in front of each feature line.
-  bulletStyle String @default("tick")
+  bulletStyle String   @default("tick")
 
   leads ServiceLead[]
 }
@@ -830,17 +881,17 @@ model Service {
 /// rendered separately. Service is booked via ServiceLead; this one via
 /// IndustrialLead, which captures a different (B2B) fact set.
 model IndustrialService {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  name      String
-  dsc       String
-  image     String   @default("") // Cloudinary URL, "" = none
-  features  String[] @default([])
-  sort      Int      @default(0)
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  dsc         String
+  image       String   @default("") // Cloudinary URL, "" = none
+  features    String[] @default([])
+  sort        Int      @default(0)
   /// "left" | "right" — which half of the 50/50 storefront card the photo takes.
-  imageSide String   @default("left")
+  imageSide   String   @default("left")
   /// "tick" | "dot" | "plain" — the marker in front of each feature line.
-  bulletStyle String @default("tick")
+  bulletStyle String   @default("tick")
 
   leads IndustrialLead[]
 }
@@ -855,7 +906,7 @@ model SiteConfig {
   /// Same shape and same rules as `featuredIds` — a separate list so the two
   /// rows can merchandise different things rather than repeating one set twice
   /// on a single page. Empty hides the row.
-  homeRowIds  String[] @default([])
+  homeRowIds String[] @default([])
 
   // Copy.
   //
@@ -888,11 +939,11 @@ model SiteConfig {
   industrialHeroHeadline String @default("")
 
   // Contact page
-  contactHeading      String @default("")
-  contactFormHeading  String @default("")
+  contactHeading       String @default("")
+  contactFormHeading   String @default("")
   contactOfficeHeading String @default("")
-  contactServiceLine  String @default("")
-  contactTendersEmail String @default("")
+  contactServiceLine   String @default("")
+  contactTendersEmail  String @default("")
 
   // Contact
   phone        String @default("")
@@ -921,21 +972,21 @@ model SiteConfig {
 }
 
 model PaymentMethod {
-  id          String  @id
+  id          String   @id
   /// Unique because checkout resolves the method BY NAME: two rows sharing
   /// one made `findFirst` pick an arbitrary winner, and which one decided
   /// whether the order was accepted at all.
-  name        String  @unique
+  name        String   @unique
   kind        String // "Mobile wallet" | "Card gateway" | "Offline"
   provider    String
   providers   String[] @default([]) // selectable provider options
-  enabled     Boolean @default(true)
-  environment String  @default("Test") // "Live" | "Test"
-  apiKey      String  @default("")
-  apiSecret   String  @default("") // never returned by the API
-  webhookUrl  String  @default("")
-  isGateway   Boolean @default(false)
-  sort        Int     @default(0)
+  enabled     Boolean  @default(true)
+  environment String   @default("Test") // "Live" | "Test"
+  apiKey      String   @default("")
+  apiSecret   String   @default("") // never returned by the API
+  webhookUrl  String   @default("")
+  isGateway   Boolean  @default(false)
+  sort        Int      @default(0)
 }
 
 /// ===== Better Auth (session/credential store) =====

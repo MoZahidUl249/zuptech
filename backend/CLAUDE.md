@@ -125,6 +125,23 @@ Use `bun` (not npm/node) everywhere; run Prisma CLI as `bunx --bun prisma …`.
   server acts on: checkout always reprices through `priceCart()`. The admin
   surfaces `productSellingPrice` beside the offer so a campaign advertising a
   price the cart won't honour is visible before it ships.
+- A campaign **can** set its own bulk prices, through `LandingPageTier`
+  (`{minQty, unitPrice}`, cascade-deleted with the page). Unlike the product's
+  two ladders these store an **absolute unit price**, not taka off — a
+  QuantityOffer subtracts from the LIST price and is then capped by the sale
+  price, which made a shallow tier silently worthless. `campaignUnitPrice()`
+  in `lib/rules.ts` resolves them, floored by the shop price so ad traffic
+  never pays more than a walk-in, and BOTH the advertised ladder
+  (`toPublicLandingPage`) and the charged price (`priceCart`) go through it —
+  `campaign-pricing.test.ts` pins that equality. The slug reaches pricing via
+  `resolveCampaignPricing()`, which the order and quote routes call; a
+  campaign prices its own product only, and an unknown or unpublished slug
+  prices at catalogue rates rather than failing.
+- The note above about reusing `bestOfferTier` for a third ladder holds for
+  discount ladders. The campaign ladder deliberately does NOT reuse it: its
+  rows are `{minQty, unitPrice}`, and making them structurally assignable to
+  `OfferTierLike` would let a price be spent as a discount. `bestCampaignTier`
+  is the same search over a different, deliberately incompatible shape.
 - `HeroSlide` is the only hero model: the homepage promo carousel, which
   `/services` and `/industrial` render too. A per-page `PageHero`/`HeroPoster`
   pair used to exist alongside it and was dropped in the site-content cleanup —

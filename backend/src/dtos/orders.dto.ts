@@ -26,6 +26,11 @@ export const createOrderDto = t.Object({
    * A slug rather than an id because that is what the page already knows, and
    * it is checked against the published set server-side — a guessed or stale
    * slug attributes nothing rather than inventing a sale.
+   *
+   * It also SELECTS A PRICE LADDER: a campaign may carry its own bulk prices,
+   * and one lookup decides both the price and the credit so the two cannot
+   * disagree. That does not weaken the rule above — the prices come from the
+   * campaign's stored rows, never from anything in this body.
    */
   landingPageSlug: t.Optional(t.String({ maxLength: 120 })),
 });

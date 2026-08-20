@@ -6,8 +6,13 @@ import { slugDto } from "./common";
  * (`/lp/:slug`), see ../../../fronend/LANDING-PAGES.md.
  *
  * `offerPrice`/`compareAtPrice` are display copy, not money the server acts
- * on — checkout still reprices from the catalog through priceCart(), so a
- * campaign can advertise a number without being able to move it.
+ * on — checkout never reads either, so a number typed beside a headline
+ * cannot move a total.
+ *
+ * A campaign CAN charge its own price, through `tiers` below: absolute
+ * per-unit prices in a constrained child table that `priceCart()` reads
+ * server-side. Copy and money stay different things, held in different
+ * places.
  */
 /**
  * A hex colour, 3- or 6-digit.
@@ -75,8 +80,10 @@ const landingPageFields = {
    * character limits — a 60-character English button label is a third of the
    * same sentence in Bangla.
    *
-   * Nothing here is money. The bundle block stores only wording; every price
-   * it shows is derived from the product's quantity offers at render time. */
+   * Nothing in `campaignFields` is money. The bundle block stores only
+   * wording; the prices it shows come from the campaign's own `tiers` when it
+   * has any and from the product's quantity offers when it does not — which
+   * is why `tiers` is validated outside this object rather than in it. */
 /**
  * Media caps.
  *
@@ -202,15 +209,41 @@ const campaignFields = {
  * in afterwards. Update is fully partial, because the admin saves one edited
  * field at a time.
  */
+/**
+ * The campaign's own bulk ladder: "buy N+, pay ৳P each".
+ *
+ * `unitPrice` is an ABSOLUTE price per unit, not taka off — see the model
+ * comment on LandingPageTier. `minQty` starts at 1, unlike the product's
+ * ladders which start at 2: a campaign may legitimately price a single unit
+ * differently from the shop, which is the whole point of an ad price.
+ *
+ * Sits OUTSIDE `campaignFields` deliberately. Everything in there is copy;
+ * this is the one thing on a landing page that moves money, and it is written
+ * through its own replace-all path rather than sprayed into `data`.
+ */
+export const landingPageTierDto = t.Object({
+  minQty: t.Integer({ minimum: 1, maximum: 99 }),
+  unitPrice: t.Integer({ minimum: 0 }),
+});
+
+/** Sending a ladder replaces the whole thing; omitting it leaves it alone —
+ *  the same contract as the product's two ladders. */
+const tiersField = t.Optional(t.Array(landingPageTierDto, { maxItems: 10 }));
+
 export const createLandingPageDto = t.Object({
   ...landingPageFields,
   ...Object.fromEntries(
     Object.entries(campaignFields).map(([k, v]) => [k, t.Optional(v)]),
   ),
+  tiers: tiersField,
 });
-export const updateLandingPageDto = t.Partial(
-  t.Object({ ...landingPageFields, ...campaignFields }),
-);
+export const updateLandingPageDto = t.Composite([
+  t.Partial(t.Object({ ...landingPageFields, ...campaignFields })),
+  // Outside the Partial for the same reason the product ladders are: "sent"
+  // and "absent" must stay distinguishable, or replace-all cannot tell a
+  // deliberate clearing from an untouched field.
+  t.Object({ tiers: tiersField }),
+]);
 
 export const listLandingPagesQueryDto = t.Object({
   published: t.Optional(t.Boolean()),

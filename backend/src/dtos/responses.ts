@@ -409,6 +409,9 @@ export interface LandingPageDto extends CampaignContentDto {
    * ad promises a number the cart won't honour.
    */
   productSellingPrice: number;
+  /** This campaign's own bulk ladder: "buy N+, pay ৳P each". Empty means the
+   *  page prices exactly like the shop. Absolute prices, not discounts. */
+  tiers: { minQty: number; unitPrice: number }[];
   offerPrice: number;
   compareAtPrice: number;
   ribbonText: string;

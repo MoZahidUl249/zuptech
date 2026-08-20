@@ -27,6 +27,10 @@ export interface LandingPage {
    * the backend never prices from it — so the editor warns when they differ.
    */
   productSellingPrice: number;
+  /** This campaign's own bulk ladder: "buy N+, pay ৳P each". Absolute prices,
+   *  not discounts — see LandingPageTier in the schema. Empty means the page
+   *  prices exactly like the shop. */
+  tiers: { minQty: number; unitPrice: number }[];
   offerPrice: number;
   compareAtPrice: number;
   ribbonText: string;
@@ -38,9 +42,12 @@ export interface LandingPage {
   published: boolean;
 
   /* ===== Campaign page content =====
-   * Every visitor-facing string on /lp/:slug. None of it is money — the bundle
-   * prices the page shows are derived server-side from the product's quantity
-   * offers, so a campaign can never advertise a total the cart won't charge. */
+   * Every visitor-facing string on /lp/:slug. None of THIS is money — the
+   * bundle prices the page shows are derived server-side, from the campaign's
+   * own `tiers` when it has any and from the product's quantity offers when it
+   * does not. Either way the ad and the cart resolve the same rows through the
+   * same function, so a campaign still cannot advertise a total the cart won't
+   * charge. `tiers` is the one field here that moves money. */
   hotlineLabel: string;
   hotlineNumber: string;
   headerCtaLabel: string;
@@ -176,7 +183,8 @@ type CampaignKey =
   | "colorHeroBg" | "colorHeroText" | "colorBandBg" | "colorBandText"
   | "colorTintBg" | "colorPageBg" | "colorPageText" | "colorAccent"
   | "colorHighlight" | "colorCtaBg" | "colorCtaText"
-  | "productRowIds" | "priceCompareLabel" | "priceOfferLabel";
+  | "productRowIds" | "priceCompareLabel" | "priceOfferLabel"
+  | "tiers";
 
 /** The theme keys, in one place so the editor and the save boundary agree. */
 export const COLOR_KEYS = [
@@ -237,6 +245,16 @@ function campaignNumbers<T extends Partial<LandingPageDraft>>(body: T): T {
       Math.max(1, out.bundleMaxQty),
     ) as T["bundleMaxQty"];
   }
+  /* Same boundary rule for the ladder: the number inputs hold what is being
+     typed, including a half-finished decimal, and both fields are integers
+     server-side. This one is money, so a 422 here would reject the whole
+     page's copy over a stray keystroke. */
+  if (Array.isArray(out.tiers)) {
+    out.tiers = out.tiers.map((t) => ({
+      minQty: whole(t.minQty),
+      unitPrice: whole(t.unitPrice),
+    })) as T["tiers"];
+  }
   return out;
 }
 
@@ -263,6 +281,7 @@ export const CAMPAIGN_LIMITS: { key: keyof LandingPage; label: string; max: numb
   { key: "footerLines", label: "Footer contact lines", max: 8 },
   { key: "productRowIds", label: "Product row", max: 12 },
   { key: "benefitBullets", label: "Benefit bullets", max: 10 },
+  { key: "tiers", label: "Bundle price tiers", max: 10 },
   { key: "galleryItems", label: "Gallery items", max: 12 },
   { key: "qcImages", label: "Quality photos", max: 8 },
 ];
@@ -303,6 +322,26 @@ export function campaignProblems(body: Partial<LandingPageDraft>): string[] {
   }
   if (typeof body.gtmId === "string" && !/^$|^GTM-[A-Z0-9]+$/.test(body.gtmId)) {
     problems.push("GTM container id must look like GTM-XXXXXXX, or be empty.");
+  }
+
+  /* The price ladder. Both of these 422 with a schema dump otherwise, on a
+     screen holding a page of unsaved Bengali ad copy — and this one moves
+     money, so the message has to name the row a person can go and fix. */
+  if (Array.isArray(body.tiers)) {
+    const seen = new Set<number>();
+    for (const tier of body.tiers) {
+      if (seen.has(tier.minQty)) {
+        problems.push(`Two bundle tiers both start at ${tier.minQty} — each needs its own quantity.`);
+        break;
+      }
+      seen.add(tier.minQty);
+    }
+    const bad = body.tiers.find(
+      (t) => !Number.isInteger(t.minQty) || t.minQty < 1 || t.minQty > 99 || t.unitPrice < 0,
+    );
+    if (bad) {
+      problems.push("Bundle tiers need a quantity from 1 to 99 and a price of ৳0 or more.");
+    }
   }
 
   return problems;

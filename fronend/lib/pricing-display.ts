@@ -10,6 +10,12 @@
  * won (sale vs quantity offer never stack — the cheaper wins). So the reason
  * shown is inferred from the product's own fields, and is only ever displayed
  * when the server's own numbers confirm a discount was applied.
+ *
+ * SCOPE: everything here explains a `{minQty, amount}` discount measured
+ * against a product's own price, so it belongs to the storefront and the cart.
+ * A campaign line is priced from an absolute per-unit figure held on the
+ * landing page (`LandingPageTier`) and cannot be explained this way — /lp does
+ * not import this module, and should not start.
  */
 
 import type { FreeDeliveryOffer, Product, QuantityOffer } from "@/lib/products";

@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   availableStock,
+  bestCampaignTier,
   bestQuantityOffer,
+  campaignUnitPrice,
   LEAD_STATUSES,
   MAX_SVG_LOGO_BYTES,
   deliveryDiscountAmount,
   discountedDeliveryFee,
+  duplicateMinQtys,
   effectiveUnitPrice,
   GTM_ID_RE,
   isLowStock,
@@ -306,5 +309,84 @@ describe("stockTagFor", () => {
     expect(stockTagFor({ ...empty, stockTag: "Incoming" }, false)).toBe("Incoming");
     // Including overriding back to a plainer label than the data suggests.
     expect(stockTagFor({ ...empty, stockTag: "Sold out" }, true)).toBe("Sold out");
+  });
+});
+
+describe("campaignUnitPrice", () => {
+  /* The live shape that motivated the whole table: listed 2600, on sale at
+     2184, so anything the product ladder could express below ৳417 off was
+     already worthless. */
+  const shop = { price: 2600, onSale: true, salePrice: 2184 };
+
+  test("with no campaign tiers it IS effectiveUnitPrice", () => {
+    for (const qty of [1, 2, 3, 10]) {
+      expect(campaignUnitPrice(shop, qty, [], [])).toBe(effectiveUnitPrice(shop, qty, []));
+    }
+    // …including when the product has a ladder of its own — the fallback must
+    // not quietly drop the product's own tiers.
+    const offers = [{ minQty: 3, amount: 600 }];
+    expect(campaignUnitPrice(shop, 3, offers, [])).toBe(effectiveUnitPrice(shop, 3, offers));
+  });
+
+  test("a qualifying tier charges its absolute price, whatever the sale is", () => {
+    const tiers = [{ minQty: 2, unitPrice: 2000 }];
+    expect(campaignUnitPrice(shop, 1, [], tiers)).toBe(2184); // below the threshold
+    expect(campaignUnitPrice(shop, 2, [], tiers)).toBe(2000);
+    expect(campaignUnitPrice(shop, 9, [], tiers)).toBe(2000); // and above it
+  });
+
+  test("the highest qualifying tier wins, never the sum", () => {
+    const tiers = [
+      { minQty: 2, unitPrice: 2000 },
+      { minQty: 3, unitPrice: 1900 },
+    ];
+    expect(campaignUnitPrice(shop, 2, [], tiers)).toBe(2000);
+    expect(campaignUnitPrice(shop, 3, [], tiers)).toBe(1900);
+  });
+
+  test("a minQty:1 tier prices a single unit", () => {
+    expect(campaignUnitPrice(shop, 1, [], [{ minQty: 1, unitPrice: 2100 }])).toBe(2100);
+  });
+
+  test("a tier at or above the shop price is inert — an ad never costs more", () => {
+    // Mistyped, or written before the sale deepened. Either way the customer
+    // pays what the shop charges, not what the campaign asked for.
+    expect(campaignUnitPrice(shop, 2, [], [{ minQty: 2, unitPrice: 2500 }])).toBe(2184);
+    expect(campaignUnitPrice(shop, 2, [], [{ minQty: 2, unitPrice: 2184 }])).toBe(2184);
+  });
+
+  test("it beats a product tier that would otherwise have won", () => {
+    const offers = [{ minQty: 2, amount: 700 }]; // → 1900
+    const tiers = [{ minQty: 2, unitPrice: 1800 }];
+    expect(campaignUnitPrice(shop, 2, offers, tiers)).toBe(1800);
+    // …but not the other way round: the cheaper of the two always wins.
+    expect(campaignUnitPrice(shop, 2, offers, [{ minQty: 2, unitPrice: 1950 }])).toBe(1900);
+  });
+
+  test("never negative, however generous the tier", () => {
+    expect(campaignUnitPrice(shop, 2, [], [{ minQty: 2, unitPrice: 0 }])).toBe(0);
+  });
+});
+
+describe("bestCampaignTier", () => {
+  const tiers = [
+    { minQty: 2, unitPrice: 2000 },
+    { minQty: 5, unitPrice: 1800 },
+  ];
+  test("picks the highest threshold the qty satisfies", () => {
+    expect(bestCampaignTier(tiers, 1)).toBeNull();
+    expect(bestCampaignTier(tiers, 2)).toEqual({ minQty: 2, unitPrice: 2000 });
+    expect(bestCampaignTier(tiers, 4)).toEqual({ minQty: 2, unitPrice: 2000 });
+    expect(bestCampaignTier(tiers, 5)).toEqual({ minQty: 5, unitPrice: 1800 });
+    expect(bestCampaignTier([], 9)).toBeNull();
+  });
+});
+
+describe("duplicateMinQtys", () => {
+  test("names every repeated threshold, once each", () => {
+    expect(duplicateMinQtys([{ minQty: 2 }, { minQty: 3 }])).toEqual([]);
+    expect(duplicateMinQtys([{ minQty: 2 }, { minQty: 2 }])).toEqual([2]);
+    expect(duplicateMinQtys([{ minQty: 2 }, { minQty: 2 }, { minQty: 2 }])).toEqual([2]);
+    expect(duplicateMinQtys([])).toEqual([]);
   });
 });

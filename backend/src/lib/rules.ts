@@ -392,6 +392,76 @@ export function effectiveUnitPrice(
   return Math.min(sellingPrice(p), offerPrice);
 }
 
+/**
+ * A "buy N+, pay ৳P each" row on ONE campaign.
+ *
+ * Deliberately NOT shaped like `OfferTierLike`. `unitPrice` is an absolute
+ * price and `amount` is a discount; making a campaign tier structurally
+ * assignable to a discount ladder would let one be passed where the other is
+ * expected and priced as taka-off, which is the exact confusion this table
+ * exists to end.
+ */
+export interface CampaignTierLike {
+  minQty: number;
+  unitPrice: number;
+}
+
+/** Best (highest-threshold) campaign tier the given qty qualifies for, or null. */
+export function bestCampaignTier<T extends CampaignTierLike>(tiers: T[], qty: number): T | null {
+  let best: T | null = null;
+  for (const tier of tiers) {
+    if (qty >= tier.minQty && (!best || tier.minQty > best.minQty)) best = tier;
+  }
+  return best;
+}
+
+/**
+ * Effective unit price with a campaign's own ladder in play.
+ *
+ * This is the one function the advertised price and the charged price both go
+ * through — `toPublicLandingPage()` builds the bundle rows with it and
+ * `priceCart()` prices the order with it — which is what keeps an ad from
+ * quoting a total the cart will refuse.
+ *
+ * A campaign price is absolute, so unlike a QuantityOffer it cannot be
+ * silently eaten by a deeper sale. It is still FLOORED BY THE SHOP PRICE:
+ * a tier at or above what the shop charges is inert, so a mistyped number — or
+ * a sale that deepens after the campaign was written — can never charge ad
+ * traffic more than walking in the front door would. The customer keeps
+ * getting the bigger win, which is the rule everywhere else here.
+ *
+ * With no tiers this IS `effectiveUnitPrice`: the fallback to catalogue
+ * pricing is the identity of the function, not a branch a caller has to
+ * remember to write.
+ */
+export function campaignUnitPrice(
+  p: { price: number; onSale: boolean; salePrice: number },
+  qty: number,
+  offers: OfferTierLike[],
+  campaignTiers: CampaignTierLike[],
+): number {
+  const base = effectiveUnitPrice(p, qty, offers);
+  const tier = bestCampaignTier(campaignTiers, qty);
+  return tier ? Math.max(0, Math.min(base, tier.unitPrice)) : base;
+}
+
+/**
+ * The `minQty` values appearing more than once in a ladder.
+ *
+ * Stated once because three places enforce it: the product's two ladders, the
+ * campaign's, and the admin editors that mirror the rule client-side. A
+ * duplicate is a 400 rather than a Prisma unique-constraint 500.
+ */
+export function duplicateMinQtys(tiers: { minQty: number }[]): number[] {
+  const seen = new Set<number>();
+  const dupes = new Set<number>();
+  for (const { minQty } of tiers) {
+    if (seen.has(minQty)) dupes.add(minQty);
+    seen.add(minQty);
+  }
+  return [...dupes];
+}
+
 /* ===== Vocabularies (validated at the API edge) ===== */
 
 /** Narrow a free string against a const vocabulary array without casting. */
