@@ -56,7 +56,12 @@ export function ProductCard({
     <Link
       href={`/products/${product.slug}`}
       className={cn(
-        "block overflow-hidden rounded-2xl border border-zup-body/6 bg-white shadow-[0_4px_16px_rgba(11,79,224,.08)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(11,79,224,.16)]",
+        // `@container`: the price row sizes itself from THIS card's width, not
+        // the viewport's. The two are independent — the homepage row pins a
+        // card at 220px whatever the screen, while the /products grid gives it
+        // 135px on a 320px phone and 197px on a desktop. A vw-based rule would
+        // hand the wide card the narrow card's type.
+        "@container block overflow-hidden rounded-2xl border border-zup-body/6 bg-white shadow-[0_4px_16px_rgba(11,79,224,.08)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(11,79,224,.16)]",
         className,
       )}
     >
@@ -71,10 +76,10 @@ export function ProductCard({
           <img
             src={product.photos[0]}
             alt={product.name}
-            className="aspect-square w-full bg-white object-contain"
+            className="aspect-[7/5] w-full bg-white object-contain"
           />
         ) : (
-          <ProductImagePlaceholder label={product.imgHint} className="aspect-square" />
+          <ProductImagePlaceholder label={product.imgHint} className="aspect-[7/5]" />
         )}
 
         {/*
@@ -116,19 +121,54 @@ export function ProductCard({
           </span>
         ) : null}
       </div>
-      <div className="flex flex-col gap-1.5 px-3.5 pb-3.5 pt-3">
-        <h3 className="min-h-9 text-sm font-semibold leading-tight text-zup-body">
+      {/* Tighter than it was: the padding and the row gap are the last 6px of
+          the height budget, and they buy the third row of cards on a phone
+          without taking anything off the photo. */}
+      <div className="flex flex-col gap-1 px-3.5 pb-3 pt-2.5">
+        {/* Clamped to two lines, which `min-h-9` then also guarantees as a
+            minimum — so every card in a row has the same title block and the
+            prices below them line up. Unbounded, a name like "Growatt SPE
+            12000 ES Solar Inverter for Hybrid (Official)" ran to five lines on
+            a phone and was most of why the card was 306px tall. The full name
+            is on the product page. */}
+        <h3 className="line-clamp-2 min-h-9 text-sm font-semibold leading-tight text-zup-body">
           {product.name}
         </h3>
-        {/* Old price struck through, then what it costs — no panel, no badge,
-            no computed saving. Both numbers come from the server as-is. */}
-        <span className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+        {/*
+         * Old price struck through, then what it costs — on ONE line, always.
+         *
+         * This row used to be `flex-wrap` with a `gap-y`, which is a two-line
+         * fallback rather than a safety net: measured on the live catalogue,
+         * every card wrapped at 320px, ten of eighteen at 360px, and desktop
+         * cleared it by only 10px. `৳ 2,50,000` twice needs 157px and a phone
+         * gives the card 133px, so simply forbidding the wrap would have
+         * pushed the price out of the card instead.
+         *
+         * So the type is sized from the card itself (see `@container` above),
+         * on a LINE rather than a plain multiple of the width. A bare `Ncqi`
+         * cannot do this job: the type has to shrink faster than the card
+         * does. Measured, a 135px card fits the widest pair only at ~9.5px
+         * while a 197px card wants 15px — a ratio of 1.6 against the cards'
+         * 1.46 — so a single multiplier either starves the desktop card or
+         * overflows the phone. `calc(Ncqi - Mpx)` gives the steeper slope.
+         *
+         * Fitted to the real extremes, then verified against a seven-figure
+         * price at every width. Caps hold the full size wherever there is
+         * room (≥197px: desktop grid, homepage row); floors stop it
+         * collapsing on a 320px screen.
+         *
+         * `whitespace-nowrap` because formatBDT emits "৳ 2,50,000" with a real
+         * space, which is a break opportunity: without it a single price can
+         * split between the sign and its digits. `tabular-nums` so the width
+         * depends on the number of digits and not on which digits they are.
+         */}
+        <span className="flex items-baseline gap-x-1 tabular-nums">
           {hasSale && (
-            <span className="text-[12.5px] text-zup-soft line-through">
+            <span className="whitespace-nowrap text-[clamp(7px,calc(7.6cqi_-_3.2px),11.5px)] text-zup-soft line-through">
               {formatBDT(product.price)}
             </span>
           )}
-          <span className="text-[16px] font-bold text-zup-body">
+          <span className="whitespace-nowrap text-[clamp(9px,calc(9.7cqi_-_4.1px),15px)] font-bold text-zup-body">
             {formatBDT(hasSale ? product.salePrice! : product.price)}
           </span>
         </span>
