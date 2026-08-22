@@ -11,6 +11,8 @@ import {
 } from "react";
 import { toast } from "sonner";
 import * as api from "@/lib/admin-api";
+import { ApiRequestError } from "@/lib/api-error";
+import { ADMIN_FIELD_LABELS } from "@/lib/admin-fields";
 
 /* ===== Types ===== */
 
@@ -683,6 +685,28 @@ export function compactBd(n: number): string {
   return String(n);
 }
 
+/**
+ * What the Save bar should say when a write is refused.
+ *
+ * A 422 from an admin route carries only "Invalid request" in `message` — the
+ * property that failed and why are in `detail`, which `ApiRequestError`
+ * already parses and which nothing ever read. On screens that PUT a whole
+ * document (site copy, contact details) that was actively harmful: one
+ * out-of-range value blocked every other field on the page and the bar would
+ * not say which one, so there was nothing to act on.
+ *
+ * `ADMIN_FIELD_LABELS` maps the DTO's property names onto the labels printed
+ * above the inputs, so the message names the box on screen. Anything not in
+ * the map is humanised from the key rather than dropped.
+ */
+export function saveErrorMessage(err: unknown): string {
+  if (err instanceof ApiRequestError) {
+    const named = err.fieldMessage((p) => ADMIN_FIELD_LABELS[p]);
+    if (named) return named;
+  }
+  return err instanceof Error ? err.message : "Couldn't save";
+}
+
 /* ===== Diff-sync: translate update(patch) into backend calls ===== */
 
 type ReloadKey = keyof typeof api.reloaders;
@@ -1100,8 +1124,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         // Local state is deliberately kept: replacing what someone just typed
         // with the server's copy loses their work at the exact moment they
         // most need it kept.
-        const message = error instanceof Error ? error.message : "Couldn't save";
-        setSync({ state: "error", at: null, error: message });
+        setSync({ state: "error", at: null, error: saveErrorMessage(error) });
       } else {
         setSync({ state: "saved", at: Date.now(), error: null });
       }
@@ -1114,9 +1137,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       const message =
         err instanceof SaveTimeout
           ? "The server didn't respond — nothing was saved. Check the connection and try again."
-          : err instanceof Error
-            ? err.message
-            : "Couldn't save";
+          : saveErrorMessage(err);
       setSync({ state: "error", at: null, error: message });
     } finally {
       flushingRef.current = false;

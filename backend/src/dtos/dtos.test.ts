@@ -1,6 +1,7 @@
 import { Value } from "@sinclair/typebox/value";
 import { describe, expect, test } from "bun:test";
 import { updateLandingPageDto } from "./landing-pages.dto";
+import { updateContactDto, updateCopyDto } from "./content.dto";
 import { createLeadDto } from "./leads.dto";
 import { createOrderDto, updateOrderDto } from "./orders.dto";
 import { updatePaymentMethodDto } from "./payments.dto";
@@ -287,3 +288,80 @@ describe("updateLandingPageDto — the campaign gallery", () => {
     ).toBe(true);
   });
 });
+
+/*
+ * The contact screen had no coverage at all, and it is the one place where a
+ * whole document is PUT on every save: `updateContactDto` is `t.Object`, not
+ * `t.Partial`, so all fifteen keys are required every time. That makes one bad
+ * value block every other field on the page — which is exactly what "Couldn't
+ * save · Invalid request" turned out to be.
+ *
+ * These pin the boundaries the admin inputs now enforce (lib/admin-fields.ts).
+ * If a limit changes here, that file has to change with it.
+ */
+describe("site contact + copy DTOs", () => {
+  const contact = {
+    phone: "+8801700000000",
+    phoneDisplay: "+880 17 0000 0000",
+    hotline: "09612-345678",
+    email: "hello@zuptech.com.bd",
+    whatsapp: "8801700000000",
+    street: "House 00, Road 00, Banani",
+    city: "Dhaka",
+    postalCode: "1213",
+    hours: "9am–8pm",
+    officeName: "",
+    warehouseName: "",
+    warehouseAddress: "",
+    hoursWeekday: "",
+    hoursWeekend: "",
+    hoursEmergency: "",
+  };
+
+  test("the document as the live site stores it is accepted", () => {
+    expect(Value.Check(updateContactDto, contact)).toBe(true);
+  });
+
+  test("whatsapp takes bare digits only — a typed + is refused", () => {
+    // The likeliest real cause of the reported failure: the field holds a
+    // phone number, so "+880…" is the natural thing to type.
+    expect(Value.Check(updateContactDto, { ...contact, whatsapp: "+8801700000000" })).toBe(false);
+    expect(Value.Check(updateContactDto, { ...contact, whatsapp: "880 1700 000000" })).toBe(false);
+    expect(Value.Check(updateContactDto, { ...contact, whatsapp: "8801700-000000" })).toBe(false);
+    expect(Value.Check(updateContactDto, { ...contact, whatsapp: "" })).toBe(true);
+  });
+
+  test("every key is required — a partial write is refused outright", () => {
+    // Not a hypothetical: the admin PUTs whatever it loaded, so a config from
+    // a backend older than the frontend drops keys and blocks the whole screen.
+    const { hoursEmergency: _dropped, ...missing } = contact;
+    expect(Value.Check(updateContactDto, missing)).toBe(false);
+    expect(Value.Check(updateContactDto, { whatsapp: "8801700000000" })).toBe(false);
+  });
+
+  test("null is not a string, however empty it looks", () => {
+    expect(Value.Check(updateContactDto, { ...contact, officeName: null })).toBe(false);
+  });
+
+  test("the tight length caps are where the admin says they are", () => {
+    expect(Value.Check(updateContactDto, { ...contact, phone: "1".repeat(20) })).toBe(true);
+    expect(Value.Check(updateContactDto, { ...contact, phone: "1".repeat(21) })).toBe(false);
+    expect(Value.Check(updateContactDto, { ...contact, hotline: "9".repeat(30) })).toBe(true);
+    expect(Value.Check(updateContactDto, { ...contact, hotline: "9".repeat(31) })).toBe(false);
+  });
+
+  test("copy is partial, so one field may be sent alone", () => {
+    expect(Value.Check(updateCopyDto, { contactTendersEmail: "mdabirmia625@gmail.com" })).toBe(true);
+    // No email format anywhere — the address in the bug report was never the
+    // problem, which is why the fix is to NAME the failing field, not guess it.
+    expect(Value.Check(updateCopyDto, { contactTendersEmail: "not-an-email" })).toBe(true);
+  });
+
+  test("the service line is the tightest copy field at 40", () => {
+    expect(Value.Check(updateCopyDto, { contactServiceLine: "x".repeat(40) })).toBe(true);
+    expect(Value.Check(updateCopyDto, { contactServiceLine: "x".repeat(41) })).toBe(false);
+    expect(Value.Check(updateCopyDto, { contactHeading: "x".repeat(120) })).toBe(true);
+    expect(Value.Check(updateCopyDto, { contactHeading: "x".repeat(121) })).toBe(false);
+  });
+});
+

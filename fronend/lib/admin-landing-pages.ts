@@ -114,6 +114,12 @@ export interface LandingPage {
     phonePlaceholder: string;
     addressPlaceholder: string;
     successMessage: string;
+    /** The delivery-zone chooser. Optional because these arrived after the
+     *  first campaigns; a page written before them stores nothing and the
+     *  form falls back to English. */
+    zoneLabel?: string;
+    zoneInsideLabel?: string;
+    zoneOutsideLabel?: string;
   };
   footerTagline: string;
   footerAbout: string;

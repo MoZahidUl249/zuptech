@@ -451,6 +451,11 @@ export interface CampaignFormLabels {
   phonePlaceholder: string;
   addressPlaceholder: string;
   successMessage: string;
+  /** Delivery-zone chooser. Optional: a campaign written before these existed
+   *  has no value stored, and the form falls back to English. */
+  zoneLabel?: string;
+  zoneInsideLabel?: string;
+  zoneOutsideLabel?: string;
 }
 
 export interface PublicLandingPage {
