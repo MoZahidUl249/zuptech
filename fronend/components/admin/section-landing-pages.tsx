@@ -15,6 +15,7 @@ import {
   campaignProblems,
   datetimeLocalValue,
   uploadLandingGalleryItem,
+  addLandingGalleryLink,
   deleteLandingGalleryItem,
   uploadLandingQcImage,
   deleteLandingQcImage,
@@ -261,14 +262,26 @@ function LandingPageEditor({
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Re-sync local draft state when the `page` prop changes to a genuinely
-  // different object (e.g. after save/publish/duplicate re-fetches the
-  // list) — adjusting state during render instead of an effect, per React's
-  // guidance for "resetting state when a prop changes" (avoids an extra
-  // commit + the set-state-in-effect lint rule).
-  const [syncedPage, setSyncedPage] = useState(page);
-  if (page !== syncedPage) {
-    setSyncedPage(page);
+  /*
+   * Re-seed the draft when this editor is handed a DIFFERENT campaign —
+   * adjusting state during render rather than in an effect, per React's
+   * guidance for "resetting state when a prop changes".
+   *
+   * Keyed on the id, not on object identity. Identity was the bug: `page`
+   * comes from a list that every media upload, delete, save and publish
+   * re-fetches, so each of those handed back a new object for the SAME
+   * campaign and this reset the whole draft to the server's copy. Upload one
+   * photo and every unsaved word on the screen reverted — including a
+   * just-typed hero video URL, which then saved back as blank.
+   *
+   * The media handlers write the field the server changed into the draft
+   * themselves (see runMedia), so nothing is missed by leaving the rest of
+   * the draft alone. `key={selected.id}` on the editor already remounts on a
+   * real campaign switch; this stays as the guard for a prop swap without one.
+   */
+  const [syncedId, setSyncedId] = useState(page.id);
+  if (page.id !== syncedId) {
+    setSyncedId(page.id);
     setDraft(page);
     setBulletsText(page.benefitBullets.join("\n"));
     setLists(linesOf(page));
@@ -352,6 +365,13 @@ function LandingPageEditor({
       () => uploadLandingGalleryItem(page.id, file) as Promise<LandingPage>,
       (u) => set("galleryItems", u.galleryItems),
       "Couldn't upload that file",
+    );
+
+  const addGalleryLink = (url: string) =>
+    runMedia(
+      () => addLandingGalleryLink(page.id, url) as Promise<LandingPage>,
+      (u) => set("galleryItems", u.galleryItems),
+      "Couldn't add that link",
     );
 
   const removeGalleryItem = (index: number) =>
@@ -497,7 +517,12 @@ function LandingPageEditor({
     }
 
     try {
-      await patchLandingPage(page.id, patch);
+      /* Re-seed the draft from what the server stored, not from what was
+         sent: the DTO trims and the slug can be rewritten, and the id-keyed
+         resync above no longer does this for us. Harmless here — the draft
+         was just persisted, so there is nothing unsaved left to lose. */
+      const saved = (await patchLandingPage(page.id, patch)) as LandingPage;
+      setDraft(saved);
       await onChanged();
       toast.success("Landing page saved");
     } catch (err) {
@@ -509,8 +534,12 @@ function LandingPageEditor({
 
   const togglePublish = async () => {
     try {
-      if (draft.published) await unpublishLandingPage(page.id);
-      else await publishLandingPage(page.id);
+      const updated = ((await (draft.published
+        ? unpublishLandingPage(page.id)
+        : publishLandingPage(page.id))) as LandingPage);
+      /* Only the flag — everything else on screen may be mid-edit, and
+         publishing is not a save. */
+      set("published", updated.published);
       await onChanged();
       toast.success(draft.published ? "Unpublished" : "Published");
     } catch (err) {
@@ -957,15 +986,10 @@ function LandingPageEditor({
               next[i] = { ...item, alt: value };
               set("galleryItems", next);
             }}
-            onAddUrl={(url) => {
-              /* A pasted link is always a video — a photo would have been
-                 uploaded. This is how YouTube links keep working now that the
-                 single "Video URL" box is gone. */
-              set("galleryItems", [
-                ...(draft.galleryItems ?? []),
-                { url, kind: "video" as const, alt: "" },
-              ]);
-            }}
+            /* Posts straight away, like an upload. Held in the draft it was
+               destroyed by the next upload or delete on this screen — see the
+               note on the route. */
+            onAddUrl={(url) => void addGalleryLink(url)}
           />
         </Group>
 
@@ -1438,8 +1462,8 @@ function MediaRepeater({
         <p className="text-ui-micro font-semibold text-zup-soft">Working…</p>
       ) : null}
       <p className="text-ui-micro leading-snug text-zup-soft">
-        Uploading and removing happen straight away. The order{onAlt ? " and alt text" : ""} save
-        with the page.
+        Adding{onAddUrl ? ", pasting" : ""} and removing happen straight away. The order
+        {onAlt ? " and alt text" : ""} save with the page.
       </p>
     </div>
   );

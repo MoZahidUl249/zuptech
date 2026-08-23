@@ -668,6 +668,79 @@ describe("POST /admin/api/landing-pages/:id/duplicate", () => {
   });
 });
 
+/*
+ * A pasted YouTube link is a WRITE, not a draft edit.
+ *
+ * It used to live in the editor's local state until someone pressed Save,
+ * which looked fine in isolation and was not: every upload and delete on that
+ * screen answers with the stored gallery and the editor writes that back, so
+ * the pasted link was discarded by the next media action with no error
+ * anywhere. A campaign quietly lost its video. These pin the endpoint that
+ * replaced it.
+ */
+describe("POST /admin/api/landing-pages/:id/gallery/link", () => {
+  test("appends the link to the end of the gallery, as a clip", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    const { status } = await call("POST", "/admin/api/landing-pages/lp1/gallery/link", {
+      url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+    });
+
+    expect(status).toBe(200);
+    // Appended — the two slides already on SOURCE keep their order.
+    expect(capturedLandingUpdate?.galleryItems).toEqual([
+      { url: "https://cdn.example/g-1.jpg", kind: "image", alt: "a" },
+      { url: "https://youtu.be/abc", kind: "video", alt: "" },
+      { url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", kind: "video", alt: "" },
+    ]);
+  });
+
+  test("a link that is not a URL is refused before anything is stored", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    const { status } = await call("POST", "/admin/api/landing-pages/lp1/gallery/link", {
+      url: "youtube.com/watch?v=aqz-KE-bpKQ",
+    });
+
+    expect(status).toBe(422);
+    expect(capturedLandingUpdate).toBeNull();
+  });
+
+  test("view-only staff cannot add one", async () => {
+    signInAs({ landingpages: "view" });
+    landingSource = SOURCE;
+
+    const { status } = await call("POST", "/admin/api/landing-pages/lp1/gallery/link", {
+      url: "https://youtu.be/abc",
+    });
+
+    expect(status).toBe(403);
+    expect(capturedLandingUpdate).toBeNull();
+  });
+
+  test("a full gallery is a 400 naming the cap, not a silent twelfth item", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = {
+      ...SOURCE,
+      galleryItems: Array.from({ length: 12 }, (_, i) => ({
+        url: `https://cdn.example/g-${i}.jpg`,
+        kind: "image",
+        alt: "",
+      })),
+    };
+
+    const { status, body } = await call("POST", "/admin/api/landing-pages/lp1/gallery/link", {
+      url: "https://youtu.be/abc",
+    });
+
+    expect(status).toBe(400);
+    expect(JSON.stringify(body)).toContain("12");
+    expect(capturedLandingUpdate).toBeNull();
+  });
+});
+
 describe("PATCH /admin/api/landing-pages/:id — the price ladder", () => {
   test("sending a ladder replaces the whole thing", async () => {
     signInAs({ landingpages: "manage" });
