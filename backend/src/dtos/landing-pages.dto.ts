@@ -275,6 +275,25 @@ export const uploadLandingGalleryDto = t.Object({
 });
 export type UploadLandingGalleryDto = typeof uploadLandingGalleryDto.static;
 
+/**
+ * One gallery slide that is a *link* rather than a file — a YouTube URL
+ * somebody pasted.
+ *
+ * It has its own endpoint, rather than riding along on the page's PATCH,
+ * because a pasted link that lives only in the editor's draft is lost the
+ * moment any upload or delete on the same screen returns: those write
+ * server-side and hand back the stored gallery, which does not contain it.
+ * That is a campaign silently losing its video, and it is the reason this
+ * route exists. Pasting now persists immediately, exactly like uploading.
+ *
+ * Same `url` pattern as the gallery column itself, so the two boundaries
+ * cannot disagree about what may reach a <video> or next/image.
+ */
+export const addLandingGalleryLinkDto = t.Object({
+  url: t.String({ maxLength: 500, pattern: "^https?://\\S+$" }),
+});
+export type AddLandingGalleryLinkDto = typeof addLandingGalleryLinkDto.static;
+
 /** One quality photo. Same 8 MB image ceiling as every other picture upload. */
 export const uploadLandingQcImageDto = t.Object({
   file: t.File({ type: "image", maxSize: "8m" }),

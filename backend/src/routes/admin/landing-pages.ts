@@ -3,6 +3,7 @@ import { Prisma } from "../../generated/client";
 import {
   MAX_CAMPAIGN_GALLERY,
   MAX_CAMPAIGN_QC_IMAGES,
+  addLandingGalleryLinkDto,
   createLandingPageDto,
   listLandingPagesQueryDto,
   updateLandingPageDto,
@@ -287,6 +288,42 @@ export const adminLandingPages = new Elysia({
       return toLandingPage(page);
     },
     { body: uploadLandingGalleryDto },
+  )
+
+  /**
+   * Append one gallery slide from a pasted link — a YouTube URL.
+   *
+   * Always `video`: a photo would have been uploaded, and nothing here fetches
+   * the URL to find out what is behind it. `parseProductVideo` on the page
+   * decides how to render it and shows nothing when the link is unusable, so
+   * a bad paste costs one empty slide rather than a broken embed.
+   *
+   * This writes immediately, like the upload above it. It used to be draft
+   * state saved with the page, which meant any upload or delete afterwards
+   * overwrote the draft with the server's gallery and took the pasted link
+   * with it — the campaign's video vanished with no error anywhere.
+   */
+  .post(
+    "/admin/api/landing-pages/:id/gallery/link",
+    async ({ params, body, staffCtx }) => {
+      assertCan(staffCtx, "landingpages", "manage");
+      const existing = await prisma.landingPage.findUnique({ where: { id: params.id } });
+      if (!existing) throw notFound("Landing page");
+
+      const items = campaignGallery(existing.galleryItems);
+      if (items.length >= MAX_CAMPAIGN_GALLERY) {
+        throw badRequest(`A campaign gallery holds at most ${MAX_CAMPAIGN_GALLERY} items`);
+      }
+
+      const next = [...items, { url: body.url, kind: "video" as const, alt: "" }];
+      const page = await prisma.landingPage.update({
+        where: { id: existing.id },
+        data: { galleryItems: next as unknown as Prisma.InputJsonValue },
+        include: landingPageInclude,
+      });
+      return toLandingPage(page);
+    },
+    { body: addLandingGalleryLinkDto },
   )
 
   /** Remove one slide by its position — later slides shift down. */

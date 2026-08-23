@@ -493,6 +493,19 @@ export const uploadLandingGalleryItem = (id: string, file: File) =>
     "POST /admin/api/landing-pages/:id/gallery",
   );
 
+/**
+ * Append one gallery slide from a pasted link (YouTube). Stored as a clip.
+ *
+ * A link posts immediately for the same reason a file does: the media
+ * endpoints hand back the stored gallery, and anything living only in the
+ * editor's draft is overwritten the next time one of them answers.
+ */
+export const addLandingGalleryLink = (id: string, url: string) =>
+  unwrap(
+    api.admin.api["landing-pages"]({ id }).gallery.link.post({ url }),
+    "POST /admin/api/landing-pages/:id/gallery/link",
+  );
+
 /** Remove one gallery slide by position. Later slides shift down. */
 export const deleteLandingGalleryItem = (id: string, index: number) =>
   unwrap(
