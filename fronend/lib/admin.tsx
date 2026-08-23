@@ -36,6 +36,9 @@ export const ADMIN_MODULES = [
   "payments",
   "staff",
   "landingpages",
+  /* See the note in backend rbac.ts: correcting a placed order's zone or
+     charges, deliberately narrower than `orders`. */
+  "orderadjust",
 ] as const;
 export type AdminModule = (typeof ADMIN_MODULES)[number];
 export type Permission = "none" | "view" | "manage";

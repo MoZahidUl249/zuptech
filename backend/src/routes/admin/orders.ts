@@ -5,6 +5,7 @@ import { prisma } from "../../lib/db";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { logOrderEvent } from "../../lib/order-events";
 import { applyStatusTransition } from "../../lib/order-stock";
+import { repriceOrderForZone } from "../../lib/pricing";
 import { assertCan } from "../../lib/rbac";
 import { parseOrderStatus, LIST_CAP } from "../../lib/rules";
 import { adminOrderInclude, toAdminOrder, toOrderDetail } from "../../lib/serialize";
@@ -104,8 +105,19 @@ export const adminOrders = new Elysia({ name: "routes/admin/orders", detail: { t
     async ({ params, body, staffCtx }) => {
       assertCan(staffCtx, "orders", "manage");
 
-      if (body.status === undefined && body.preparedById === undefined) {
-        throw badRequest("Nothing to update — send status and/or preparedById");
+      /* Correcting a placed order's money is a different act from advancing
+         its status, and is gated separately — see ADMIN_MODULES in rbac.ts. */
+      const touchesMoney = body.insideDhaka !== undefined || body.adjust !== undefined;
+      if (touchesMoney) assertCan(staffCtx, "orderadjust", "manage");
+
+      if (
+        body.status === undefined &&
+        body.preparedById === undefined &&
+        !touchesMoney
+      ) {
+        throw badRequest(
+          "Nothing to update — send status, preparedById, insideDhaka and/or adjust",
+        );
       }
 
       // Resolve the assignee up front: a bad id should 404 before the
@@ -135,6 +147,100 @@ export const adminOrders = new Elysia({ name: "routes/admin/orders", detail: { t
             await applyStatusTransition(tx, order, from, body.status, staffCtx.staff.username);
             data.status = body.status;
             await logOrderEvent(tx, order.id, "status", `${from} → ${body.status}`, staffCtx);
+          }
+
+          /*
+           * Zone correction and/or a manual override.
+           *
+           * Both rewrite money on a placed order, so they are refused once an
+           * invoice has left the building: Invoice stores no amounts of its
+           * own and derives every figure from this row (serialize.ts
+           * toInvoice), so editing here would silently restate a document the
+           * customer is already holding. Void it or keep it in Draft first.
+           */
+          if (touchesMoney) {
+            const invoice = await tx.invoice.findUnique({
+              where: { orderId: order.id },
+              select: { id: true, status: true },
+            });
+            if (invoice && (invoice.status === "Issued" || invoice.status === "Paid")) {
+              throw badRequest(
+                `Invoice ${invoice.id} is ${invoice.status} and takes its amounts from this order — void it before changing the charges`,
+              );
+            }
+          }
+
+          if (body.insideDhaka !== undefined && body.insideDhaka !== order.insideDhaka) {
+            const priced = await repriceOrderForZone(
+              order.items.map((i) => ({
+                productId: i.productId,
+                qty: i.qty,
+                unitPrice: i.unitPrice,
+              })),
+              body.insideDhaka,
+            );
+            // The goods must not move. If they did, something repriced the
+            // catalogue instead of the zone, and the customer would be billed
+            // for a change they never agreed to.
+            if (priced.subtotal !== order.subtotal) {
+              throw badRequest(
+                "Re-pricing changed the goods total — refusing. This is a bug, not a data problem.",
+              );
+            }
+
+            const wasLabel = order.insideDhaka ? "Inside Dhaka" : "Outside Dhaka";
+            const nowLabel = body.insideDhaka ? "Inside Dhaka" : "Outside Dhaka";
+
+            data.insideDhaka = body.insideDhaka;
+            data.deliveryFee = priced.deliveryFee;
+            data.installationFee = priced.installationFee;
+            data.total = priced.total;
+            /* The zone is also baked into the address string at checkout
+               (public/orders.ts), so correcting the column alone would leave
+               the address contradicting it on every screen and invoice. */
+            data.address = order.address.endsWith(`, ${wasLabel}`)
+              ? `${order.address.slice(0, -`, ${wasLabel}`.length)}, ${nowLabel}`
+              : `${order.address}, ${nowLabel}`;
+
+            // Per-unit snapshots move too, or the line rows stop adding up to
+            // the order totals shown beside them.
+            for (const line of priced.lines) {
+              await tx.orderItem.updateMany({
+                where: { orderId: order.id, productId: line.productId },
+                data: { deliveryFee: line.deliveryFee, installationFee: line.installationFee },
+              });
+            }
+
+            await logOrderEvent(
+              tx,
+              order.id,
+              "note",
+              `Delivery zone ${wasLabel} → ${nowLabel} · delivery ${order.deliveryFee} → ${priced.deliveryFee}` +
+                ` · installation ${order.installationFee} → ${priced.installationFee}` +
+                ` · total ${order.total} → ${priced.total}`,
+              staffCtx,
+            );
+          }
+
+          if (body.adjust) {
+            const nextDelivery = body.adjust.deliveryFee ?? (data.deliveryFee as number | undefined) ?? order.deliveryFee;
+            const nextInstall =
+              body.adjust.installationFee ?? (data.installationFee as number | undefined) ?? order.installationFee;
+            const nextTotal = order.subtotal + nextDelivery + nextInstall;
+
+            data.deliveryFee = nextDelivery;
+            data.installationFee = nextInstall;
+            data.total = nextTotal;
+
+            await logOrderEvent(
+              tx,
+              order.id,
+              "note",
+              `Charges adjusted by hand · delivery ${order.deliveryFee} → ${nextDelivery}` +
+                ` · installation ${order.installationFee} → ${nextInstall}` +
+                ` · total ${order.total} → ${nextTotal} · reason: ${body.adjust.reason}`,
+              staffCtx,
+            );
           }
 
           if (body.preparedById !== undefined && body.preparedById !== order.preparedById) {

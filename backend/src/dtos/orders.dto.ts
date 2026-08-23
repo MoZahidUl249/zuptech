@@ -49,6 +49,38 @@ export const listOrdersQueryDto = t.Object({
 export const updateOrderDto = t.Object({
   status: t.Optional(orderStatusDto),
   preparedById: t.Optional(t.Union([t.String({ maxLength: 40 }), t.Null()])),
+  /**
+   * Correct the delivery zone of an order already placed, and re-cost it.
+   *
+   * The customer picks the zone at checkout and can be wrong — "inside Dhaka"
+   * with an address in Bogura. This is the manual fix, gated on `orderadjust`
+   * rather than `orders`.
+   *
+   * Note what is NOT here: any money. The server recomputes delivery and
+   * installation from the corrected zone and the product's own fee columns,
+   * exactly as checkout did, and keeps the unit prices frozen on the order.
+   * The rule that a client never supplies an amount is untouched.
+   */
+  insideDhaka: t.Optional(t.Boolean()),
+  /**
+   * Override the two fees outright — a courier surcharge, a negotiated
+   * delivery, something the catalogue cannot express.
+   *
+   * This IS a human-entered amount, and the only one in the system. It is
+   * therefore authenticated, permissioned, requires a written reason, and
+   * writes an append-only event naming the staff member and both numbers. The
+   * invariant it bends is "no CLIENT-supplied money" (cal-bk.md §3); a
+   * deliberate act by a named operator with an audit trail is a different
+   * thing from a forged request body.
+   */
+  adjust: t.Optional(
+    t.Object({
+      deliveryFee: t.Optional(t.Integer({ minimum: 0, maximum: 1_000_000 })),
+      installationFee: t.Optional(t.Integer({ minimum: 0, maximum: 1_000_000 })),
+      /** Required — an unexplained change to someone's bill is not auditable. */
+      reason: t.String({ minLength: 3, maxLength: 200 }),
+    }),
+  ),
 });
 
 export type CreateOrderDto = typeof createOrderDto.static;
