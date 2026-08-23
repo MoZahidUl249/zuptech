@@ -196,6 +196,14 @@ const campaignFields = {
     phonePlaceholder: t.String({ maxLength: 120 }),
     addressPlaceholder: t.String({ maxLength: 200 }),
     successMessage: t.String({ maxLength: 300 }),
+    /* The delivery-zone chooser, added after the first campaigns shipped.
+       OPTIONAL, unlike every key above, because this object is validated
+       whole: a client that loaded its copy before these existed would post
+       eleven keys and be refused outright — the same whole-document trap that
+       broke the contact screen. Blank falls back to English in the renderer. */
+    zoneLabel: t.Optional(t.String({ maxLength: 80 })),
+    zoneInsideLabel: t.Optional(t.String({ maxLength: 80 })),
+    zoneOutsideLabel: t.Optional(t.String({ maxLength: 80 })),
   }),
 
   footerTagline: t.String({ maxLength: 200 }),

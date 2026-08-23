@@ -179,3 +179,40 @@ describe("priceCart", () => {
     );
   });
 });
+
+/*
+ * The zone had no coverage at all: every priceCart call in this file, in
+ * app.test.ts and in campaign-pricing.test.ts passed `true`, so nothing pinned
+ * what "Outside Dhaka" actually charges — while the campaign form hardcoded
+ * `insideDhaka: true` and shipped every order at Dhaka rates.
+ */
+describe("delivery zone", () => {
+  test("outside Dhaka charges the outside fees, per unit", async () => {
+    // ips1000: delivery 100/200, installation 50/80, qty 2.
+    const inside = await priceCart([{ productId: "ips1000", qty: 2 }], true);
+    const outside = await priceCart([{ productId: "ips1000", qty: 2 }], false);
+
+    expect(outside.deliveryFee).toBe(400); // 200 × 2
+    expect(outside.installationFee).toBe(160); // 80 × 2
+    // The goods never move with the zone — only the two fees do.
+    expect(outside.subtotal).toBe(inside.subtotal);
+    expect(outside.total).toBe(outside.subtotal + 400 + 160);
+    // Non-null by construction: both were priced with a known zone.
+    expect(outside.total! - inside.total!).toBe(400 - 200 + (160 - 100));
+  });
+
+  test("an unanswered zone prices the goods and nothing else", async () => {
+    // This is what the campaign form now relies on before the customer picks:
+    // a subtotal it can show, and nulls where a guess would otherwise go.
+    const cart = await priceCart([{ productId: "ips1000", qty: 2 }], undefined);
+
+    expect(cart.subtotal).toBe(2000);
+    expect(cart.insideDhaka).toBeNull();
+    expect(cart.deliveryFee).toBeNull();
+    expect(cart.installationFee).toBeNull();
+    expect(cart.total).toBeNull();
+    expect(cart.lines[0]!.deliveryFee).toBeNull();
+    expect(cart.lines[0]!.installationFee).toBeNull();
+  });
+});
+

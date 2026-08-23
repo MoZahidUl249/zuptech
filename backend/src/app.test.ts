@@ -151,6 +151,31 @@ let deletedPosFor: string[] = [];
 /** Campaign ids whose price ladder the PATCH replaced, in order. */
 let clearedTiersFor: string[] = [];
 
+/* ===== Orders =====
+ * PATCH /admin/api/orders/:id had no coverage at all, which is uncomfortable
+ * for the one route that can now move money on a placed order. */
+
+/** An order as stored: two units bought at 850 with inside-Dhaka fees. */
+const ORDER_ROW = {
+  id: "ZT-10001",
+  status: "Processing",
+  insideDhaka: true,
+  address: "House 9, Bogura Sadar, Bogura, Inside Dhaka",
+  subtotal: 1700,
+  deliveryFee: 200,
+  installationFee: 100,
+  total: 2000,
+  preparedById: null,
+  preparedBy: null,
+  items: [{ productId: "ips1000", qty: 2, unitPrice: 850 }],
+};
+
+let orderRow: Record<string, unknown> | null = null;
+let orderInvoice: { id: string; status: string } | null = null;
+let capturedOrderUpdate: Record<string, unknown> | null = null;
+let orderEvents: { kind: string; detail: string }[] = [];
+let itemFeeWrites: Record<string, unknown>[] = [];
+
 /** The subset of the client the delete route's transaction touches. Handed to
  *  the callback as `tx`, so what the route does inside the transaction is
  *  observable — the ledger clearing in particular. */
@@ -185,6 +210,66 @@ const txClient = {
     update: async ({ data }: { data: Record<string, unknown> }) => {
       capturedLandingUpdate = data;
       return { ...landingSource, ...data, product: CATALOG[0], tiers: [] };
+    },
+  },
+  order: {
+    findUnique: async () => orderRow,
+    update: async ({ data }: { data: Record<string, unknown> }) => {
+      capturedOrderUpdate = data;
+      return { ...orderRow, ...data };
+    },
+    /* The route re-reads through orderDetailInclude so the response carries
+       the events it just wrote. Shaped for toOrderDetail, which walks the
+       customer, the line products and the event list. */
+    findUniqueOrThrow: async () => ({
+      ...ORDER_ROW,
+      ...capturedOrderUpdate,
+      number: 1,
+      name: "Test Buyer",
+      phone: "01700000000",
+      pay: "Cash on delivery",
+      customerId: "c1",
+      customer: { id: "c1", name: "Test Buyer", phone: "01700000000" },
+      landingPageId: null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      preparedBy: null,
+      invoice: null,
+      // toAdminOrder reads the count for the badge; toOrderDetail maps the rows.
+      _count: { warranties: 0 },
+      warranties: [],
+      items: [
+        {
+          id: 1,
+          productId: "ips1000",
+          qty: 2,
+          unitPrice: 850,
+          deliveryFee: 100,
+          installationFee: 50,
+          product: CATALOG[0],
+        },
+      ],
+      events: orderEvents.map((e, i) => ({
+        id: String(i),
+        at: new Date(0),
+        kind: e.kind,
+        detail: e.detail,
+        by: "test",
+        byName: "Test Staff",
+      })),
+    }),
+  },
+  orderItem: {
+    updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+      itemFeeWrites.push(data);
+      return { count: 1 };
+    },
+  },
+  invoice: { findUnique: async () => orderInvoice },
+  orderEvent: {
+    create: async ({ data }: { data: { kind: string; detail: string } }) => {
+      orderEvents.push({ kind: data.kind, detail: data.detail });
+      return data;
     },
   },
 };
@@ -300,6 +385,11 @@ beforeEach(() => {
   capturedLandingCreate = null;
   capturedLandingUpdate = null;
   clearedTiersFor = [];
+  orderRow = null;
+  orderInvoice = null;
+  capturedOrderUpdate = null;
+  orderEvents = [];
+  itemFeeWrites = [];
 });
 
 /* ========================================================================
@@ -936,3 +1026,130 @@ describe("unpublished campaign pages are invisible", () => {
     expect(missing.body?.error).toBe("Landing page not found");
   });
 });
+
+/*
+ * Correcting a placed order.
+ *
+ * This route had no tests at all before it could move money, which is the
+ * wrong order to do things in. The customer picks a zone at checkout and can
+ * be wrong — "inside Dhaka" against an address in Bogura — and these pin what
+ * staff are allowed to do about it.
+ */
+describe("PATCH /admin/api/orders/:id — correcting the zone and the charges", () => {
+  const full = { orders: "manage", orderadjust: "manage" };
+
+  test("changing the zone re-costs the fees and leaves the goods alone", async () => {
+    signInAs(full);
+    orderRow = { ...ORDER_ROW };
+
+    const { status } = await call("PATCH", "/admin/api/orders/ZT-10001", { insideDhaka: false });
+
+    expect(status).toBe(200);
+    // ips1000 outside: delivery 200/unit, installation 80/unit, qty 2.
+    expect(capturedOrderUpdate?.deliveryFee).toBe(400);
+    expect(capturedOrderUpdate?.installationFee).toBe(160);
+    expect(capturedOrderUpdate?.total).toBe(1700 + 400 + 160);
+    // The one number that must never move on a zone correction.
+    expect(capturedOrderUpdate?.subtotal).toBeUndefined();
+  });
+
+  test("the address stops contradicting the zone", async () => {
+    signInAs(full);
+    orderRow = { ...ORDER_ROW };
+
+    await call("PATCH", "/admin/api/orders/ZT-10001", { insideDhaka: false });
+
+    // Checkout bakes the label into the address; correcting the column alone
+    // would leave "Inside Dhaka" printed on every screen and the invoice.
+    expect(capturedOrderUpdate?.address).toBe("House 9, Bogura Sadar, Bogura, Outside Dhaka");
+  });
+
+  test("the per-unit line snapshots move with it", async () => {
+    signInAs(full);
+    orderRow = { ...ORDER_ROW };
+
+    await call("PATCH", "/admin/api/orders/ZT-10001", { insideDhaka: false });
+
+    expect(itemFeeWrites).toEqual([{ deliveryFee: 200, installationFee: 80 }]);
+  });
+
+  test("both changes are written to the order's history, with the numbers", async () => {
+    signInAs(full);
+    orderRow = { ...ORDER_ROW };
+
+    await call("PATCH", "/admin/api/orders/ZT-10001", { insideDhaka: false });
+
+    const note = orderEvents.find((e) => e.kind === "note");
+    expect(note?.detail).toContain("Inside Dhaka → Outside Dhaka");
+    expect(note?.detail).toContain("total 2000 → 2260");
+  });
+
+  test("a manual override needs a reason and records it", async () => {
+    signInAs(full);
+    orderRow = { ...ORDER_ROW };
+
+    const missing = await call("PATCH", "/admin/api/orders/ZT-10001", {
+      adjust: { deliveryFee: 500 },
+    });
+    expect(missing.status).toBe(422);
+
+    orderRow = { ...ORDER_ROW };
+    const ok = await call("PATCH", "/admin/api/orders/ZT-10001", {
+      adjust: { deliveryFee: 500, reason: "Courier surcharge for Bogura" },
+    });
+    expect(ok.status).toBe(200);
+    expect(capturedOrderUpdate?.deliveryFee).toBe(500);
+    expect(capturedOrderUpdate?.total).toBe(1700 + 500 + 100);
+    expect(orderEvents.find((e) => e.kind === "note")?.detail).toContain(
+      "Courier surcharge for Bogura",
+    );
+  });
+
+  test("an issued invoice takes its amounts from this row, so the charges are frozen", async () => {
+    signInAs(full);
+    orderRow = { ...ORDER_ROW };
+    orderInvoice = { id: "INV-1001", status: "Issued" };
+
+    const { status, body } = await call("PATCH", "/admin/api/orders/ZT-10001", {
+      insideDhaka: false,
+    });
+
+    expect(status).toBe(400);
+    expect(JSON.stringify(body)).toContain("INV-1001");
+    expect(capturedOrderUpdate).toBeNull();
+  });
+
+  test("a Draft invoice does not block the correction", async () => {
+    signInAs(full);
+    orderRow = { ...ORDER_ROW };
+    orderInvoice = { id: "INV-1002", status: "Draft" };
+
+    const { status } = await call("PATCH", "/admin/api/orders/ZT-10001", { insideDhaka: false });
+    expect(status).toBe(200);
+  });
+
+  test("`orders: manage` alone cannot move money — that is the point of the split", async () => {
+    // All three seeded roles hold orders:manage, Support included. Moving money
+    // on a placed order is deliberately a separate grant.
+    signInAs({ orders: "manage" });
+    orderRow = { ...ORDER_ROW };
+
+    const zone = await call("PATCH", "/admin/api/orders/ZT-10001", { insideDhaka: false });
+    expect(zone.status).toBe(403);
+
+    const adjust = await call("PATCH", "/admin/api/orders/ZT-10001", {
+      adjust: { deliveryFee: 1, reason: "nope" },
+    });
+    expect(adjust.status).toBe(403);
+    expect(capturedOrderUpdate).toBeNull();
+  });
+
+  test("status changes still work with only `orders: manage`", async () => {
+    signInAs({ orders: "manage" });
+    orderRow = { ...ORDER_ROW };
+
+    const { status } = await call("PATCH", "/admin/api/orders/ZT-10001", { status: "Confirmed" });
+    expect(status).toBe(200);
+  });
+});
+

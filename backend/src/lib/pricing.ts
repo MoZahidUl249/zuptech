@@ -210,6 +210,92 @@ export async function priceCart(
   };
 }
 
+/** One already-placed line, as stored on the order. */
+export interface PlacedLine {
+  productId: string;
+  qty: number;
+  /** Frozen at checkout. Deliberately an INPUT here, never recomputed. */
+  unitPrice: number;
+}
+
+/** What a zone correction works out to, shaped like the Order money columns. */
+export interface RepricedOrder {
+  subtotal: number;
+  deliveryFee: number;
+  installationFee: number;
+  total: number;
+  /** Per line, per unit — the OrderItem snapshots that must move with it. */
+  lines: { productId: string; deliveryFee: number; installationFee: number }[];
+}
+
+/**
+ * Re-cost an ALREADY PLACED order for a corrected delivery zone.
+ *
+ * Deliberately not `priceCart`. That function re-reads unit prices from the
+ * catalog at call time, which is exactly right at checkout and exactly wrong
+ * here: an order placed last month would silently pick up every price change
+ * since, and a campaign ladder would vanish entirely because
+ * `resolveCampaignPricing` needs a slug and a still-published page. The
+ * customer agreed to the prices frozen on the order, so those are inputs.
+ *
+ * Only the two zone-dependent fees are recomputed, by the same rules the
+ * checkout used: `discountedDeliveryFee` applies the product's free-delivery
+ * ladder to the zone fee, and installation is the flat per-zone column. The
+ * roll-up is per unit × qty, matching priceCart.
+ *
+ * Subtotal is summed from the stored unit prices, so it MUST come out equal to
+ * what is already on the order — the caller asserts that rather than trusting
+ * it, because a subtotal that moved would mean the goods were repriced.
+ */
+export async function repriceOrderForZone(
+  lines: PlacedLine[],
+  insideDhaka: boolean,
+): Promise<RepricedOrder> {
+  const products = await prisma.product.findMany({
+    where: { id: { in: lines.map((l) => l.productId) } },
+    include: { freeDeliveryOffers: true },
+  });
+  const byId = new Map(products.map((p) => [p.id, p]));
+
+  let subtotal = 0;
+  let deliveryFee = 0;
+  let installationFee = 0;
+  const out: RepricedOrder["lines"] = [];
+
+  for (const line of lines) {
+    const product = byId.get(line.productId);
+    // A product deleted since the order was placed leaves nothing to price the
+    // zone from. Refusing beats guessing a fee onto someone's bill.
+    if (!product) throw badRequest(`Product no longer exists: ${line.productId}`);
+
+    const perUnitDelivery = discountedDeliveryFee(
+      insideDhaka ? product.deliveryFeeInsideDhaka : product.deliveryFeeOutsideDhaka,
+      product.freeDeliveryOffers,
+      line.qty,
+    );
+    const perUnitInstall = insideDhaka
+      ? product.installationFeeInsideDhaka
+      : product.installationFeeOutsideDhaka;
+
+    subtotal += line.unitPrice * line.qty;
+    deliveryFee += perUnitDelivery * line.qty;
+    installationFee += perUnitInstall * line.qty;
+    out.push({
+      productId: line.productId,
+      deliveryFee: perUnitDelivery,
+      installationFee: perUnitInstall,
+    });
+  }
+
+  return {
+    subtotal,
+    deliveryFee,
+    installationFee,
+    total: subtotal + deliveryFee + installationFee,
+    lines: out,
+  };
+}
+
 /** Human-readable order summary, e.g. "1000VA IPS + Battery Combo ×1". */
 export function orderSummary(lines: PricedLine[]): string {
   return lines.map((line) => `${line.product.name} ×${line.qty}`).join(", ");

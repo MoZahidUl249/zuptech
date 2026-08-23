@@ -369,6 +369,10 @@ export interface CampaignContentDto {
     phonePlaceholder: string;
     addressPlaceholder: string;
     successMessage: string;
+    /** Delivery-zone chooser. Blank falls back to English in the renderer. */
+    zoneLabel: string;
+    zoneInsideLabel: string;
+    zoneOutsideLabel: string;
   };
   footerTagline: string;
   footerAbout: string;

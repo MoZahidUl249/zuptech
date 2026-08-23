@@ -17,7 +17,7 @@ import {
   type SiteContact,
   type WarrantyStatus,
 } from "@/lib/admin";
-import { getOrderDetail, setOrderPreparedBy } from "@/lib/admin-api";
+import { adjustOrderCharges, getOrderDetail, setOrderPreparedBy, setOrderZone } from "@/lib/admin-api";
 import { useFilterParams } from "./primitives/filter-params";
 import { FilterBar, FilterTabs } from "./primitives/filter-bar";
 import { PageHeader } from "./primitives";
@@ -29,6 +29,7 @@ import {
   BtnGhost,
   BtnPrimary,
   Card,
+  Field,
   Pill,
   Table,
   Td,
@@ -307,6 +308,9 @@ export function OrdersSection() {
 function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => void }) {
   const { state, user, can } = useAdmin();
   const readOnly = can("orders") !== "manage";
+  /* Changing what a placed order CHARGES is a separate grant from working
+     orders — every seeded role holds `orders: manage`, Support included. */
+  const canAdjust = can("orderadjust") === "manage";
   const canInvoice = can("invoices");
   const canWarranty = can("warranty");
 
@@ -417,6 +421,24 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
                 <p className="mt-1 text-ui-sm text-zup-gray">
                   {order.insideDhaka ? "Inside Dhaka" : "Outside Dhaka"}
                 </p>
+                {/* The customer chooses this at checkout and can be wrong —
+                    "Inside Dhaka" against an address in Bogura. Correcting it
+                    re-costs delivery and installation server-side from the
+                    product's own fee columns; the goods keep the price that
+                    was agreed. */}
+                {canAdjust ? (
+                  <BtnGhost
+                    className="mt-2"
+                    disabled={busy}
+                    onClick={() =>
+                      run("Delivery zone corrected", () =>
+                        setOrderZone(order.id, !order.insideDhaka),
+                      )
+                    }
+                  >
+                    Change to {order.insideDhaka ? "Outside Dhaka" : "Inside Dhaka"}
+                  </BtnGhost>
+                ) : null}
               </div>
             </div>
 
@@ -454,6 +476,8 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
                 </div>
               </div>
             </div>
+
+            {canAdjust ? <ChargeOverride order={order} busy={busy} run={run} /> : null}
           </Card>
 
           <InvoiceCard
@@ -542,6 +566,121 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
         </div>
       </div>
 
+    </div>
+  );
+}
+
+/**
+ * Correct the delivery and installation charge by hand.
+ *
+ * The only place in this system where a number a person typed becomes the
+ * number charged. Everything else is computed server-side from the catalogue,
+ * and that rule is not being relaxed — this is a named operator, holding a
+ * permission nobody has by default, writing a reason that is stored with both
+ * figures on the order's own history.
+ *
+ * Blank means "leave alone", so an adjustment can move delivery without
+ * touching installation.
+ */
+function ChargeOverride({
+  order,
+  busy,
+  run,
+}: {
+  order: OrderDetail;
+  busy: boolean;
+  run: (label: string, fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [delivery, setDelivery] = useState("");
+  const [installation, setInstallation] = useState("");
+  const [reason, setReason] = useState("");
+
+  const nextDelivery = delivery === "" ? order.deliveryFee : Number(delivery);
+  const nextInstall = installation === "" ? order.installationFee : Number(installation);
+  const nextTotal = order.total - order.deliveryFee - order.installationFee + nextDelivery + nextInstall;
+  const ready = reason.trim().length >= 3 && (delivery !== "" || installation !== "");
+
+  if (!open) {
+    return (
+      <div className="mt-4 flex justify-end">
+        <BtnGhost onClick={() => setOpen(true)}>Adjust charges…</BtnGhost>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-zup-body/10 bg-zup-bg/60 p-3.5">
+      <p className="text-ui-sm font-bold">Adjust charges</p>
+      <p className="mt-0.5 text-ui-micro leading-relaxed text-zup-gray">
+        For what the catalogue cannot express — a courier surcharge, a
+        negotiated delivery. Leave a box blank to keep it as it is. Correcting a
+        wrong delivery zone is the button above, not this.
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <Field label={`Delivery (now ${taka(order.deliveryFee)})`}>
+          <input
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={delivery}
+            disabled={busy}
+            onChange={(e) => setDelivery(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
+        <Field label={`Installation (now ${taka(order.installationFee)})`}>
+          <input
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={installation}
+            disabled={busy}
+            onChange={(e) => setInstallation(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
+        <Field label="Reason (recorded)">
+          <input
+            value={reason}
+            disabled={busy}
+            placeholder="Courier surcharge for Bogura"
+            onChange={(e) => setReason(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
+      </div>
+      {/* Shown before the click, because the person approving it should see
+          the figure they are approving rather than discover it afterwards. */}
+      <p className="mt-3 text-ui-sm">
+        New total: <span className="font-extrabold">{taka(nextTotal)}</span>
+        {nextTotal !== order.total ? (
+          <span className="text-zup-gray"> (was {taka(order.total)})</span>
+        ) : null}
+      </p>
+      <div className="mt-3 flex gap-2">
+        <BtnPrimary
+          disabled={busy || !ready}
+          onClick={() =>
+            run("Charges adjusted", async () => {
+              await adjustOrderCharges(order.id, {
+                ...(delivery !== "" ? { deliveryFee: Number(delivery) } : {}),
+                ...(installation !== "" ? { installationFee: Number(installation) } : {}),
+                reason: reason.trim(),
+              });
+              setOpen(false);
+              setDelivery("");
+              setInstallation("");
+              setReason("");
+            })
+          }
+        >
+          Apply
+        </BtnPrimary>
+        <BtnGhost disabled={busy} onClick={() => setOpen(false)}>
+          Cancel
+        </BtnGhost>
+      </div>
     </div>
   );
 }

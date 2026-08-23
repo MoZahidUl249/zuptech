@@ -40,6 +40,9 @@ const MODULE_LABELS: Record<AdminModule, string> = {
   sitecontent: "Site content",
   payments: "Payments",
   staff: "Staff & roles",
+  // Narrower than Orders on purpose: everyone who works orders can advance a
+  // status, but changing what a placed order charges is its own grant.
+  orderadjust: "Order charges (corrections)",
 };
 
 const PERMS: Permission[] = ["none", "view", "manage"];

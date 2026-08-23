@@ -16,6 +16,35 @@
  * Better Auth answers with { message, code } instead, hence `code`.
  */
 
+/** `contactServiceLine` → "Contact service line". Last resort when a caller
+ *  has no label map — better than printing the raw key, worse than a real
+ *  label, which is why `fieldMessage` prefers one. */
+function humanizeKey(key: string): string {
+  const words = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * TypeBox's own summaries, in words a shop owner can act on.
+ *
+ * These are the exact strings the backend's DTOs produce — verified against
+ * `content.dto.ts` by feeding it real values. Anything unrecognised falls
+ * through unchanged rather than being swallowed: a slightly technical message
+ * beats an invented one.
+ */
+function explainSummary(summary: string | undefined, found: unknown): string {
+  if (!summary) return "is not valid";
+  const len = /less or equal to (\d+)/.exec(summary);
+  if (len) {
+    const over = typeof found === "string" ? ` (you typed ${found.length})` : "";
+    return `too long — at most ${len[1]} characters${over}`;
+  }
+  if (/match '\^\[0-9\]\*\$'/.test(summary)) return "digits only — no +, spaces or dashes";
+  if (/required property/i.test(summary)) return "is missing — reload the page and try again";
+  if (/to be string but found: null|Expected string$/.test(summary)) return "cannot be empty";
+  return summary;
+}
+
 /** Elysia's validation payload, unwrapped from the `detail` string. */
 export interface ValidationDetail {
   /** Which part of the request failed: "body", "query", "params". */
@@ -96,6 +125,33 @@ export class ApiRequestError extends Error {
    *  for an operational reason — worth branching on in a form. */
   get isValidation(): boolean {
     return this.status === 422 || this.status === 400;
+  }
+
+  /**
+   * ONE line, for a person looking at a form — as opposed to `describe()`,
+   * which is shaped for a console.
+   *
+   * The admin used to print the literal "Invalid request" and nothing else,
+   * because that is all `message` carries on a 422. The server was already
+   * sending which property failed and why; it was simply never read. On a
+   * screen that PUTs a whole document, that meant one bad value blocked every
+   * other field with no way to tell which one.
+   *
+   * `labelFor` maps the DTO's property name onto the label actually printed
+   * above the input, so the message names the box the person is looking at
+   * rather than a column they have never heard of. Without it, the property
+   * name is humanised as a fallback.
+   *
+   * Returns null when the failure was not a validation error, so callers can
+   * keep their existing message.
+   */
+  fieldMessage(labelFor?: (property: string) => string | undefined): string | null {
+    const v = this.validation;
+    if (!v) return null;
+    const raw = (v.property ?? "").replace(/^\//, "");
+    if (!raw) return v.summary ?? null;
+    const label = labelFor?.(raw) ?? humanizeKey(raw);
+    return `${label} — ${explainSummary(v.summary, v.found)}`;
   }
 
   /**

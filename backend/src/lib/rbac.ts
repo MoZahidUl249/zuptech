@@ -33,6 +33,13 @@ export const ADMIN_MODULES = [
   "sitecontent",
   "payments",
   "staff",
+  /* Correcting an order's delivery zone or its charges after it was placed.
+     Separate from `orders` on purpose: all three seeded roles hold
+     `orders: manage` — including Support — and moving money on a placed order
+     is a different kind of act from advancing its status. Nobody holds this
+     until a Super Admin grants it, which is the safe default for the one
+     permission that lets a human overwrite a computed total. */
+  "orderadjust",
 ] as const;
 
 export type AdminModule = (typeof ADMIN_MODULES)[number];
@@ -97,6 +104,7 @@ export function normalizePermissions(raw: unknown): PermissionMatrix {
     sitecontent: "none",
     payments: "none",
     staff: "none",
+    orderadjust: "none",
   };
   for (const module of ADMIN_MODULES) {
     const value = source[module];

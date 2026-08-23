@@ -327,6 +327,29 @@ export const setOrderStatus = (id: string, status: OrderStatus) =>
 export const setOrderPreparedBy = (id: string, preparedById: string | null) =>
   unwrap(api.admin.api.orders({ id }).patch({ preparedById }), "PATCH /admin/api/orders/:id");
 
+/**
+ * Correct the delivery zone of a placed order.
+ *
+ * The server re-costs delivery and installation from the corrected zone and
+ * the product's own fee columns, keeping the unit prices frozen at checkout —
+ * no amount is sent from here. Needs `orderadjust: manage`, which is narrower
+ * than `orders` on purpose.
+ */
+export const setOrderZone = (id: string, insideDhaka: boolean) =>
+  unwrap(api.admin.api.orders({ id }).patch({ insideDhaka }), "PATCH /admin/api/orders/:id");
+
+/**
+ * Override the delivery and/or installation charge by hand.
+ *
+ * The one place a human-entered amount becomes the charged amount, so the
+ * reason is required and the server writes both numbers and the operator into
+ * the order's history.
+ */
+export const adjustOrderCharges = (
+  id: string,
+  adjust: { deliveryFee?: number; installationFee?: number; reason: string },
+) => unwrap(api.admin.api.orders({ id }).patch({ adjust }), "PATCH /admin/api/orders/:id");
+
 /** Lines + audit trail + invoice + warranties, in one call. */
 export const getOrderDetail = (id: string) =>
   unwrap(api.admin.api.orders({ id }).get(), "GET /admin/api/orders/:id");

@@ -23,7 +23,6 @@ export function CampaignOrderForm({
   labels,
   title,
   intro,
-  deliveryFee,
   unitLabel,
   campaignSlug,
   payMethod,
@@ -35,7 +34,6 @@ export function CampaignOrderForm({
   labels: CampaignFormLabels;
   title: string;
   intro: string;
-  deliveryFee: number;
   unitLabel: string;
   /** Attributes the order to this campaign, so its sales can be counted. */
   campaignSlug: string;
@@ -66,6 +64,16 @@ export function CampaignOrderForm({
   // bundle ladder exists to lift order value and the page already argues for it.
   const [qty, setQty] = useState(bundles[bundles.length - 1]?.qty ?? 1);
   const [form, setForm] = useState({ name: "", phone: "", address: "" });
+  /*
+   * Delivery zone, deliberately UNSET until the customer answers.
+   *
+   * It used to be hardcoded `true`, so every campaign order was charged Dhaka
+   * rates wherever it shipped. `null` rather than a default because the two
+   * zones can carry different delivery AND installation fees: pre-selecting
+   * one shows a total nobody chose, and the quote below is only asked once
+   * there is an answer to ask about.
+   */
+  const [insideDhaka, setInsideDhaka] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -91,21 +99,39 @@ export function CampaignOrderForm({
   /* The slug goes to the quote as well as the order: this campaign may carry
      its own bulk prices, and a form that quoted catalogue rates then charged
      campaign rates would be the same class of bug as the missing installation
-     fee described above. */
+     fee described above.
+
+     `undefined` for an unanswered zone is not a workaround — `quoteDto` makes
+     `insideDhaka` optional precisely so a cart can be priced before the zone
+     is known, and the server answers with null fees and a null total. */
   const { quote } = useQuote(
     chosen ? [{ productId, qty }] : [],
-    true,
+    insideDhaka ?? undefined,
     campaignSlug,
   );
-  const delivery = quote?.deliveryFee ?? deliveryFee * qty;
-  const installation = quote?.installationFee ?? 0;
-  const total = quote?.total ?? (chosen?.total ?? 0) + delivery;
+
+  /*
+   * Nulls until the zone is answered, and the row renders a dash.
+   *
+   * The old fallback was `quote?.deliveryFee ?? deliveryFee * qty`, which
+   * quietly substituted the INSIDE-Dhaka fee whenever the quote had no
+   * number — so an unanswered form would have shown a delivery charge and a
+   * total the customer never chose, and the order would then have been priced
+   * differently. A dash is honest; a stale number is not.
+   */
+  const priced = insideDhaka !== null && quote !== null;
+  const delivery = priced ? quote.deliveryFee : null;
+  const installation = priced ? quote.installationFee : null;
+  const total = priced ? quote.total : null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return setError(labels.name);
     if (!form.phone.trim()) return setError(labels.phone);
     if (form.address.trim().length < 8) return setError(labels.address);
+    // The zone decides delivery AND installation, so there is no safe default
+    // to fall back on — ask rather than guess.
+    if (insideDhaka === null) return setError(zoneLabel);
 
     setError(null);
     setBusy(true);
@@ -121,7 +147,7 @@ export function CampaignOrderForm({
           name: form.name.trim(),
           phone: form.phone.trim(),
           address: form.address.trim(),
-          insideDhaka: true,
+          insideDhaka,
           pay: payMethod,
           items: [{ productId, qty }],
           landingPageSlug: campaignSlug,
@@ -159,6 +185,18 @@ export function CampaignOrderForm({
 
   const field =
     "w-full rounded-xl border border-zup-line bg-white px-3.5 py-3 text-[15px] outline-none focus:border-zup-blue";
+
+  /* Campaign copy is Bangla and comes from the database, but these three keys
+     were added after the first campaigns shipped — so an existing page has
+     nothing stored and falls back to the storefront's English rather than
+     rendering an empty legend. */
+  const zoneLabel = labels.zoneLabel || "Delivery area";
+  const zoneInside = labels.zoneInsideLabel || "Inside Dhaka";
+  const zoneOutside = labels.zoneOutsideLabel || "Outside Dhaka";
+  /* The one string on this page that was hardcoded Bangla with no label key.
+     It has no key of its own, so it borrows the delivery row's wording rather
+     than shipping a second hardcoded word. */
+  const installLabel = labels.deliveryLabel ? `${labels.deliveryLabel} +` : "Installation";
 
   return (
     <form onSubmit={submit} className="rounded-2xl border border-zup-line bg-white p-5 sm:p-6">
@@ -202,6 +240,45 @@ export function CampaignOrderForm({
         </label>
       </div>
 
+      {/*
+        Delivery zone.
+
+        Real radios in a fieldset, matching the bundle picker below rather than
+        importing the storefront's ZonePicker — that component hardcodes
+        English in four places and takes no label props, so it cannot speak a
+        campaign's own language.
+
+        Nothing is checked initially. The customer answers, or the form does
+        not submit.
+      */}
+      <fieldset className="mt-5">
+        <legend className="mb-2 text-[13px] font-semibold text-zup-body">{zoneLabel}</legend>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { inside: true, text: zoneInside },
+            { inside: false, text: zoneOutside },
+          ].map((o) => (
+            <label
+              key={o.text}
+              className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 py-3 text-center text-[14px] font-semibold ${
+                insideDhaka === o.inside
+                  ? "border-zup-blue bg-zup-blue/5 text-zup-ink"
+                  : "border-zup-line bg-white text-zup-gray"
+              }`}
+            >
+              <input
+                type="radio"
+                name="zone"
+                className="sr-only"
+                checked={insideDhaka === o.inside}
+                onChange={() => setInsideDhaka(o.inside)}
+              />
+              {o.text}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
       {bundles.length > 1 ? (
         <fieldset className="mt-5">
           <legend className="mb-2 text-[13px] font-semibold text-zup-body">
@@ -241,22 +318,29 @@ export function CampaignOrderForm({
         </fieldset>
       ) : null}
 
+      {/* A dash until the zone is answered — see the note on `priced` above.
+          Every figure here depends on it, so showing one before it is known
+          would be showing a number the customer has not chosen. */}
       <dl className="mt-5 flex flex-col gap-1.5 border-t border-zup-line pt-4 text-[14px]">
         <div className="flex justify-between">
           <dt className="text-zup-gray">{labels.deliveryLabel}</dt>
-          <dd className="font-semibold text-zup-body">{formatBDT(delivery)}</dd>
+          <dd className="font-semibold text-zup-body">
+            {delivery === null ? "—" : formatBDT(delivery)}
+          </dd>
           {/* Only when the product carries one. Shown as its own line because a
               total that does not visibly add up reads as a mistake. */}
-          {installation > 0 ? (
+          {installation !== null && installation > 0 ? (
             <>
-              <dt className="text-zup-gray">ইনস্টলেশন</dt>
+              <dt className="text-zup-gray">{installLabel}</dt>
               <dd className="font-semibold text-zup-body">{formatBDT(installation)}</dd>
             </>
           ) : null}
         </div>
         <div className="flex justify-between text-[17px]">
           <dt className="font-bold text-zup-ink">{labels.totalLabel}</dt>
-          <dd className="font-bold text-zup-ink">{formatBDT(total)}</dd>
+          <dd className="font-bold text-zup-ink">
+            {total === null ? "—" : formatBDT(total)}
+          </dd>
         </div>
       </dl>
 

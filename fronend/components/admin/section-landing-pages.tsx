@@ -1163,6 +1163,9 @@ function LandingPageEditor({
               ["phonePlaceholder", "Phone placeholder"],
               ["addressPlaceholder", "Address placeholder"],
               ["successMessage", "Success message"],
+              ["zoneLabel", "Delivery area question"],
+              ["zoneInsideLabel", "Option — inside Dhaka"],
+              ["zoneOutsideLabel", "Option — outside Dhaka"],
             ] as const).map(([key, label]) => (
               <Field key={key} label={label}>
                 <Input

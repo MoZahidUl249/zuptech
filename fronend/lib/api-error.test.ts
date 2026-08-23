@@ -109,3 +109,68 @@ describe("ApiRequestError", () => {
     expect(err.isValidation).toBe(false);
   });
 });
+
+/*
+ * The messages a shop owner actually reads.
+ *
+ * These `detail` payloads are the real ones: each was produced by feeding a
+ * plausible value to the DTOs in backend/src/dtos/content.dto.ts and copying
+ * what TypeBox emitted. The admin printed "Invalid request" for every one of
+ * them, on a screen that PUTs the whole document — so one bad field blocked
+ * every other with no clue which.
+ */
+describe("fieldMessage — naming the field that failed", () => {
+  const err = (detail: Record<string, unknown>) =>
+    new ApiRequestError({
+      status: 422,
+      method: "PUT",
+      path: "/admin/api/contact",
+      body: { error: "Invalid request", detail: JSON.stringify(detail) },
+    });
+
+  test("a phone typed with + is named as digits-only", () => {
+    const e = err({
+      on: "body",
+      property: "/whatsapp",
+      summary: "Expected string to match '^[0-9]*$'",
+      found: "+8801700000000",
+    });
+    expect(e.fieldMessage()).toBe("Whatsapp — digits only — no +, spaces or dashes");
+    // …and the caller's own label wins over the humanised key.
+    expect(e.fieldMessage((p) => (p === "whatsapp" ? "WhatsApp number" : undefined))).toBe(
+      "WhatsApp number — digits only — no +, spaces or dashes",
+    );
+  });
+
+  test("an over-length value says the limit and what was typed", () => {
+    const e = err({
+      property: "/contactServiceLine",
+      summary: "Expected string length less or equal to 40",
+      found: "x".repeat(47),
+    });
+    expect(e.fieldMessage()).toBe(
+      "Contact service line — too long — at most 40 characters (you typed 47)",
+    );
+  });
+
+  test("a key missing from a whole-document PUT tells you to reload", () => {
+    const e = err({ property: "/hoursEmergency", summary: "Expected required property" });
+    expect(e.fieldMessage()).toContain("reload");
+  });
+
+  test("an unrecognised summary is passed through, not invented", () => {
+    const e = err({ property: "/city", summary: "Expected string to match some future rule" });
+    expect(e.fieldMessage()).toBe("City — Expected string to match some future rule");
+  });
+
+  test("null for a non-validation failure, so callers keep their own message", () => {
+    const e = new ApiRequestError({
+      status: 403,
+      method: "PUT",
+      path: "/admin/api/contact",
+      body: { error: "Forbidden" },
+    });
+    expect(e.fieldMessage()).toBeNull();
+  });
+});
+

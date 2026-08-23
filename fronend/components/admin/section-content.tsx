@@ -15,6 +15,7 @@ import {
 import { uploadSlideImage } from "@/lib/admin-api";
 import { ProductPicker } from "@/components/admin/products/product-picker";
 import { DEFAULT_COPY } from "@/lib/site-copy";
+import { ADMIN_FIELD_MAX, violatesDigitsOnly } from "@/lib/admin-fields";
 import { HERO_PAGE_LABELS, type HeroPage } from "@/lib/admin";
 import {
   bannerDimensionWarning,
@@ -570,24 +571,43 @@ export function ContactDetailsCard() {
         Shown in the site footer, the contact page and the floating WhatsApp button.
       </p>
       <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-        {CONTACT_FIELDS.map((f) => (
-          <Field key={f.key} label={f.label}>
-            <input
-              value={state.contact[f.key]}
-              disabled={readOnly}
-              placeholder={f.hint}
-              inputMode={
-                f.key === "phone" || f.key === "whatsapp" || f.key === "hotline"
-                  ? "tel"
-                  : undefined
-              }
-              onChange={(e) =>
-                update({ contact: { ...state.contact, [f.key]: e.target.value } })
-              }
-              className={inputCls}
-            />
-          </Field>
-        ))}
+        {CONTACT_FIELDS.map((f) => {
+          const value = state.contact[f.key] ?? "";
+          // The DTO requires every one of these 15 keys on every write, and
+          // the whole object is PUT each time — so a key missing from the
+          // loaded config would 422 as "found: undefined" and block the
+          // screen. CopyCard already defended this way; this card did not.
+          const badDigits = violatesDigitsOnly(f.key, value);
+          return (
+            <Field key={f.key} label={f.label}>
+              <input
+                value={value}
+                disabled={readOnly}
+                maxLength={ADMIN_FIELD_MAX[f.key]}
+                placeholder={f.hint}
+                aria-invalid={badDigits || undefined}
+                inputMode={
+                  f.key === "phone" || f.key === "whatsapp" || f.key === "hotline"
+                    ? "tel"
+                    : undefined
+                }
+                onChange={(e) =>
+                  update({ contact: { ...state.contact, [f.key]: e.target.value } })
+                }
+                className={cn(inputCls, badDigits && "border-destructive")}
+              />
+              {/* Said here rather than after a failed save: the server takes
+                  bare digits only, and a phone number is the one thing people
+                  reflexively type with a + and spaces. Not auto-stripped —
+                  silently rewriting someone's contact number is worse. */}
+              {badDigits ? (
+                <p className="mt-1 text-ui-micro font-semibold text-destructive">
+                  Digits only — remove the +, spaces and dashes.
+                </p>
+              ) : null}
+            </Field>
+          );
+        })}
       </div>
       {!readOnly ? (
         <p className="mt-5 text-ui-sm text-zup-soft">
@@ -683,6 +703,10 @@ export function CopyCard({
                 value={state.copy[f.key] ?? ""}
                 rows={3}
                 disabled={readOnly}
+                /* From the DTO, so a value the server refuses cannot be typed.
+                   These screens PUT the whole document, so one over-long field
+                   used to block saving every other field on the page. */
+                maxLength={ADMIN_FIELD_MAX[f.key]}
                 placeholder={DEFAULT_COPY[f.key]}
                 onChange={(e) => update({ copy: { ...state.copy, [f.key]: e.target.value } })}
                 className={cn(inputCls, "min-h-20 resize-y")}
@@ -691,6 +715,7 @@ export function CopyCard({
               <input
                 value={state.copy[f.key] ?? ""}
                 disabled={readOnly}
+                maxLength={ADMIN_FIELD_MAX[f.key]}
                 placeholder={DEFAULT_COPY[f.key]}
                 onChange={(e) => update({ copy: { ...state.copy, [f.key]: e.target.value } })}
                 className={inputCls}
