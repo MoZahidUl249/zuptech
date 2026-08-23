@@ -5,6 +5,7 @@ import { Check, Phone } from "lucide-react";
 import { getLandingPage, getProductsByIds, getSiteConfig } from "@/lib/api";
 import { formatBDTBangla as formatBDT, toBanglaDigits } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { isOptimizableImageSrc } from "@/lib/images";
 import { LandingPageGtm } from "@/components/marketing/landing-page-gtm";
 import { ProductCard } from "@/components/product-card";
 import { CampaignOrderForm } from "@/components/marketing/campaign-order-form";
@@ -245,6 +246,35 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
    * client mid-rollout — but a campaign silently losing its demo video for
    * the length of a deploy is not something to leave to timing.
    */
+  /*
+   * The pack shot, defined once because two things need it: the hero when no
+   * video is set, and `ProductVideo`'s fallback when a video IS set but will
+   * not play.
+   *
+   * That second case used to have no answer. `parseProductVideo` decides from
+   * the URL's shape, before anything has tried to load it, so a hero video
+   * whose file had gone left a dead black rectangle at the top of the page AND
+   * suppressed the photo that should have stood in for it. Passing the still
+   * down means the worst case is the page the campaign would have had anyway.
+   */
+  const heroStill = product.photos?.[0] ? (
+    <Image
+      src={product.photos[0]}
+      alt={product.name}
+      width={720}
+      height={540}
+      className="h-auto w-full object-cover"
+      unoptimized={!isOptimizableImageSrc(product.photos[0])}
+      preload
+    />
+  ) : (
+    <div className="flex aspect-[4/3] items-center justify-center bg-[repeating-linear-gradient(135deg,#f4f5f7_0_12px,#eceef1_12px_24px)]">
+      <span className="rounded-full bg-white/80 px-3 py-1 text-[12px] text-zup-soft">
+        {pub.imageHint || product.name}
+      </span>
+    </div>
+  );
+
   const galleryItems: CampaignMediaItem[] = pub.galleryItems?.length
     ? pub.galleryItems
     : pub.videoUrl
@@ -375,24 +405,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
             page could explain.
           */}
           <div className="relative mt-6 overflow-hidden rounded-[2px] border border-white/15">
-            {heroVideo ? (
-              <ProductVideo url={pub.heroVideoUrl} />
-            ) : product.photos?.[0] ? (
-              <Image
-                src={product.photos[0]!}
-                alt={product.name}
-                width={720}
-                height={540}
-                className="h-auto w-full object-cover"
-                preload
-              />
-            ) : (
-              <div className="flex aspect-[4/3] items-center justify-center bg-[repeating-linear-gradient(135deg,#f4f5f7_0_12px,#eceef1_12px_24px)]">
-                <span className="rounded-full bg-white/80 px-3 py-1 text-[12px] text-zup-soft">
-                  {pub.imageHint || product.name}
-                </span>
-              </div>
-            )}
+            {heroVideo ? <ProductVideo url={pub.heroVideoUrl} fallback={heroStill} /> : heroStill}
             {pub.discountBadge ? (
               <span
                 className="absolute right-3 top-3 z-10 rounded-[2px] px-3 py-1 text-[12.5px] font-extrabold"
@@ -557,6 +570,7 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
                 alt={pub.qcImageHint || pub.qcTitle || product.name}
                 width={720}
                 height={405}
+                unoptimized={!isOptimizableImageSrc(qcPhotos[0])}
                 className="h-auto w-full rounded-[2px] border border-zup-line object-cover"
               />
             ) : (

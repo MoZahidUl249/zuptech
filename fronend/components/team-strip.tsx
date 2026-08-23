@@ -1,5 +1,6 @@
 import Image from "next/image";
 import type { TeamMember } from "@/lib/api";
+import { isOptimizableImageSrc } from "@/lib/images";
 
 /**
  * The people on the contact page.
@@ -40,6 +41,7 @@ export function TeamStrip({ members }: { members: TeamMember[] }) {
                     // to pick a source width, so leaving it behind would serve
                     // an image too small for the box and it would look soft.
                     sizes="216px"
+                    unoptimized={!isOptimizableImageSrc(m.photo)}
                     className="object-cover"
                   />
                 ) : (

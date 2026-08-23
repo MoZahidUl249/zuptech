@@ -3,6 +3,40 @@ import { parseProductVideo } from "./video";
 
 const ID = "dQw4w9WgXcQ";
 
+/*
+ * A picture is not a video.
+ *
+ * The campaign gallery's paste box tagged every link as a clip, so a pasted
+ * photo reached <video> and rendered as a black rectangle. Returning null lets
+ * every caller fall back to what it would have shown anyway.
+ */
+describe("a URL that is plainly a picture is not a video", () => {
+  test("raster extensions give null", () => {
+    for (const ext of ["jpg", "jpeg", "png", "webp", "gif", "avif"]) {
+      expect(parseProductVideo(`https://res.cloudinary.com/x/image/upload/v1/a.${ext}`)).toBeNull();
+    }
+  });
+
+  test("the live shape that caused it — a Cloudinary product photo", () => {
+    expect(
+      parseProductVideo(
+        "https://res.cloudinary.com/cum8k5j2/image/upload/c_limit,f_auto,q_auto,w_1600/v1786878058/zuptech-prod/product/bir38piecestoolsetwi/tvsmdall.png",
+      ),
+    ).toBeNull();
+  });
+
+  test("video files still parse as playable files", () => {
+    for (const ext of ["mp4", "webm", "mov"]) {
+      const v = parseProductVideo(`https://res.cloudinary.com/x/video/upload/v1/a.${ext}`);
+      expect(v?.kind).toBe("file");
+    }
+  });
+
+  test("a YouTube link is untouched by the picture check", () => {
+    expect(parseProductVideo("https://www.youtube.com/watch?v=aqz-KE-bpKQ")?.kind).toBe("youtube");
+  });
+});
+
 describe("parseProductVideo — YouTube shapes", () => {
   test("reads the id from every link shape people actually paste", () => {
     const urls = [

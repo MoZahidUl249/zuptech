@@ -696,6 +696,28 @@ describe("POST /admin/api/landing-pages/:id/gallery/link", () => {
     ]);
   });
 
+  test("a pasted PHOTO is stored as an image, not as a clip", async () => {
+    signInAs({ landingpages: "manage" });
+    landingSource = SOURCE;
+
+    const { status } = await call("POST", "/admin/api/landing-pages/lp1/gallery/link", {
+      url: "https://res.cloudinary.com/cum8k5j2/image/upload/v1/a.png",
+    });
+
+    expect(status).toBe(200);
+    // The whole point: hard-coding "video" here put pictures inside a <video>.
+    const stored = capturedLandingUpdate?.galleryItems as {
+      url: string;
+      kind: string;
+      alt: string;
+    }[];
+    expect(stored[stored.length - 1]).toEqual({
+      url: "https://res.cloudinary.com/cum8k5j2/image/upload/v1/a.png",
+      kind: "image",
+      alt: "",
+    });
+  });
+
   test("a link that is not a URL is refused before anything is stored", async () => {
     signInAs({ landingpages: "manage" });
     landingSource = SOURCE;
