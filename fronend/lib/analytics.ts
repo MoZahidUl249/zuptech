@@ -106,14 +106,32 @@ export const trackBeginCheckout = (items: TrackedItem[], value: number) =>
     meta: metaBlock(items, value),
   });
 
+/**
+ * The order completed.
+ *
+ * `customer` carries Meta's Advanced Matching fields — already hashed, see
+ * lib/customer-match.ts — under the variable names both GTM containers were
+ * built to read and which this site had never once pushed. They go in their
+ * OWN push, before the event, because a GTM variable is resolved at the moment
+ * its tag fires: values arriving in the same push as `purchase` are a race, and
+ * values arriving after it are simply too late.
+ */
 export const trackPurchase = (
   transaction_id: string,
   value: number,
   items: TrackedItem[],
   extra: Record<string, unknown> = {},
-) =>
+  customer?: Readonly<Record<string, string | undefined>>,
+) => {
+  // Undefined values are dropped: an empty field is one Meta would try to
+  // match on and fail, which reads as a worse signal than no field at all.
+  const present = Object.fromEntries(
+    Object.entries(customer ?? {}).filter(([, v]) => typeof v === "string" && v !== ""),
+  );
+  if (Object.keys(present).length > 0) track("customer_data", present);
   track("purchase", {
     ecommerce: { transaction_id, currency: CURRENCY, value, items, ...extra },
     // Meta dedupes on this when the Conversions API is added server-side later.
     meta: { ...metaBlock(items, value), order_id: transaction_id },
   });
+};

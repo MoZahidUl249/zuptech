@@ -19,6 +19,7 @@ import { setAuthPhone } from "@/lib/orders";
 import type { Product } from "@/lib/products";
 import { cartToItems, useQuote } from "@/lib/quote";
 import { trackBeginCheckout, trackPurchase, type TrackedItem } from "@/lib/analytics";
+import { buildCustomerMatch } from "@/lib/customer-match";
 import { formatBDT } from "@/lib/site";
 import { useDeliveryZone } from "@/lib/zone";
 import { CustomerFields, normalizePhone, validateCustomer } from "./customer-fields";
@@ -181,11 +182,26 @@ export function CheckoutFlow({ products = [] }: { products?: Product[] }) {
       clearDraft();
       // The one event the whole funnel is measured against. Pushed before the
       // cart is cleared, because the items come from the quote that priced it.
-      trackPurchase(order.orderId, order.total, trackedItems(), {
-        payment_type: pay,
-        // The quote is what priced this order, and it is still in hand here.
-        shipping: quote?.deliveryFee ?? 0,
+      /* Who bought it, hashed, for Meta's Advanced Matching. A signed-in
+         buyer contributes their stored email too; a guest has none, and the
+         helper omits what it does not have rather than sending blanks. */
+      const customerMatch = await buildCustomerMatch({
+        name,
+        phone: usedPhone,
+        email: signedIn ? customer!.email : null,
+        insideDhaka,
       });
+      trackPurchase(
+        order.orderId,
+        order.total,
+        trackedItems(),
+        {
+          payment_type: pay,
+          // The quote is what priced this order, and it is still in hand here.
+          shipping: quote?.deliveryFee ?? 0,
+        },
+        customerMatch,
+      );
       setDone({
         orderId: order.orderId,
         total: order.total,

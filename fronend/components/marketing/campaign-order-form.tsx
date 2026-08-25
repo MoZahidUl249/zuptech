@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
+import { buildCustomerMatch } from "@/lib/customer-match";
 import { useQuote } from "@/lib/quote";
 import { formatBDTBangla as formatBDT, toBanglaDigits } from "@/lib/site";
 import type { CampaignBundle, CampaignFormLabels } from "@/lib/api";
@@ -162,10 +163,24 @@ export function CampaignOrderForm({
       }
       /* The campaign's own funnel. Same event names as the storefront, so a
          GA4 report covers both without a second set of tags — the campaign is
-         distinguishable by page_location, not by a different vocabulary. */
-      trackPurchase(String(body.orderId), Number(body.total ?? chosen.total), [
-        { item_id: productId, item_name: productName, price: chosen.unitPrice, quantity: qty },
-      ]);
+         distinguishable by page_location, not by a different vocabulary.
+
+         Now also the same PAYLOAD. This used to send neither payment_type nor
+         shipping, so the campaign — the funnel that actually carries ad spend
+         — reported thinner than the storefront for no reason at all. */
+      const customerMatch = await buildCustomerMatch({
+        name: form.name,
+        phone: form.phone,
+        // The campaign form collects no email; the helper omits what is absent.
+        insideDhaka,
+      });
+      trackPurchase(
+        String(body.orderId),
+        Number(body.total ?? chosen.total),
+        [{ item_id: productId, item_name: productName, price: chosen.unitPrice, quantity: qty }],
+        { payment_type: payMethod, shipping: delivery ?? 0 },
+        customerMatch,
+      );
       setDone(body.orderId as string);
     } catch {
       setError("Network error");
