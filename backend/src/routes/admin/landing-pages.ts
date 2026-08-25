@@ -11,7 +11,7 @@ import {
   uploadLandingQcImageDto,
 } from "../../dtos/landing-pages.dto";
 import { prisma } from "../../lib/db";
-import { LIST_CAP, duplicateMinQtys } from "../../lib/rules";
+import { LIST_CAP, classifyMediaUrl, duplicateMinQtys } from "../../lib/rules";
 import { badRequest, conflict, notFound } from "../../lib/http";
 import { assertCan } from "../../lib/rbac";
 import { campaignGallery, landingPageInclude, toLandingPage } from "../../lib/serialize";
@@ -293,10 +293,12 @@ export const adminLandingPages = new Elysia({
   /**
    * Append one gallery slide from a pasted link — a YouTube URL.
    *
-   * Always `video`: a photo would have been uploaded, and nothing here fetches
-   * the URL to find out what is behind it. `parseProductVideo` on the page
-   * decides how to render it and shows nothing when the link is unusable, so
-   * a bad paste costs one empty slide rather than a broken embed.
+   * The kind comes from the URL, via `classifyMediaUrl`. It used to be a flat
+   * `video`, on the reasoning that a photo would have been uploaded — but
+   * pasting a photo link is an obvious thing to do, and it put the picture in
+   * a <video>, which renders as a black rectangle with no way to tell what
+   * went wrong. The renderer double-checks the same way, so rows already
+   * stored under the old rule draw correctly too.
    *
    * This writes immediately, like the upload above it. It used to be draft
    * state saved with the page, which meant any upload or delete afterwards
@@ -315,7 +317,7 @@ export const adminLandingPages = new Elysia({
         throw badRequest(`A campaign gallery holds at most ${MAX_CAMPAIGN_GALLERY} items`);
       }
 
-      const next = [...items, { url: body.url, kind: "video" as const, alt: "" }];
+      const next = [...items, { url: body.url, kind: classifyMediaUrl(body.url), alt: "" }];
       const page = await prisma.landingPage.update({
         where: { id: existing.id },
         data: { galleryItems: next as unknown as Prisma.InputJsonValue },

@@ -4,6 +4,7 @@ import {
   bestCampaignTier,
   bestQuantityOffer,
   campaignUnitPrice,
+  classifyMediaUrl,
   LEAD_STATUSES,
   MAX_SVG_LOGO_BYTES,
   deliveryDiscountAmount,
@@ -388,5 +389,48 @@ describe("duplicateMinQtys", () => {
     expect(duplicateMinQtys([{ minQty: 2 }, { minQty: 2 }])).toEqual([2]);
     expect(duplicateMinQtys([{ minQty: 2 }, { minQty: 2 }, { minQty: 2 }])).toEqual([2]);
     expect(duplicateMinQtys([])).toEqual([]);
+  });
+});
+
+/*
+ * What a PASTED link gets stored as.
+ *
+ * Uploads are classified from their magic bytes; this is the campaign
+ * gallery's link box, where the path is all there is. It used to answer
+ * "video" for everything, which put pasted photos inside a <video>.
+ */
+describe("classifyMediaUrl", () => {
+  test("a picture extension is an image", () => {
+    for (const ext of ["jpg", "jpeg", "png", "webp", "gif", "avif", "svg", "PNG"]) {
+      expect(classifyMediaUrl(`https://res.cloudinary.com/x/image/upload/v1/a.${ext}`)).toBe("image");
+    }
+  });
+
+  test("the live shape that caused it", () => {
+    expect(
+      classifyMediaUrl(
+        "https://res.cloudinary.com/cum8k5j2/image/upload/c_limit,f_auto,q_auto,w_1600/v1786878058/zuptech-prod/product/bir38piecestoolsetwi/tvsmdall.png",
+      ),
+    ).toBe("image");
+  });
+
+  test("a video extension is a video", () => {
+    for (const ext of ["mp4", "webm", "mov"]) {
+      expect(classifyMediaUrl(`https://res.cloudinary.com/x/video/upload/v1/a.${ext}`)).toBe("video");
+    }
+  });
+
+  test("YouTube links have no extension and stay video — the box exists for them", () => {
+    for (const u of [
+      "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+      "https://youtu.be/aqz-KE-bpKQ",
+      "https://www.youtube.com/shorts/aqz-KE-bpKQ",
+    ]) {
+      expect(classifyMediaUrl(u)).toBe("video");
+    }
+  });
+
+  test("an unparseable value falls back to video rather than throwing", () => {
+    expect(classifyMediaUrl("not a url")).toBe("video");
   });
 });

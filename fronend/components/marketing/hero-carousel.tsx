@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isOptimizableImageSrc } from "@/lib/images";
 
 /** How long a still slide holds before advancing. */
 const ADVANCE_MS = 6000;
@@ -64,11 +65,35 @@ export function HeroCarousel({
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [drag, setDrag] = useState(0);
+  /**
+   * Slides whose art 404ed, by id.
+   *
+   * A hero image can stop resolving without anything on this page knowing:
+   * the row still holds a URL, the request still returns 200, and the banner
+   * renders as white space. That is not hypothetical — it was live on
+   * zupplus.com for days, blank above the fold, while the server logged
+   * `upstream image response failed … 404` on every render and nobody was
+   * reading the logs.
+   */
+  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
   const startX = useRef<number | null>(null);
   const reduceMotion = usePrefersReducedMotion();
   const id = useId();
 
-  const count = slides.length;
+  /*
+   * A slide with no art is worth less than no slide at all, so a failed one
+   * leaves the rotation — arrows, dots, timer and all, because everything
+   * below counts off THIS list rather than the prop.
+   *
+   * Unless they all failed. Then keep them: their copy and buttons are still
+   * real, and an empty hero would turn one broken picture into a missing
+   * section. Falling back to the prop also means a transient network blip
+   * cannot empty the banner.
+   */
+  const usable = slides.filter((s) => !failed.has(s.id));
+  const shown = usable.length > 0 ? usable : slides;
+
+  const count = shown.length;
   const multi = count > 1;
   // Controls only make sense on an interactive carousel with somewhere to go.
   const interactive = multi && !decorative;
@@ -78,10 +103,20 @@ export function HeroCarousel({
     [count],
   );
 
+  /** Idempotent: the same slide can report failure on every re-render. */
+  const markFailed = useCallback((slideId: string) => {
+    setFailed((prev) => {
+      if (prev.has(slideId)) return prev;
+      const next = new Set(prev);
+      next.add(slideId);
+      return next;
+    });
+  }, []);
+
   // Timed off the slide on screen, not a fixed cadence: a 6s hold cuts a video
   // off part-way, and holding every still for 12s would drag.
   const dwell =
-    slides[count > 0 ? index % count : 0]?.mediaType === "video"
+    shown[count > 0 ? index % count : 0]?.mediaType === "video"
       ? VIDEO_ADVANCE_MS
       : ADVANCE_MS;
 
@@ -163,7 +198,7 @@ export function HeroCarousel({
         )}
         style={{ transform: `translate3d(calc(-${active * 100}% + ${drag}px), 0, 0)` }}
       >
-        {slides.map((s, i) => (
+        {shown.map((s, i) => (
           <div
             key={s.id}
             role={decorative ? undefined : "group"}
@@ -178,6 +213,7 @@ export function HeroCarousel({
                 active={i === active}
                 reduceMotion={reduceMotion}
                 fit={s.fit ?? "cover"}
+                onFailed={() => markFailed(s.id)}
               />
             ) : s.image ? (
               <Image
@@ -186,6 +222,14 @@ export function HeroCarousel({
                 fill
                 priority={priorityFirst && i === 0}
                 sizes="100vw"
+                /* A URL outside next/image's allow-list does not render a
+                   broken picture — the loader THROWS, and in a server tree
+                   that is a 500 for the whole page. Serving it unoptimised
+                   is worse than optimised and far better than a dead site,
+                   which is what a Cloudinary account migration or a wrong
+                   NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME would otherwise cause. */
+                unoptimized={!isOptimizableImageSrc(s.image)}
+                onError={() => markFailed(s.id)}
                 className={cn(
                   (s.fit ?? "cover") === "contain" ? "object-contain" : "object-cover",
                 )}
@@ -228,7 +272,7 @@ export function HeroCarousel({
           </p>
 
           <div className="absolute inset-x-0 bottom-3 flex justify-center gap-1.5">
-            {slides.map((s, i) => (
+            {shown.map((s, i) => (
               <button
                 key={s.id}
                 type="button"
@@ -266,13 +310,28 @@ function SlideVideo({
   active,
   reduceMotion,
   fit,
+  onFailed,
 }: {
   src: string;
   active: boolean;
   reduceMotion: boolean;
   fit: "cover" | "contain";
+  /** Fires when the clip cannot be decoded — same blank frame as a dead image. */
+  onFailed: () => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
+
+  /*
+   * Same stall guard as ProductVideo: a clip whose file has gone can sit at
+   * HAVE_NOTHING without ever firing `error`, which would leave this slide as
+   * a blank frame in the rotation — the thing this whole change is about.
+   */
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (ref.current?.readyState === 0) onFailed();
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [onFailed]);
 
   useEffect(() => {
     const el = ref.current;
@@ -302,6 +361,7 @@ function SlideVideo({
       // Only the metadata up front — play() fetches the rest when the slide is
       // actually reached, so three off-screen clips cost nothing on load.
       preload="metadata"
+      onError={onFailed}
       aria-hidden
       className={cn("h-full w-full", fit === "contain" ? "object-contain" : "object-cover")}
     />

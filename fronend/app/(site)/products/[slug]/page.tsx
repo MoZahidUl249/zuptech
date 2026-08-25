@@ -11,6 +11,7 @@ import { ProductCard, ProductImagePlaceholder } from "@/components/product-card"
 import { ProductVideo } from "@/components/product-video";
 import { ProductPhotoZoom } from "@/components/product-photo-zoom";
 import { parseProductVideo } from "@/lib/video";
+import { cloudinaryWidth } from "@/lib/images";
 
 export async function generateMetadata({
   params,
@@ -210,8 +211,12 @@ export default async function ProductPage({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   key={url}
-                  src={url}
+                  /* Half-width thumbnails under the main photo — nowhere near
+                     the 1600px the stored URL asks for. */
+                  src={cloudinaryWidth(url, 400)}
                   alt={`${product.name} — photo ${i + 2}`}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full rounded-[2px] border border-zup-body/6 object-cover [aspect-ratio:1]"
                 />
               ))

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatBDT } from "@/lib/site";
 import type { Product } from "@/lib/products";
 import { cn } from "@/lib/utils";
+import { cloudinaryWidth } from "@/lib/images";
 
 export function ProductImagePlaceholder({
   label,
@@ -74,8 +75,17 @@ export function ProductCard({
         {product.photos?.[0] ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={product.photos[0]}
+            /* The card is ~195px wide; the stored URL asks Cloudinary for
+               1600. Measured against the live CDN that is 64.5 KB where 14.3
+               would do — about 1.3 MB on /products, paid by a mobile-first
+               audience on mobile data. `cloudinaryWidth` rewrites the width in
+               the delivery path for THIS request only; the stored value is
+               untouched, which matters because the backend recovers a
+               public_id by matching the transform it issued. */
+            src={cloudinaryWidth(product.photos[0], 400)}
             alt={product.name}
+            loading="lazy"
+            decoding="async"
             className="aspect-[7/5] w-full bg-white object-contain"
           />
         ) : (

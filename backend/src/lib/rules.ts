@@ -445,6 +445,39 @@ export function campaignUnitPrice(
   return tier ? Math.max(0, Math.min(base, tier.unitPrice)) : base;
 }
 
+/** Raster formats a browser paints in an <img> and cannot play in a <video>. */
+const IMAGE_URL_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "avif", "bmp", "svg"];
+
+/**
+ * Whether a URL somebody PASTED should be stored as a picture or a clip.
+ *
+ * Uploads do not come through here — `classifyAndValidate` sniffs their magic
+ * bytes, which is stronger than anything a path can tell you. This is for the
+ * campaign gallery's "paste a link" box, where there are no bytes to sniff
+ * until a visitor's browser fetches it.
+ *
+ * It used to hard-code "video", on the reasoning that a photo would have been
+ * uploaded. Pasting a photo link is an obvious thing to do, and doing it put
+ * the picture inside a <video> — a black rectangle with MediaError.code 4
+ * behind it, no fallback, and nothing to tell the person who pasted it.
+ *
+ * Extension-only, and it only ever answers "image" when it is sure: a URL with
+ * no extension is a clip, because that is the YouTube case and YouTube links
+ * are the reason the box exists. `looksLikeImageUrl` in the frontend's
+ * lib/images.ts is the render-side twin, so an already-stored row with the
+ * wrong kind still draws correctly.
+ */
+export function classifyMediaUrl(url: string): "image" | "video" {
+  let pathname: string;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    return "video";
+  }
+  const ext = pathname.split(".").pop()?.toLowerCase();
+  return ext !== undefined && IMAGE_URL_EXTENSIONS.includes(ext) ? "image" : "video";
+}
+
 /**
  * The `minQty` values appearing more than once in a ladder.
  *

@@ -50,6 +50,14 @@ jobs:
         working-directory: backend
         run: bun test
 
+      # The frontend has had unit tests since before this job existed and none
+      # of them had ever run here — video URL parsing, the money the product
+      # card prints, the admin's error text. They only guard anything if CI
+      # executes them.
+      - name: Test (frontend)
+        working-directory: fronend
+        run: bun test
+
   # Proves the images build before main is allowed to deploy. No push here —
   # this is a compile check, not a release.
   build-check:

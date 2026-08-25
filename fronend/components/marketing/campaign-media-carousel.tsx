@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ProductVideo } from "@/components/product-video";
 import { usePrefersReducedMotion } from "@/components/marketing/hero-carousel";
 import { cn } from "@/lib/utils";
+import { isOptimizableImageSrc, looksLikeImageUrl } from "@/lib/images";
 
 /** How long a photo holds before advancing. Matches the site hero's cadence. */
 const ADVANCE_MS = 6000;
@@ -17,7 +18,9 @@ const SWIPE_THRESHOLD = 50;
 export interface CampaignMediaItem {
   /** A Cloudinary URL, or a pasted YouTube / direct-video link. */
   url: string;
-  /** Decided by the server at upload time from the sniffed bytes. */
+  /**
+   * What the server stored. A HINT here, not the last word — see `renderAs`.
+   */
   kind: "image" | "video";
   /** Alt text for a photo. Blank falls back to the caller's `fallbackAlt`. */
   alt?: string;
@@ -70,6 +73,22 @@ export function CampaignMediaCarousel({
   const count = items.length;
   const multi = count > 1;
 
+  /*
+   * What to actually render this slide as.
+   *
+   * The stored `kind` comes from sniffed bytes for an upload, which is
+   * trustworthy — but a PASTED link was recorded as "video" whatever it was,
+   * so rows exist that call a photo a clip. Letting an obvious picture win
+   * over the stored value means those heal on the next page view instead of
+   * needing a migration, and it costs nothing when the two agree.
+   *
+   * Only ever downgrades video → image. A URL with no extension stays
+   * whatever the server said, because that is the YouTube case and the
+   * server knows more than the path does.
+   */
+  const renderAs = (item: CampaignMediaItem): "image" | "video" =>
+    looksLikeImageUrl(item.url) ? "image" : item.kind;
+
   const go = useCallback(
     (next: number) => setIndex(((next % count) + count) % count),
     [count],
@@ -81,7 +100,8 @@ export function CampaignMediaCarousel({
 
   // Timed off the slide on screen: 6s cuts a video thumbnail short, and
   // holding every photo for 12s drags.
-  const dwell = items[active]?.kind === "video" ? VIDEO_ADVANCE_MS : ADVANCE_MS;
+  const activeItem = items[active];
+  const dwell = activeItem && renderAs(activeItem) === "video" ? VIDEO_ADVANCE_MS : ADVANCE_MS;
 
   useEffect(() => {
     // `playing` stops the timer outright rather than lengthening it. Advancing
@@ -167,7 +187,7 @@ export function CampaignMediaCarousel({
             {/* Off-screen slides must not be reachable — without this, tabbing
                 past the gallery walks through play buttons nobody can see. */}
             <div className="h-full w-full" {...(i === active ? {} : { inert: true })}>
-              {item.kind === "video" ? (
+              {renderAs(item) === "video" ? (
                 <div className="grid h-full w-full place-items-center bg-black">
                   <ProductVideo
                     url={item.url}
@@ -182,6 +202,10 @@ export function CampaignMediaCarousel({
                   fill
                   sizes="(max-width: 760px) 100vw, 720px"
                   preload={preloadFirst && i === 0}
+                  /* A pasted link can point anywhere, and next/image throws on
+                     a host it was not configured for — which is a 500, not a
+                     broken picture. */
+                  unoptimized={!isOptimizableImageSrc(item.url)}
                   className="object-cover"
                 />
               )}

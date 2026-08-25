@@ -7,6 +7,8 @@
  * this is where that decision is made, once.
  */
 
+import { looksLikeImageUrl } from "./images";
+
 export type ProductVideo =
   | { kind: "youtube"; id: string; embedUrl: string; thumbnailUrl: string }
   | { kind: "file"; url: string };
@@ -52,10 +54,18 @@ function youtubeId(parsed: URL): string | null {
  * Anything that isn't a recognisable YouTube link falls through to `file` —
  * that's the Cloudinary case today, and it keeps working unchanged if the
  * files ever move to another host.
+ *
+ * A URL that is plainly a PICTURE returns null rather than falling through to
+ * `file`. It used to fall through, and the campaign gallery's paste box tagged
+ * every link it was handed as a clip — so pasting a photo put it in a <video>,
+ * where it rendered as a black rectangle with MediaError.code 4 behind it.
+ * Null is the honest answer: callers already treat it as "there is no video
+ * here" and show their own fallback, which is exactly the right outcome.
  */
 export function parseProductVideo(url: string | null | undefined): ProductVideo | null {
   const raw = url?.trim();
   if (!raw) return null;
+  if (looksLikeImageUrl(raw)) return null;
 
   let parsed: URL;
   try {

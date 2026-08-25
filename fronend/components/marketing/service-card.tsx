@@ -2,6 +2,7 @@ import Image from "next/image";
 import { Check } from "lucide-react";
 import type { ServiceBulletStyle, ServiceCard } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { isOptimizableImageSrc } from "@/lib/images";
 
 /**
  * The marker in front of a feature line.
@@ -81,7 +82,10 @@ export function ServiceCardView({
             alt={service.name}
             fill
             sizes="(min-width: 768px) 50vw, 100vw"
-            unoptimized={unoptimizedImage}
+            /* The caller's opt-out, OR a src next/image cannot be handed at
+               all — an unconfigured host throws in the loader, which is a 500
+               for the page rather than one broken picture. */
+            unoptimized={unoptimizedImage || !isOptimizableImageSrc(service.image)}
             className="object-cover"
           />
         ) : (
