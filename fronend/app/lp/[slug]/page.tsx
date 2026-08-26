@@ -615,7 +615,13 @@ export default async function LandingPage({ params }: { params: Promise<{ slug: 
               <div className="mt-5">
                 <CampaignCountdown
                   endsAt={pub.countdownEndsAt}
-                  labels={["ঘণ্টা", "মিনিট", "সেকেন্ড"]}
+                  /* The server's clock, stamped per request so the first paint
+                     shows the real remaining time instead of ০০ ০০ ০০. Safe
+                     because this route renders on demand — the landing page
+                     fetch is uncached, so there is no build-time value to go
+                     stale. */
+                  nowIso={new Date().toISOString()}
+                  labels={["দিন", "ঘণ্টা", "মিনিট", "সেকেন্ড"]}
                 />
               </div>
             ) : null}
