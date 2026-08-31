@@ -1,0 +1,105 @@
+name: Maintenance
+
+# Reclaim Docker disk on the VPS, on demand.
+#
+# Why this exists as its own workflow: `scripts/deploy.sh` only prunes when free
+# space has ALREADY fallen below REQUIRED_FREE_MB (6000). That is a last line of
+# defence, not housekeeping — on 2026-08-20 the disk reached zero before anything
+# collected the old images, Postgres could not checkpoint, and the site was down
+# for three and a half minutes. This lets the reclaim be run deliberately, while
+# there is still headroom, without rolling code.
+#
+# It touches images and build cache only. No pull, no migration, no restart.
+
+on:
+  workflow_dispatch:
+    inputs:
+      prune_build_cache:
+        description: "Also prune the buildx build cache"
+        type: boolean
+        default: true
+
+# The same group as deploy.yml, and queueing rather than cancelling: a prune must
+# never run while a rollout is mid-flight, and must never abort one that is.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Reclaim Docker disk on the VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: PRUNE_BUILD_CACHE
+          # No `script_stop` — appleboy/ssh-action@v1 dropped that input and an
+          # unrecognised one fails the step before it connects. See the note in
+          # deploy.yml; `set -euo pipefail` covers it.
+          script: |
+            set -euo pipefail
+
+            DOCKER_ROOT="$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)"
+
+            echo "==================== BEFORE ===================="
+            df -h "$DOCKER_ROOT"
+            docker system df
+            echo "--- images ---"
+            docker images --format '{{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' | sort
+            echo "--- containers ---"
+            docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}'
+
+            # The safety gate. `docker image prune -a` spares any image referenced
+            # by a container, running or stopped — that protection is the ONLY
+            # thing separating "delete everything else" from "delete the live
+            # stack". With no containers present, nothing is referenced and the
+            # prune would take the running site's images with it.
+            if [ "$(docker ps -q | wc -l)" -eq 0 ]; then
+              echo "REFUSED: no running containers — nothing would be protected from the prune."
+              echo "Start the stack first (cd \$HOME/zup/zuptech && docker compose up -d), then re-run."
+              exit 1
+            fi
+
+            echo "==================== PRUNE ====================="
+            # -a, not the dangling-only prune: every image CI publishes carries a
+            # SHA tag, so none of them are ever dangling. -a is what collects them.
+            docker image prune -af
+
+            if [ "${PRUNE_BUILD_CACHE:-true}" = "true" ]; then
+              # Invisible to `docker images` and routinely larger than the images.
+              docker builder prune -af
+            fi
+
+            echo "==================== AFTER ====================="
+            df -h "$DOCKER_ROOT"
+            docker system df
+            echo "--- images kept ---"
+            docker images --format '{{.Repository}}:{{.Tag}}\t{{.Size}}' | sort
+        env:
+          PRUNE_BUILD_CACHE: ${{ inputs.prune_build_cache }}
+
+      # A prune that leaves the site broken is a failed prune, whatever the disk
+      # numbers say. /health only proves the DB adapter connected; /api/site-config
+      # is the query every storefront page actually depends on.
+      - name: Verify the site still serves
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd "${APP_DIR:-$HOME/zup/zuptech}"
+            docker compose --env-file .env.production ps
+            code=$(docker compose --env-file .env.production exec -T backend \
+              bun -e "fetch('http://127.0.0.1:3000/api/site-config').then(r=>console.log(r.status)).catch(()=>console.log('000'))")
+            echo "GET /api/site-config -> $code"
+            if [ "$code" != "200" ]; then
+              echo "storefront data path is broken after the prune — dumping logs"
+              docker compose --env-file .env.production logs --tail=80 backend
+              exit 1
+            fi
