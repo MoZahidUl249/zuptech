@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import {
   useAdmin,
   taka,
-  ORDER_STATUSES,
   INVOICE_STATUSES,
   WARRANTY_STATUSES,
   type InvoiceStatus,
@@ -18,7 +17,7 @@ import {
   type WarrantyStatus,
 } from "@/lib/admin";
 import { adjustOrderCharges, getOrderDetail, setOrderPreparedBy, setOrderZone } from "@/lib/admin-api";
-import { ShipmentCard } from "./shipment-card";
+import { OrderSteps } from "./order-steps";
 import { useFilterParams } from "./primitives/filter-params";
 import { FilterBar, FilterTabs } from "./primitives/filter-bar";
 import { PageHeader } from "./primitives";
@@ -247,28 +246,14 @@ export function OrdersSection() {
                   <span className="text-zup-faint">—</span>
                 )}
               </Td>
+              {/* Read-only on purpose. This was a dropdown of every status,
+                  which meant a brand-new order could be set to Delivered from
+                  a list row — taking the stock and starting warranty cover for
+                  goods nobody had arranged to send, with no courier and no
+                  confirmation. Moving an order now happens in the guided view,
+                  where the checks and the customer's details are. */}
               <Td>
-                {readOnly ? (
-                  <Pill tone={orderStatusTone(o.status)}>{o.status}</Pill>
-                ) : (
-                  <select
-                    value={o.status}
-                    aria-label={`Status of ${o.id}`}
-                    onChange={(e) => {
-                      update({
-                        orders: state.orders.map((x) =>
-                          x.id === o.id ? { ...x, status: e.target.value as OrderStatus } : x,
-                        ),
-                      });
-                      toast(`${o.id} → ${e.target.value}`);
-                    }}
-                    className={selectCls}
-                  >
-                    {ORDER_STATUSES.map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </select>
-                )}
+                <Pill tone={orderStatusTone(o.status)}>{o.status}</Pill>
               </Td>
               <Td>
                 <div className="flex items-center justify-end gap-1.5">
@@ -484,11 +469,12 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
             {canAdjust ? <ChargeOverride order={order} busy={busy} run={run} /> : null}
           </Card>
 
-          <ShipmentCard
-            orderId={order.id}
+          <OrderSteps
+            order={order}
             permission={canShip}
             busy={busy}
             run={run}
+            onChanged={() => void load()}
           />
 
           <InvoiceCard

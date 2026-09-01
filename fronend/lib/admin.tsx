@@ -795,12 +795,13 @@ async function syncKeys(
 
   await run("orders", async () => {
     const { changed, removed } = diffById(prev.orders, next.orders);
-    // Status and ownership are separate endpoints, so push only what moved —
-    // sending both on every edit would put a spurious entry in the order's
-    // audit trail each time someone changed the other field.
+    /* Ownership only. Status used to be editable here too, from a dropdown
+       in the list; it now moves exclusively through the guided flow on the
+       order detail, which calls its endpoints directly rather than going
+       through the draft. A status branch left here would be a second, unguarded
+       way to move an order — the exact thing that flow exists to remove. */
     for (const o of changed) {
       const before = prev.orders.find((x) => x.id === o.id);
-      if (o.status !== before?.status) await api.setOrderStatus(o.id, o.status);
       if (o.preparedById !== before?.preparedById) {
         await api.setOrderPreparedBy(o.id, o.preparedById);
       }

@@ -45,6 +45,15 @@ export const updateCourierDto = t.Partial(
  */
 export const createShipmentDto = t.Object({
   courierId: t.String({ minLength: 1, maxLength: 50 }),
+  /**
+   * Confirm the order in the same breath as handing it to the courier.
+   *
+   * The admin's step 1 is one action — check the details, pick the courier,
+   * go — and this is what makes it one call. Booking and confirming in one
+   * transaction is the whole point: an order that is confirmed but has no
+   * courier is the state this flow exists to make unreachable.
+   */
+  confirm: t.Optional(t.Boolean()),
   riderId: t.Optional(t.Nullable(t.String({ maxLength: 40 }))),
   consignmentId: t.Optional(t.String({ maxLength: 100 })),
   trackingCode: t.Optional(t.String({ maxLength: 100 })),

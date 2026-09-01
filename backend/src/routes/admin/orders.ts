@@ -125,6 +125,37 @@ export const adminOrders = new Elysia({ name: "routes/admin/orders", detail: { t
         );
       }
 
+      /*
+       * Nothing reaches the customer without a courier on file.
+       *
+       * `On the way` and `Delivered` are claims about a parcel physically
+       * moving, and until this gate existed either could be set on a
+       * brand-new order in one click from a dropdown — consuming stock and
+       * starting warranty cover for goods nobody had arranged to send.
+       *
+       * Checked HERE and not in lib/order-status.ts on purpose. That helper is
+       * shared with payment confirmation and courier callbacks: EPS moves a
+       * paid order to Confirmed with no human present, and a paid order must
+       * never fail because nobody has picked a courier yet. This is the
+       * admin's own move, and the admin is exactly who should have to say how
+       * the order is going out.
+       *
+       * `Cancelled` is deliberately exempt — an order going nowhere needs no
+       * courier — and so is moving backwards, which is how a mistake is
+       * corrected.
+       */
+      if (body.status === "On the way" || body.status === "Delivered") {
+        const shipment = await prisma.shipment.findUnique({
+          where: { orderId: params.id },
+          select: { id: true },
+        });
+        if (!shipment) {
+          throw badRequest(
+            `Order ${params.id} has no courier yet — hand it to one first, then mark it ${body.status.toLowerCase()}. Use "Own delivery" if your own rider took it.`,
+          );
+        }
+      }
+
       // Resolve the assignee up front: a bad id should 404 before the
       // transaction below starts moving stock around.
       let preparedByName: string | null = null;

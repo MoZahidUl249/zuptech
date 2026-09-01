@@ -69,6 +69,22 @@ export function useAttention(): AttentionItem[] {
     module: "orders",
   });
 
+  /* An order that is confirmed but still sitting here has been promised to a
+     customer and handed to nobody. It cannot move any further until someone
+     says how it is going out, so it will sit here silently otherwise. Gated on
+     `shipping`, because that is who can actually clear it. */
+  const awaitingCourier = state.orders.filter((o) => o.status === "Confirmed");
+  add({
+    id: "orders-awaiting-courier",
+    count: awaitingCourier.length,
+    text: `${awaitingCourier.length} confirmed ${plural(awaitingCourier.length, "order is", "orders are")} waiting for a courier`,
+    href: "/admin/orders?status=Confirmed",
+    action: "Hand them over",
+    icon: Truck,
+    tone: "urgent",
+    module: "shipping",
+  });
+
   const unclaimed = state.orders.filter(
     (o) => o.preparedById === null && o.status !== "Cancelled" && o.status !== "Delivered",
   );
