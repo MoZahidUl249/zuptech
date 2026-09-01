@@ -42,6 +42,17 @@ export const updatePaymentMethodDto = t.Partial(
 );
 
 /**
+ * Starting an online payment for an order.
+ *
+ * `payToken` is the proof handed back at checkout. Optional in the schema
+ * because a signed-in customer who owns the order does not need one — the
+ * route decides, not the shape.
+ */
+export const startPaymentDto = t.Optional(
+  t.Object({ payToken: t.Optional(t.String({ maxLength: 200 })) }),
+);
+
+/**
  * EPS instant payment notification.
  *
  * Only the transaction id is read, and only to decide WHICH payment to go and
@@ -66,3 +77,4 @@ export type CreatePaymentMethodDto = typeof createPaymentMethodDto.static;
 export type UpdatePaymentMethodDto = typeof updatePaymentMethodDto.static;
 export type PaymentWebhookDto = typeof paymentWebhookDto.static;
 export type EpsWebhookDto = typeof epsWebhookDto.static;
+export type StartPaymentDto = typeof startPaymentDto.static;

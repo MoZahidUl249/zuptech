@@ -46,17 +46,25 @@ export function PaymentReturn({
   const [phase, setPhase] = useState<Phase>(merchantTxnId ? "checking" : "error");
   const [orderId, setOrderId] = useState("");
   const [message, setMessage] = useState(merchantTxnId ? "" : MISSING_REFERENCE);
-  /* React 18 development mode mounts effects twice. Without this the status
-     call — and the Purchase event behind it — would fire twice per visit. */
-  const asked = useRef(false);
+  /* Which transaction has already been asked about.
+     
+     React's development mode mounts effects twice, so the check has to be
+     guarded or the status call — and the Purchase event behind it — fires
+     twice per visit. A plain boolean did that, and got it wrong the other way:
+     once flipped it never reset, so a client-side navigation from
+     /checkout/payment/failed?txn=A to …/success?txn=B on the same mounted
+     component left the page showing A's outcome forever. Remembering WHICH id
+     was asked about is once-per-transaction rather than once-per-mount. */
+  const asked = useRef<string | null>(null);
 
   useEffect(() => {
-    if (asked.current) return;
-    asked.current = true;
-
-    if (!merchantTxnId) return;
+    if (!merchantTxnId || asked.current === merchantTxnId) return;
+    asked.current = merchantTxnId;
 
     let cancelled = false;
+    // A second transaction on the same mount starts over rather than showing
+    // the previous one's answer while this one is in flight.
+    setPhase("checking");
 
     (async () => {
       try {

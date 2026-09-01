@@ -4,7 +4,10 @@ import type { Prisma } from "../../generated/client";
 import { prisma } from "../../lib/db";
 import { ApiError, badRequest, notFound } from "../../lib/http";
 import { setOrderStatus } from "../../lib/order-status";
+import { startPaymentDto } from "../../dtos/payments.dto";
+import { getSignedInCustomer } from "../../lib/customer-session";
 import { initPayment, parseEpsCredentials, verifyPayment } from "../../lib/payments/eps";
+import { payTokenMatches } from "../../lib/payments/pay-token";
 import { storefrontUrl } from "../../lib/payments/urls";
 import { allowHit, clientIp } from "../../lib/rate-limit";
 import { PAYMENT_ENVIRONMENTS, coerceTo } from "../../lib/rules";
@@ -35,11 +38,9 @@ export const publicPayments = new Elysia({
   name: "routes/public/payments",
   detail: { tags: ["Checkout"] },
 })
-  .post("/api/orders/:id/pay", async ({ params, request, server }) => {
-    // Rate-limited like checkout itself: order ids are guessable, so without
-    // this someone could walk the range opening gateway sessions. They would
-    // gain nothing — the worst case is paying a stranger's bill — but it is
-    // free traffic against our merchant account, and EPS counts it.
+  .post(
+    "/api/orders/:id/pay",
+    async ({ params, body, request, server }) => {
     const ip = clientIp(request, server);
     if (!allowHit(`pay-ip:${ip}`, 30, 5 * 60_000)) {
       throw new ApiError(429, "Too many payment attempts — try again in a few minutes");
@@ -50,6 +51,28 @@ export const publicPayments = new Elysia({
       include: { payments: true },
     });
     if (!order) throw notFound("Order");
+
+    /*
+     * Prove this is your order before anything is sent to the gateway.
+     *
+     * Order ids are sequential and printed on invoices, so an open endpoint
+     * here lets anyone walk the range and open a gateway session against a
+     * stranger's order — which hands EPS that customer's name, phone and
+     * address and puts their total on a payment page. Nobody is charged by it;
+     * it is still their data leaving on a stranger's say-so.
+     *
+     * Two acceptable proofs, and the session is the better one: a signed-in
+     * customer who owns the order needs no token at all.
+     *
+     * The 404 rather than a 403 is deliberate. "Wrong token" and "no such
+     * order" must look identical, or the endpoint becomes an oracle for which
+     * order ids exist.
+     */
+    const me = await getSignedInCustomer(request.headers);
+    const ownsIt = me?.phone === order.phone;
+    if (!ownsIt && !payTokenMatches(order.id, body?.payToken)) {
+      throw notFound("Order");
+    }
 
     if (order.payments.some((p) => p.status === "Paid")) {
       throw badRequest("This order has already been paid");
@@ -113,7 +136,9 @@ export const publicPayments = new Elysia({
     });
 
     return { redirectUrl, merchantTxnId };
-  })
+    },
+    { body: startPaymentDto },
+  )
 
   /**
    * Ask EPS how the payment ended, and move the order if it succeeded.
