@@ -18,6 +18,7 @@ import {
   type WarrantyStatus,
 } from "@/lib/admin";
 import { adjustOrderCharges, getOrderDetail, setOrderPreparedBy, setOrderZone } from "@/lib/admin-api";
+import { ShipmentCard } from "./shipment-card";
 import { useFilterParams } from "./primitives/filter-params";
 import { FilterBar, FilterTabs } from "./primitives/filter-bar";
 import { PageHeader } from "./primitives";
@@ -313,6 +314,9 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
   const canAdjust = can("orderadjust") === "manage";
   const canInvoice = can("invoices");
   const canWarranty = can("warranty");
+  /* Handing a customer's address to a courier is its own grant — see the note
+     on ADMIN_MODULES. Someone who works orders does not get it for free. */
+  const canShip = can("shipping");
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -479,6 +483,13 @@ function OrderDetailView({ orderId, onBack }: { orderId: string; onBack: () => v
 
             {canAdjust ? <ChargeOverride order={order} busy={busy} run={run} /> : null}
           </Card>
+
+          <ShipmentCard
+            orderId={order.id}
+            permission={canShip}
+            busy={busy}
+            run={run}
+          />
 
           <InvoiceCard
             order={order}

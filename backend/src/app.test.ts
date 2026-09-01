@@ -281,6 +281,10 @@ mock.module("./lib/db", () => ({
     $transaction: async (fn: (tx: typeof txClient) => Promise<unknown>) => fn(txClient),
     // getStaffContext's lookup — the door every admin route goes through.
     staff: { findUnique: async () => staffRow },
+    // Enough for the shipping RBAC checks: the list route is the only one
+    // these tests are allowed to reach, and an empty catalogue is a valid
+    // answer from it.
+    courier: { findMany: async () => [] },
     // priceCart's catalog read. The `where` carries orderableProductWhere()'s
     // visibility clause too; filtering on id alone is enough here because
     // rules.test.ts already pins what that clause admits.
@@ -487,6 +491,39 @@ describe("admin routes enforce per-module permissions", () => {
   test("`manage` satisfies a `view` check", async () => {
     signInAs({ products: "manage" });
     expect((await call("GET", "/admin/api/products")).status).toBe(200);
+  });
+
+  /*
+   * Shipping is its own module, not a corner of orders.
+   *
+   * Everyone who works orders holds `orders: manage` — including Support. But
+   * booking a parcel hands a customer's name, phone and address to a third
+   * party, and courier credentials live behind this module. Neither should
+   * come free with the permission to advance a status.
+   */
+  test("orders: manage does not grant shipping", async () => {
+    signInAs({ orders: "manage" });
+
+    const list = await call("GET", "/admin/api/couriers");
+    expect(list.status).toBe(403);
+    expect(String(list.body?.error)).toContain("shipping");
+
+    // A valid body, so this is refused by assertCan rather than by the DTO.
+    const book = await call("POST", "/admin/api/orders/ZT-10241/shipment", {
+      courierId: "self",
+    });
+    expect(book.status).toBe(403);
+  });
+
+  test("shipping: view can read couriers but not book or sync", async () => {
+    signInAs({ shipping: "view" });
+
+    expect((await call("GET", "/admin/api/couriers")).status).toBe(200);
+    expect(
+      (await call("POST", "/admin/api/orders/ZT-10241/shipment", { courierId: "self" })).status,
+    ).toBe(403);
+    expect((await call("POST", "/admin/api/shipments/sh1/sync")).status).toBe(403);
+    expect((await call("DELETE", "/admin/api/couriers/self")).status).toBe(403);
   });
 
   test("an endpoint checks the module it belongs to, not just any module", async () => {

@@ -1,5 +1,7 @@
 import type {
   AdminOrderDto,
+  CourierDto,
+  ShipmentDto,
   AdminOrderItemDto,
   AdminProductDto,
   CategoryDto,
@@ -32,6 +34,7 @@ import type {
 import type {
   Category,
   ContactMessage,
+  Courier,
   Customer,
   FreeDeliveryOffer,
   HeroSlide,
@@ -51,6 +54,8 @@ import type {
   Section,
   Service,
   ServiceLead,
+  Shipment,
+  ShipmentEvent,
   ShowcaseCard,
   Staff,
   StockMovement,
@@ -62,6 +67,7 @@ import type { PricedCart } from "./pricing";
 import {
   availableStock,
   coerceTo,
+  COURIER_KINDS,
   HERO_MEDIA_TYPES,
   INDUSTRIAL_LEAD_STATUSES,
   INVOICE_STATUSES,
@@ -81,6 +87,7 @@ import {
   stockTagFor,
   SERVICE_BULLET_STYLES,
   SERVICE_IMAGE_SIDES,
+  SHIPMENT_STATUSES,
   WARRANTY_STATUSES,
 } from "./rules";
 
@@ -193,7 +200,16 @@ export function toAdminProduct(
  * ⚠️ Shared with the customer-facing GET /api/my/orders — never add staff-only
  * fields here. They belong on `toAdminOrder` below.
  */
-export function toOrder(o: Order & { items: OrderItem[] }): OrderDto {
+type OrderForCustomer = Order & {
+  items: OrderItem[];
+  shipment?:
+    | (Pick<Shipment, "trackingCode" | "status"> & {
+        courier: Pick<Courier, "name" | "trackingUrl">;
+      })
+    | null;
+};
+
+export function toOrder(o: OrderForCustomer): OrderDto {
   return {
     id: o.id,
     customer: o.name,
@@ -214,6 +230,20 @@ export function toOrder(o: Order & { items: OrderItem[] }): OrderDto {
     pay: o.pay,
     status: parseOrderStatus(o.status),
     createdAt: o.createdAt.toISOString(),
+    tracking: o.shipment
+      ? {
+          courier: o.shipment.courier.name,
+          trackingCode: o.shipment.trackingCode,
+          trackingUrl:
+            o.shipment.courier.trackingUrl && o.shipment.trackingCode
+              ? o.shipment.courier.trackingUrl.replace(
+                  "{code}",
+                  encodeURIComponent(o.shipment.trackingCode),
+                )
+              : "",
+          status: coerceTo(SHIPMENT_STATUSES, o.shipment.status, "Booked"),
+        }
+      : null,
   };
 }
 
@@ -820,6 +850,63 @@ export function toPaymentMethod(m: PaymentMethod): PaymentMethodDto {
     credentials: maskCredentials(m.credentials),
     webhookUrl: m.webhookUrl,
     isGateway: m.isGateway,
+  };
+}
+
+/* ===== Fulfilment ===== */
+
+/** Row shapes the two mappers below need loaded. */
+type CourierRow = Courier & { _count?: { shipments: number } };
+type ShipmentRow = Shipment & {
+  courier: Pick<Courier, "name" | "kind" | "trackingUrl">;
+  rider: { id: string; name: string } | null;
+  events?: ShipmentEvent[];
+};
+
+/** Admin courier view — credentials masked, exactly like a payment method. */
+export function toCourier(c: CourierRow): CourierDto {
+  return {
+    id: c.id,
+    name: c.name,
+    kind: coerceTo(COURIER_KINDS, c.kind, "manual"),
+    provider: c.provider,
+    enabled: c.enabled,
+    environment: coerceTo(PAYMENT_ENVIRONMENTS, c.environment, "Test"),
+    credentials: maskCredentials(c.credentials),
+    trackingUrl: c.trackingUrl,
+    ...(c._count ? { shipmentCount: c._count.shipments } : {}),
+  };
+}
+
+export function toShipment(s: ShipmentRow): ShipmentDto {
+  return {
+    id: s.id,
+    orderId: s.orderId,
+    courierId: s.courierId,
+    courierName: s.courier.name,
+    courierKind: coerceTo(COURIER_KINDS, s.courier.kind, "manual"),
+    consignmentId: s.consignmentId,
+    trackingCode: s.trackingCode,
+    /* Only ever built when there is something to put in it. A template with
+       an empty code resolves to a link that 404s at the courier, which reads
+       to a customer as "they lost my parcel". */
+    trackingUrl:
+      s.courier.trackingUrl && s.trackingCode
+        ? s.courier.trackingUrl.replace("{code}", encodeURIComponent(s.trackingCode))
+        : "",
+    status: coerceTo(SHIPMENT_STATUSES, s.status, "Booked"),
+    codAmount: s.codAmount,
+    riderId: s.rider?.id ?? null,
+    riderName: s.rider?.name ?? null,
+    note: s.note,
+    createdAt: s.createdAt.toISOString(),
+    events: (s.events ?? []).map((e) => ({
+      at: e.at.toISOString(),
+      kind: e.kind,
+      detail: e.detail,
+      by: e.by,
+      byName: e.byName,
+    })),
   };
 }
 

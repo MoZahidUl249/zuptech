@@ -13,6 +13,7 @@ import {
   PhoneCall,
   ShieldCheck,
   ShoppingBag,
+  Truck,
   Users,
   Warehouse,
   Wrench,
@@ -245,6 +246,13 @@ export const NAV_GROUPS: AdminNavGroup[] = [
         icon: CreditCard,
         module: "payments",
         help: "Which ways customers can pay.",
+      },
+      {
+        href: "/admin/settings/shipping",
+        label: "Delivery",
+        icon: Truck,
+        module: "shipping",
+        help: "Who carries your parcels — your own riders, or a courier.",
       },
       {
         href: "/admin/settings/staff",

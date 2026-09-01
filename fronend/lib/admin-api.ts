@@ -10,6 +10,7 @@ import type {
   AdminModule,
   AdminProduct,
   AdminState,
+  Courier,
   HeroSlide,
   Integrations,
   IndustrialLeadStatus,
@@ -191,6 +192,7 @@ export async function loadAdminState(
     customers,
     slides,
     payments,
+    couriers,
     suppliers,
     purchaseOrders,
     movements,
@@ -223,6 +225,7 @@ export async function loadAdminState(
       () => unwrap(api.admin.api["payment-methods"].get(), "GET /admin/api/payment-methods"),
       [],
     ),
+    slice("shipping", "Couriers", () => unwrap(api.admin.api.couriers.get(), "GET /admin/api/couriers"), []),
     slice("inventory", "Suppliers", () => unwrap(api.admin.api.suppliers.get(), "GET /admin/api/suppliers"), []),
     slice(
       "inventory",
@@ -275,6 +278,7 @@ export async function loadAdminState(
       contact: config.contact,
       integrations,
       payments,
+      couriers,
       suppliers,
       purchaseOrders: purchaseOrders.map((po) => ({ ...po, eta: shortDate(po.eta) })),
       movements: movements.map((m) => ({ ...m, date: shortDateTime(m.date) })),
@@ -299,6 +303,7 @@ export const reloaders = {
   industrialLeads: () => unwrap(api.admin.api["industrial-leads"].get(), "GET /admin/api/industrial-leads"),
   slides: () => unwrap(api.admin.api.slides.get(), "GET /admin/api/slides"),
   payments: () => unwrap(api.admin.api["payment-methods"].get(), "GET /admin/api/payment-methods"),
+  couriers: () => unwrap(api.admin.api.couriers.get(), "GET /admin/api/couriers"),
   suppliers: () => unwrap(api.admin.api.suppliers.get(), "GET /admin/api/suppliers"),
   staff: () => unwrap(api.admin.api.staff.get(), "GET /admin/api/staff"),
   roles: () => unwrap(api.admin.api.roles.get(), "GET /admin/api/roles"),
@@ -457,6 +462,48 @@ export const putIntegrations = (integrations: Integrations) =>
 
 export const putPaymentMethod = (id: string, body: Partial<PaymentMethod>) =>
   unwrap(api.admin.api["payment-methods"]({ id: id }).put(body), "PUT /admin/api/payment-methods/:id");
+
+/* ===== Couriers & shipments ===== */
+
+export const createCourier = (body: Courier) =>
+  unwrap(api.admin.api.couriers.post(body), "POST /admin/api/couriers");
+export const putCourier = (id: string, body: Partial<Courier>) =>
+  unwrap(api.admin.api.couriers({ id }).put(body), "PUT /admin/api/couriers/:id");
+export const deleteCourier = (id: string) =>
+  unwrap(api.admin.api.couriers({ id }).delete(), "DELETE /admin/api/couriers/:id");
+
+/** Hand an order to a courier. For an API courier this books the parcel. */
+export const bookShipment = (
+  orderId: string,
+  body: { courierId: string; riderId?: string | null; consignmentId?: string; trackingCode?: string; note?: string },
+) => unwrap(api.admin.api.orders({ id: orderId }).shipment.post(body), "POST /admin/api/orders/:id/shipment");
+
+export const getShipment = (orderId: string) =>
+  unwrap(api.admin.api.orders({ id: orderId }).shipment.get(), "GET /admin/api/orders/:id/shipment");
+
+/** The shipment vocabulary, mirrored from the backend's SHIPMENT_STATUSES. */
+export type ShipmentStatus =
+  | "Booked"
+  | "Picked up"
+  | "In transit"
+  | "Delivered"
+  | "Returned"
+  | "Cancelled";
+
+export const patchShipment = (
+  id: string,
+  body: {
+    status?: ShipmentStatus;
+    riderId?: string | null;
+    consignmentId?: string;
+    trackingCode?: string;
+    note?: string;
+  },
+) => unwrap(api.admin.api.shipments({ id }).patch(body), "PATCH /admin/api/shipments/:id");
+
+/** Ask the courier where the parcel is. */
+export const syncShipment = (id: string) =>
+  unwrap(api.admin.api.shipments({ id }).sync.post(), "POST /admin/api/shipments/:id/sync");
 
 /* ===== Location tree (delivery/installation pricing) ===== */
 

@@ -1227,6 +1227,32 @@ export function AccountView({ productNames }: { productNames: Record<string, str
                     Deliver to: {order.address}
                   </span>
                 ) : null}
+                {/* Once a courier has it, the number is the thing a customer
+                    actually wants — it is what they quote when they call. */}
+                {order.tracking ? (
+                  <span className="text-[12.5px] leading-relaxed text-zup-soft">
+                    {order.tracking.courier}
+                    {order.tracking.trackingCode ? (
+                      <>
+                        {" · "}
+                        {order.tracking.trackingUrl ? (
+                          <a
+                            href={order.tracking.trackingUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-semibold text-zup-blue hover:underline"
+                          >
+                            {order.tracking.trackingCode}
+                          </a>
+                        ) : (
+                          <span className="font-semibold text-zup-mid">
+                            {order.tracking.trackingCode}
+                          </span>
+                        )}
+                      </>
+                    ) : null}
+                  </span>
+                ) : null}
                 {!cancelled && (
                   <>
                     <div className="mt-0.5 flex items-center gap-1.5" aria-hidden>

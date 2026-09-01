@@ -164,6 +164,18 @@ export interface OrderDto {
   pay: string;
   status: OrderStatus;
   createdAt: string;
+  /**
+   * What the customer is allowed to know about their parcel: who has it, the
+   * number they can quote, and where to follow it. Null until it is handed
+   * over. Deliberately NOT the whole Shipment — the COD amount, the rider's
+   * identity and the courier's raw payload are ours, not theirs.
+   */
+  tracking: {
+    courier: string;
+    trackingCode: string;
+    trackingUrl: string;
+    status: string;
+  } | null;
 }
 
 /** GET /admin/api/orders — the list row, with fulfilment accountability. */
@@ -588,4 +600,45 @@ export interface PaymentMethodDto {
   credentials: Record<string, string>;
   webhookUrl: string;
   isGateway: boolean;
+}
+
+export interface CourierDto {
+  id: string;
+  name: string;
+  kind: "self" | "api" | "manual";
+  provider: string;
+  enabled: boolean;
+  environment: "Live" | "Test";
+  /** Masked, like every other credential the admin API returns. */
+  credentials: Record<string, string>;
+  trackingUrl: string;
+  /** Shipments booked on this courier — blocks deletion when nonzero. */
+  shipmentCount?: number;
+}
+
+export interface ShipmentEventDto {
+  at: string;
+  kind: string;
+  detail: string;
+  by: string;
+  byName: string;
+}
+
+export interface ShipmentDto {
+  id: string;
+  orderId: string;
+  courierId: string;
+  courierName: string;
+  courierKind: "self" | "api" | "manual";
+  consignmentId: string;
+  trackingCode: string;
+  /** The courier's tracking page for this parcel, or "" when there isn't one. */
+  trackingUrl: string;
+  status: "Booked" | "Picked up" | "In transit" | "Delivered" | "Returned" | "Cancelled";
+  codAmount: number;
+  riderId: string | null;
+  riderName: string | null;
+  note: string;
+  createdAt: string;
+  events: ShipmentEventDto[];
 }

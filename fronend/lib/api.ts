@@ -396,6 +396,20 @@ export interface MyOrder {
   pay: string;
   status: OrderStatus;
   createdAt: string;
+  /**
+   * The parcel, once it has been handed to someone. Null before that.
+   *
+   * Only what the customer is entitled to: who has it, the number they can
+   * quote on the phone, and where to follow it. The amount the rider collects
+   * and who that rider is stay on the admin side.
+   */
+  tracking: {
+    courier: string;
+    trackingCode: string;
+    /** "" when the courier has no tracking page. */
+    trackingUrl: string;
+    status: string;
+  } | null;
 }
 
 export async function getMyOrders(): Promise<MyOrder[]> {

@@ -8,9 +8,11 @@ import {
   INDUSTRIAL_TIMELINES,
   INVOICE_STATUSES,
   LEAD_STATUSES,
+  COURIER_KINDS,
   ORDER_STATUSES,
   PAYMENT_ENVIRONMENTS,
   PAYMENT_KINDS,
+  SHIPMENT_STATUSES,
   WARRANTY_STATUSES,
 } from "../lib/rules";
 
@@ -70,6 +72,8 @@ export const industrialScopeDto = literalUnion(INDUSTRIAL_SCOPES);
 export const industrialTimelineDto = literalUnion(INDUSTRIAL_TIMELINES);
 
 export const paymentKindDto = literalUnion(PAYMENT_KINDS);
+export const shipmentStatusDto = literalUnion(SHIPMENT_STATUSES);
+export const courierKindDto = literalUnion(COURIER_KINDS);
 export const paymentEnvironmentDto = literalUnion(PAYMENT_ENVIRONMENTS);
 
 export const heroMediaTypeDto = literalUnion(HERO_MEDIA_TYPES);
