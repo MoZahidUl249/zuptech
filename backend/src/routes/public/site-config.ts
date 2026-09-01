@@ -60,7 +60,15 @@ export const siteConfig = new Elysia({ name: "routes/public/site-config", detail
       },
       // GTM loads only when enabled AND the id looks like a container id (§4.10).
       gtm: config.gtmEnabled && GTM_ID_RE.test(config.gtmId) ? { id: config.gtmId } : null,
-      paymentOptions: payments.map((m) => ({ label: m.name, sub: m.provider })),
+      /* `online` tells checkout whether choosing this method means a redirect
+         to a gateway. It is derived, never a credential: the storefront needs
+         to know THAT a method is online, and must never learn anything about
+         how we authenticate to it (BACKEND.md §3). */
+      paymentOptions: payments.map((m) => ({
+        label: m.name,
+        sub: m.provider,
+        online: m.isGateway && m.provider.toLowerCase() === "eps",
+      })),
     };
   },
 );

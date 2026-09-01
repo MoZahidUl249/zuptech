@@ -23,6 +23,7 @@ import { customerAuth } from "./routes/public/auth";
 import { publicLandingPages } from "./routes/public/landing-pages";
 import { publicLeads } from "./routes/public/leads";
 import { publicOrders } from "./routes/public/orders";
+import { publicPayments } from "./routes/public/payments";
 import { publicPricing } from "./routes/public/pricing";
 import { publicProducts } from "./routes/public/products";
 import { publicServices } from "./routes/public/services";
@@ -239,6 +240,7 @@ export function createApp({ quiet = false }: { quiet?: boolean } = {}) {
       .use(siteConfig)
       .use(publicPricing)
       .use(publicOrders)
+      .use(publicPayments)
       .use(customerAuth)
       .use(publicLeads)
       .use(publicLandingPages)

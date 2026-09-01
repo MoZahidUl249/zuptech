@@ -86,6 +86,10 @@ function MethodCard({
   onChange: (patch: Partial<PaymentMethod>) => void;
 }) {
   const [showSecret, setShowSecret] = useState(false);
+  /* EPS is the one provider with a real integration behind it, and it needs
+     five credentials rather than two. Keyed on the provider, not the row id,
+     so a method renamed in the admin keeps its form. */
+  const isEps = m.provider.trim().toLowerCase() === "eps";
   const [name, setName] = useState(m.name);
 
   return (
@@ -172,6 +176,7 @@ function MethodCard({
               </BtnGhost>
             </div>
           </Field>
+          {isEps ? <EpsCredentials m={m} readOnly={readOnly} onChange={onChange} /> : null}
           <Field label="Webhook / callback URL" className="sm:col-span-2">
             <input
               value={m.webhookUrl}
@@ -194,5 +199,81 @@ function MethodCard({
         </p>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * The five credentials EPS issues a merchant.
+ *
+ * They arrive masked and are write-only: leaving a field as the mask it came
+ * back as means "keep what is stored", which is why the backend merges these
+ * key by key instead of writing the object whole. Typing over one of them
+ * therefore cannot wipe the other four.
+ *
+ * `hashKey` is the one that signs every request. It is treated like the API
+ * secret — hidden by default — because a leaked hash key lets someone else
+ * sign payments as this merchant.
+ */
+function EpsCredentials({
+  m,
+  readOnly,
+  onChange,
+}: {
+  m: PaymentMethod;
+  readOnly: boolean;
+  onChange: (patch: Partial<PaymentMethod>) => void;
+}) {
+  const [showHash, setShowHash] = useState(false);
+  const creds = m.credentials ?? {};
+
+  const set = (key: string, value: string) =>
+    onChange({ credentials: { ...creds, [key]: value } });
+
+  const text = (key: string, label: string, wide = false) => (
+    <Field key={key} label={label} className={wide ? "sm:col-span-2" : undefined}>
+      <input
+        value={creds[key] ?? ""}
+        disabled={readOnly}
+        onChange={(e) => set(key, e.target.value)}
+        className={`${inputCls} font-mono text-ui-sm`}
+      />
+    </Field>
+  );
+
+  return (
+    <>
+      <p className="mt-1 text-ui-sm text-zup-gray sm:col-span-2">
+        EPS credentials. Leave a field untouched to keep the stored value — what you
+        see is a mask, never the real credential.
+      </p>
+      {text("merchantId", "EPS merchant ID")}
+      {text("storeId", "EPS store ID")}
+      {text("username", "EPS username")}
+      <Field label="EPS password">
+        <input
+          type="password"
+          value={creds.password ?? ""}
+          disabled={readOnly}
+          onChange={(e) => set("password", e.target.value)}
+          aria-label="EPS password"
+          className={`${inputCls} font-mono text-ui-sm`}
+        />
+      </Field>
+      <Field label="EPS hash key" className="sm:col-span-2">
+        <div className="flex gap-2">
+          <input
+            type={showHash ? "text" : "password"}
+            value={creds.hashKey ?? ""}
+            disabled={readOnly}
+            onChange={(e) => set("hashKey", e.target.value)}
+            aria-label="EPS hash key"
+            className={`${inputCls} min-w-0 flex-1 font-mono text-ui-sm`}
+          />
+          <BtnGhost onClick={() => setShowHash((v) => !v)} className="min-h-10 px-4">
+            {showHash ? "Hide" : "Show"}
+          </BtnGhost>
+        </div>
+      </Field>
+    </>
   );
 }

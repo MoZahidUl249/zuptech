@@ -584,6 +584,8 @@ export interface PaymentMethodDto {
   environment: "Live" | "Test";
   apiKey: string;
   apiSecret: string;
+  /** Extra provider credentials, masked. Keys present = fields configured. */
+  credentials: Record<string, string>;
   webhookUrl: string;
   isGateway: boolean;
 }

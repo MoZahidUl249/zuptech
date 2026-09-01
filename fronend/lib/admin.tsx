@@ -551,6 +551,12 @@ export interface PaymentMethod {
   environment: "Live" | "Test";
   apiKey: string;
   apiSecret: string;
+  /**
+   * Provider credentials that do not fit apiKey/apiSecret — EPS needs five.
+   * Arrives masked, exactly like the two above: a key being present means the
+   * field is configured, and the value shown is never the real one.
+   */
+  credentials?: Record<string, string>;
   webhookUrl: string;
   isGateway: boolean;
 }
@@ -838,6 +844,13 @@ async function syncKeys(
         // The server returns the secret masked — only write it back when
         // the admin actually typed a new one.
         ...(old && old.apiSecret !== m.apiSecret ? { apiSecret: m.apiSecret } : {}),
+        /* Same rule for the provider credential bag, and the server merges it
+           key by key: a field still holding its mask is skipped there, so
+           sending the whole object cannot overwrite the four the admin did not
+           touch with asterisks. */
+        ...(old && JSON.stringify(old.credentials ?? {}) !== JSON.stringify(m.credentials ?? {})
+          ? { credentials: m.credentials }
+          : {}),
       });
     }
   });

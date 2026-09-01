@@ -788,6 +788,20 @@ export function toMovement(m: StockMovement): StockMovementDto {
 }
 
 /**
+ * Every provider credential is masked, never returned.
+ *
+ * Keys are kept so the admin form knows which fields are already set; only the
+ * values are replaced. A field that was never configured comes back as "" so
+ * the form can tell "set, hidden" apart from "empty".
+ */
+function maskCredentials(raw: unknown): Record<string, string> {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return Object.fromEntries(
+    Object.entries(source).map(([k, v]) => [k, typeof v === "string" && v ? maskSecret(v) : ""]),
+  );
+}
+
+/**
  * Admin payments view: gateway credentials are write-only, responses carry a
  * mask. Both fields, not just the one named "secret" — a gateway API key is a
  * credential too, and it was going out in full to anyone with `payments: view`.
@@ -803,6 +817,7 @@ export function toPaymentMethod(m: PaymentMethod): PaymentMethodDto {
     environment: coerceTo(PAYMENT_ENVIRONMENTS, m.environment, "Test"),
     apiKey: maskSecret(m.apiKey),
     apiSecret: maskSecret(m.apiSecret),
+    credentials: maskCredentials(m.credentials),
     webhookUrl: m.webhookUrl,
     isGateway: m.isGateway,
   };

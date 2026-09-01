@@ -254,6 +254,12 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
 export interface PaymentOption {
   label: string;
   sub: string;
+  /**
+   * Choosing this method sends the customer to a payment gateway before the
+   * order is confirmed. Derived server-side from the configured methods; the
+   * storefront never sees anything about how we authenticate to the gateway.
+   */
+  online?: boolean;
 }
 
 export interface SiteConfig {
@@ -425,6 +431,41 @@ export interface PlacedOrder {
 
 export async function placeOrder(input: PlaceOrderInput): Promise<PlacedOrder> {
   return unwrap(api.api.orders.post(input), "POST /api/orders");
+}
+
+/** Where an online payment for this order should send the customer. */
+export interface PaymentSession {
+  redirectUrl: string;
+  merchantTxnId: string;
+}
+
+/**
+ * Open a gateway session for an order that was just placed.
+ *
+ * The order already exists at this point and stays "Processing" until the
+ * gateway says otherwise — abandoning the payment page leaves a real order
+ * behind to follow up, not a hole.
+ */
+export async function startPayment(orderId: string): Promise<PaymentSession> {
+  return unwrap(api.api.orders({ id: orderId }).pay.post(), "POST /api/orders/:id/pay");
+}
+
+export interface PaymentStatus {
+  paid: boolean;
+  status: string;
+  orderId: string;
+}
+
+/**
+ * Ask the backend how a payment ended. The backend asks the gateway — landing
+ * on the success URL is not itself proof of anything, so this is what the
+ * return page believes rather than the URL it arrived on.
+ */
+export async function getPaymentStatus(merchantTxnId: string): Promise<PaymentStatus> {
+  return unwrap(
+    api.api.payments({ txn: merchantTxnId }).status.get(),
+    "GET /api/payments/:txn/status",
+  );
 }
 
 /** One row of the bundle ladder, priced by the server from the product's

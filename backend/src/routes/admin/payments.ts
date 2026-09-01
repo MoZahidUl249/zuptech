@@ -12,6 +12,29 @@ import { staffGuard } from "./guard";
  * mask apiSecret, and a submitted value that still looks like our mask (or
  * is empty on an existing method) means "keep what's stored".
  */
+
+/**
+ * Merge submitted provider credentials over the stored ones, field by field.
+ *
+ * The same "a mask means unchanged" rule as apiKey/apiSecret, applied per key
+ * — and the merge matters more here than there. EPS needs five credentials and
+ * the form round-trips all five as masks, so a whole-object write would
+ * replace four live secrets with asterisks the moment someone retyped the
+ * fifth. Fields absent from the submission are left alone entirely.
+ */
+function mergeCredentials(
+  stored: unknown,
+  submitted: Record<string, string | undefined>,
+): Record<string, string> {
+  const base =
+    stored && typeof stored === "object" ? { ...(stored as Record<string, string>) } : {};
+
+  for (const [key, value] of Object.entries(submitted)) {
+    if (value === undefined || value === "" || isMaskedSecret(value)) continue;
+    base[key] = value;
+  }
+  return base;
+}
 export const adminPayments = new Elysia({ name: "routes/admin/payments", detail: { tags: ["Admin · Payments"] } })
   .use(staffGuard)
 
@@ -49,7 +72,7 @@ export const adminPayments = new Elysia({ name: "routes/admin/payments", detail:
       // field arrives looking like "••••1234". Writing that back would replace
       // the credential with its own mask, which is why neither is ever taken
       // from the body unless it has actually been retyped.
-      const { apiKey, apiSecret, ...rest } = body;
+      const { apiKey, apiSecret, credentials, ...rest } = body;
       const unchanged = (value: string | undefined) =>
         value === undefined || value === "" || isMaskedSecret(value);
 
@@ -59,6 +82,7 @@ export const adminPayments = new Elysia({ name: "routes/admin/payments", detail:
           ...rest,
           ...(unchanged(apiKey) ? {} : { apiKey }),
           ...(unchanged(apiSecret) ? {} : { apiSecret }),
+          ...(credentials ? { credentials: mergeCredentials(existing.credentials, credentials) } : {}),
         },
       });
       return toPaymentMethod(method);

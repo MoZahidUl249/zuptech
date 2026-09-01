@@ -247,6 +247,7 @@ model Order {
   events     OrderEvent[]
   invoice    Invoice?
   warranties Warranty[]
+  payments   PaymentTransaction[]
 
   @@index([status])
   @@index([createdAt])
@@ -984,9 +985,53 @@ model PaymentMethod {
   environment String   @default("Test") // "Live" | "Test"
   apiKey      String   @default("")
   apiSecret   String   @default("") // never returned by the API
+  /// Extra provider credentials that do not fit the two columns above — EPS
+  /// alone needs five (merchantId, storeId, username, password, hashKey).
+  /// Write-only like the other two: responses carry masks, never values.
+  credentials Json     @default("{}")
   webhookUrl  String   @default("")
   isGateway   Boolean  @default(false)
   sort        Int      @default(0)
+}
+
+/// One row per attempt to collect money through a gateway.
+///
+/// Separate from Order.status on purpose: an order can be attempted, abandoned
+/// and re-attempted, and "was this paid?" must be answerable from something
+/// the gateway agrees with rather than from a status a human can type. The
+/// gateway's own id is unique, which is what makes confirmation idempotent —
+/// a replayed callback matches the row that already moved the order.
+model PaymentTransaction {
+  id            String @id @default(cuid())
+  orderId       String
+  order         Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  /// PaymentMethod.id as chosen at checkout. Deliberately NOT a foreign key:
+  /// deleting a payment method must never delete the record of money taken
+  /// through it, and the method's name is already frozen on Order.pay.
+  methodId      String
+  provider      String // "eps"
+  /// OUR id for this attempt, sent to the gateway as `merchantTransactionId`
+  /// and the key every later status query is asked about. Unique, which is
+  /// what makes confirmation idempotent: a replayed callback can only ever
+  /// resolve to the attempt it belongs to.
+  merchantTxnId String @unique
+  /// The gateway's own id (EPS calls it EPSTransactionId), learned only once
+  /// the customer has actually paid. Empty until then, which is why it is not
+  /// the key above — support quotes it, nothing keys on it.
+  providerTxnId String @default("")
+  amount        Int // BDT, snapshot of Order.total at initiation
+  status        String @default("Initiated") // Initiated|Paid|Failed|Cancelled
+  redirectUrl   String @default("")
+  /// Whatever the gateway last told us, verbatim. Kept for disputes: when a
+  /// customer says they paid and the row says otherwise, this is the evidence.
+  raw           Json   @default("{}")
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  verifiedAt DateTime?
+
+  @@index([orderId])
+  @@index([status])
 }
 
 /// ===== Better Auth (session/credential store) =====
