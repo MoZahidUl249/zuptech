@@ -63,6 +63,7 @@ import type {
   TeamMember,
   Warranty,
 } from "../generated/client";
+import { signPayToken } from "./payments/pay-token";
 import type { PricedCart } from "./pricing";
 import {
   availableStock,
@@ -952,6 +953,8 @@ export function toCheckoutOrder(o: Order & { items: OrderItem[] }, summary: stri
     phone: o.phone,
     address: o.address,
     insideDhaka: o.insideDhaka,
+    /* Handed out exactly once, to the browser that just placed the order. */
+    payToken: signPayToken(o.id),
     createdAt: o.createdAt.getTime(),
   };
 }

@@ -134,6 +134,12 @@ export interface CheckoutOrderDto {
   phone: string;
   address: string; // free text + delivery zone label, e.g. "House 12, Road 7, Dhanmondi, Inside Dhaka"
   insideDhaka: boolean;
+  /**
+   * Proof that this browser placed this order, required to start an online
+   * payment for it. Order ids are sequential, so without it anyone could open
+   * a gateway session against a stranger's order — see lib/payments/pay-token.ts.
+   */
+  payToken: string;
   createdAt: number; // epoch ms
 }
 
