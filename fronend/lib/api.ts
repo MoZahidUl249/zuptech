@@ -427,6 +427,12 @@ export interface PlacedOrder {
   orderId: string;
   total: number;
   status: OrderStatus;
+  /**
+   * Proof that this browser placed this order, needed to start an online
+   * payment for it. Order ids are sequential, so the backend will not open a
+   * gateway session without it (or a session that owns the order).
+   */
+  payToken: string;
 }
 
 export async function placeOrder(input: PlaceOrderInput): Promise<PlacedOrder> {
@@ -446,8 +452,14 @@ export interface PaymentSession {
  * gateway says otherwise — abandoning the payment page leaves a real order
  * behind to follow up, not a hole.
  */
-export async function startPayment(orderId: string): Promise<PaymentSession> {
-  return unwrap(api.api.orders({ id: orderId }).pay.post(), "POST /api/orders/:id/pay");
+export async function startPayment(
+  orderId: string,
+  payToken: string,
+): Promise<PaymentSession> {
+  return unwrap(
+    api.api.orders({ id: orderId }).pay.post({ payToken }),
+    "POST /api/orders/:id/pay",
+  );
 }
 
 export interface PaymentStatus {

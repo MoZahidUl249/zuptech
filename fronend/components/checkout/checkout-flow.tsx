@@ -224,7 +224,7 @@ export function CheckoutFlow({ products = [] }: { products?: Product[] }) {
         } catch {
           // A blocked storage costs an analytics event, never the order.
         }
-        const session = await startPayment(order.orderId);
+        const session = await startPayment(order.orderId, order.payToken);
         clear();
         window.location.href = session.redirectUrl;
         return;
