@@ -15,6 +15,7 @@ import { adminOrders } from "./routes/admin/orders";
 import { adminPayments } from "./routes/admin/payments";
 import { adminProducts } from "./routes/admin/products";
 import { adminServices } from "./routes/admin/services";
+import { adminShipping } from "./routes/admin/shipping";
 import { adminStaff } from "./routes/admin/staff";
 import { adminTeam } from "./routes/admin/team";
 import { adminTaxonomy } from "./routes/admin/taxonomy";
@@ -260,6 +261,7 @@ export function createApp({ quiet = false }: { quiet?: boolean } = {}) {
       .use(adminContent)
       .use(adminServices)
       .use(adminPayments)
+      .use(adminShipping)
       .use(adminStaff)
       .use(adminTeam)
   );

@@ -39,6 +39,7 @@ const MODULE_LABELS: Record<AdminModule, string> = {
   landingpages: "Landing pages",
   sitecontent: "Site content",
   payments: "Payments",
+  shipping: "Shipping & couriers",
   staff: "Staff & roles",
   // Narrower than Orders on purpose: everyone who works orders can advance a
   // status, but changing what a placed order charges is its own grant.

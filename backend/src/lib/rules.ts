@@ -642,6 +642,33 @@ export type PoStatus = (typeof PO_STATUSES)[number];
 export const PAYMENT_KINDS = ["Mobile wallet", "Card gateway", "Offline"] as const;
 export type PaymentKind = (typeof PAYMENT_KINDS)[number];
 
+/* ===== Fulfilment ===== */
+
+/**
+ * Where a parcel is. Deliberately a shorter list than any courier's own
+ * vocabulary — Steadfast alone reports a dozen states, most of which are
+ * approval sub-steps nobody outside their office can act on. Each adapter maps
+ * its provider's words onto these, and refuses to guess at a word it does not
+ * know (lib/shipping/steadfast.ts).
+ */
+export const SHIPMENT_STATUSES = [
+  "Booked",
+  "Picked up",
+  "In transit",
+  "Delivered",
+  "Returned",
+  "Cancelled",
+] as const;
+export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
+
+/**
+ * How much of a courier is automated. `self` is our own rider and `manual` is
+ * a courier we have no integration with; both are database-only, and only
+ * `api` calls out. See lib/shipping/index.ts.
+ */
+export const COURIER_KINDS = ["self", "api", "manual"] as const;
+export type CourierKind = (typeof COURIER_KINDS)[number];
+
 export const PAYMENT_ENVIRONMENTS = ["Live", "Test"] as const;
 export type PaymentEnvironment = (typeof PAYMENT_ENVIRONMENTS)[number];
 

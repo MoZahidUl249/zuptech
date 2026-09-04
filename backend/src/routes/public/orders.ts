@@ -224,7 +224,17 @@ export const publicOrders = new Elysia({ name: "routes/public/orders", detail: {
 
     const orders = await prisma.order.findMany({
       where: { phone: customer.phone },
-      include: { items: true },
+      include: {
+        items: true,
+        // Only what the customer is entitled to see — see OrderDto.tracking.
+        shipment: {
+          select: {
+            trackingCode: true,
+            status: true,
+            courier: { select: { name: true, trackingUrl: true } },
+          },
+        },
+      },
       orderBy: { number: "desc" },
     });
     return orders.map(toOrder);

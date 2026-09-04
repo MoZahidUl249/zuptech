@@ -34,6 +34,9 @@ export const ADMIN_MODULES = [
   "homepage",
   "sitecontent",
   "payments",
+  /* See the note in backend rbac.ts: couriers, bookings and rider
+     assignment, deliberately separate from `orders`. */
+  "shipping",
   "staff",
   "landingpages",
   /* See the note in backend rbac.ts: correcting a placed order's zone or
@@ -561,6 +564,28 @@ export interface PaymentMethod {
   isGateway: boolean;
 }
 
+/**
+ * Who carries a parcel.
+ *
+ * `kind` is what decides how much of a shipment is automated: `self` is our
+ * own rider and `manual` a courier we have no integration with — both are
+ * moved by hand — while `api` books and tracks over the courier's API.
+ */
+export interface Courier {
+  id: string;
+  name: string;
+  kind: "self" | "api" | "manual";
+  provider: string;
+  enabled: boolean;
+  environment: "Live" | "Test";
+  /** Masked on arrival, exactly like payment credentials. */
+  credentials?: Record<string, string>;
+  /** `{code}` is replaced with the tracking code. "" = no tracking page. */
+  trackingUrl: string;
+  /** Shipments already booked — the server refuses deletion when nonzero. */
+  shipmentCount?: number;
+}
+
 export interface AdminState {
   roles: Role[];
   staff: StaffMember[];
@@ -583,6 +608,7 @@ export interface AdminState {
   contact: SiteContact;
   integrations: Integrations;
   payments: PaymentMethod[];
+  couriers: Courier[];
   suppliers: Supplier[];
   purchaseOrders: PurchaseOrder[];
   movements: StockMovement[];
@@ -658,6 +684,7 @@ export function emptyState(): AdminState {
     },
     integrations: { gtmId: "", gtmEnabled: false },
     payments: [],
+    couriers: [],
     suppliers: [],
     purchaseOrders: [],
     movements: [],
@@ -853,6 +880,29 @@ async function syncKeys(
           : {}),
       });
     }
+  });
+
+  await run("couriers", async () => {
+    const { added, removed, changed, before } = diffById(prev.couriers, next.couriers);
+    for (const c of added) await api.createCourier(c);
+    for (const c of removed) await api.deleteCourier(c.id);
+    for (const c of changed) {
+      const old = before(c.id);
+      await api.putCourier(c.id, {
+        name: c.name,
+        kind: c.kind,
+        provider: c.provider,
+        enabled: c.enabled,
+        environment: c.environment,
+        trackingUrl: c.trackingUrl,
+        /* Merged key by key on the server, so sending the bag cannot replace
+           an untouched credential with the mask it arrived as. */
+        ...(old && JSON.stringify(old.credentials ?? {}) !== JSON.stringify(c.credentials ?? {})
+          ? { credentials: c.credentials }
+          : {}),
+      });
+    }
+    if (added.length > 0) reload.add("couriers");
   });
 
   await run("suppliers", async () => {

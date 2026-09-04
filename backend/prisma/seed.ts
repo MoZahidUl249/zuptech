@@ -263,6 +263,20 @@ const paymentMethods = [
   { id: "rocket", name: "Rocket", kind: "Mobile wallet", provider: "DBBL Rocket", providers: ["DBBL Rocket"], enabled: false, environment: "Test", apiKey: "", apiSecret: "", webhookUrl: "", isGateway: true, sort: 4 },
 ];
 
+/* ===== Couriers ===== */
+
+/* Three kinds, one of each, so the admin has something to pick on day one.
+   Steadfast ships DISABLED and with no credentials — the same rule as the
+   payment gateway: nothing that moves goods or money is on by default.
+
+   As with paymentMethods above, the upsert rewrites `enabled` on every seed
+   run but leaves `credentials` alone (it is not in these objects). */
+const couriers = [
+  { id: "self", name: "Own delivery", kind: "self", provider: "", enabled: true, environment: "Live", trackingUrl: "", sort: 0 },
+  { id: "steadfast", name: "Steadfast", kind: "api", provider: "steadfast", enabled: false, environment: "Test", trackingUrl: "https://steadfast.com.bd/t/{code}", sort: 1 },
+  { id: "other", name: "Other courier", kind: "manual", provider: "", enabled: true, environment: "Live", trackingUrl: "", sort: 2 },
+];
+
 /* ===== Hero slides / site config ===== */
 
 const slides = [
@@ -792,6 +806,9 @@ async function main() {
 
   for (const method of paymentMethods) {
     await prisma.paymentMethod.upsert({ where: { id: method.id }, create: method, update: method });
+  }
+  for (const courier of couriers) {
+    await prisma.courier.upsert({ where: { id: courier.id }, create: courier, update: courier });
   }
   for (const slide of slides) {
     await prisma.heroSlide.upsert({ where: { id: slide.id }, create: slide, update: slide });

@@ -32,6 +32,12 @@ export const ADMIN_MODULES = [
   "landingpages",
   "sitecontent",
   "payments",
+  /* Booking a parcel, assigning a rider, and configuring couriers. Separate
+     from `orders` because handing a customer's name, phone and address to a
+     third-party courier is a different act from advancing a status — and
+     because courier credentials live behind it, exactly as gateway
+     credentials live behind `payments`. */
+  "shipping",
   "staff",
   /* Correcting an order's delivery zone or its charges after it was placed.
      Separate from `orders` on purpose: all three seeded roles hold
@@ -103,6 +109,7 @@ export function normalizePermissions(raw: unknown): PermissionMatrix {
     landingpages: "none",
     sitecontent: "none",
     payments: "none",
+    shipping: "none",
     staff: "none",
     orderadjust: "none",
   };

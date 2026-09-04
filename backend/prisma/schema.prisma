@@ -248,6 +248,7 @@ model Order {
   invoice    Invoice?
   warranties Warranty[]
   payments   PaymentTransaction[]
+  shipment   Shipment?
 
   @@index([status])
   @@index([createdAt])
@@ -735,8 +736,9 @@ model Staff {
   userId   String  @unique // -> User.id (Better Auth)
   user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  preparedOrders Order[]   @relation("OrderPreparedBy")
-  issuedInvoices Invoice[] @relation("InvoiceIssuedBy")
+  preparedOrders Order[]    @relation("OrderPreparedBy")
+  issuedInvoices Invoice[]  @relation("InvoiceIssuedBy")
+  deliveries     Shipment[] @relation("ShipmentRider")
 }
 
 /// ===== Inventory =====
@@ -1032,6 +1034,103 @@ model PaymentTransaction {
 
   @@index([orderId])
   @@index([status])
+}
+
+/// ===== Fulfilment =====
+
+/// How an order physically reaches the customer.
+///
+/// Three kinds, and the kind — not the row — decides how much of this is
+/// automated:
+///
+///   self   — our own rider. No network anywhere; staff move the shipment by
+///            hand and the trail records who.
+///   api    — an integrated courier (`provider` says which; Steadfast today).
+///            Booking calls out, and status can be pulled back.
+///   manual — any other courier. Staff type the consignment number they were
+///            given, and the customer gets a tracking link if the courier has
+///            one.
+///
+/// Deliberately shaped like PaymentMethod: same admin CRUD, same write-only
+/// credential bag, same enable/environment switches. A second config model
+/// that behaved differently would be a second thing to learn for no reason.
+model Courier {
+  id          String  @id
+  name        String  @unique
+  kind        String // self|api|manual
+  provider    String  @default("") // "steadfast" when kind = api
+  enabled     Boolean @default(true)
+  environment String  @default("Test") // "Live" | "Test"
+  /// Write-only, masked in responses — same discipline as PaymentMethod.
+  credentials Json    @default("{}")
+  /// Where a customer follows a parcel. `{code}` is replaced with the
+  /// tracking code, e.g. "https://steadfast.com.bd/t/{code}".
+  trackingUrl String  @default("")
+  sort        Int     @default(0)
+
+  shipments Shipment[]
+}
+
+/// One order's journey to the door.
+///
+/// At most one per order (`orderId` is unique). Split shipments are a real
+/// thing and deliberately not modelled yet: half-shipped orders change what
+/// every total on the invoice means, and nothing in this codebase is ready for
+/// that conversation.
+model Shipment {
+  id        String  @id @default(cuid())
+  orderId   String  @unique
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courierId String
+  courier   Courier @relation(fields: [courierId], references: [id])
+
+  /// The courier'''s own id for the parcel, and the code a customer quotes.
+  /// Both empty for self-delivery, which has neither.
+  consignmentId String @default("")
+  trackingCode  String @default("")
+
+  status String @default("Booked") // Booked|Picked up|In transit|Delivered|Returned|Cancelled
+
+  /// What the rider must collect at the door, in BDT.
+  ///
+  /// Zero when the order was already paid online — sending the order total to
+  /// a courier for a prepaid order charges the customer twice, and the courier
+  /// has no way to know better.
+  codAmount Int @default(0)
+
+  /// Which of ours is carrying it. Only meaningful for a self-delivery
+  /// courier; SetNull so removing a staff row never deletes delivery history.
+  riderId String?
+  rider   Staff?  @relation("ShipmentRider", fields: [riderId], references: [id], onDelete: SetNull)
+
+  note String @default("")
+  /// The courier'''s last raw response, kept for disputes.
+  raw  Json   @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events ShipmentEvent[]
+
+  @@index([courierId])
+  @@index([status])
+  @@index([riderId])
+}
+
+/// Append-only trail for a shipment — same audit philosophy as OrderEvent and
+/// StockMovement: the actor is frozen as text, so the history still reads
+/// correctly after a staff member is renamed or deleted.
+model ShipmentEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  at         DateTime @default(now())
+  kind       String // booked|status|rider|note|sync
+  detail     String
+  by         String
+  byName     String
+
+  @@index([shipmentId, at])
 }
 
 /// ===== Better Auth (session/credential store) =====
