@@ -23,6 +23,7 @@ import {
   inputCls,
   selectCls,
 } from "./ui";
+import { setStaffPassword } from "@/lib/admin-api";
 import { ConfirmDialog } from "./confirm-dialog";
 
 const MODULE_LABELS: Record<AdminModule, string> = {
@@ -42,6 +43,10 @@ const MODULE_LABELS: Record<AdminModule, string> = {
   shipping: "Shipping & couriers",
   messaging: "Text messages",
   staff: "Staff & roles",
+  // Narrower than Staff & roles on purpose: staff cannot reset their own
+  // password, so someone has to set it — without also being able to create,
+  // delete or re-permission people.
+  staffpassword: "Set staff passwords",
   // Narrower than Orders on purpose: everyone who works orders can advance a
   // status, but changing what a placed order charges is its own grant.
   orderadjust: "Order charges (corrections)",
@@ -52,6 +57,9 @@ const PERMS: Permission[] = ["none", "view", "manage"];
 export function StaffSection() {
   const { state, update, can, user } = useAdmin();
   const readOnly = can("staff") !== "manage";
+  /* Its own grant: a Manager sets passwords without being able to create,
+     delete or re-permission anyone. The server enforces the same split. */
+  const canSetPassword = can("staffpassword") === "manage";
   const [selectedRoleId, setSelectedRoleId] = useState("manager");
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({
@@ -260,10 +268,15 @@ export function StaffSection() {
                     ))}
                   </select>
                 </Td>
-                <Td className="text-right">
+                <Td className="whitespace-nowrap text-right">
+                  {/* Staff cannot reset their own password any more, so this
+                      is the only way one gets changed. Its own permission,
+                      narrower than `staff` — a Manager sets passwords without
+                      being able to create or delete people. */}
+                  {canSetPassword ? <SetPasswordButton id={s.id} name={s.name} /> : null}
                   {!readOnly && !isSuperSelf && s.id !== user?.id ? (
                     <ConfirmDialog
-                      trigger={<BtnDanger>Remove</BtnDanger>}
+                      trigger={<BtnDanger className="ml-1.5">Remove</BtnDanger>}
                       title={`Remove ${s.name}?`}
                       description="They will immediately lose access to the admin panel."
                       confirmLabel="Remove"
@@ -421,6 +434,71 @@ export function StaffSection() {
           ) : null}
         </Card>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Set a staff member's password.
+ *
+ * Deliberately not part of the pending-changes/Save flow the rest of this
+ * screen uses: a password is applied the moment it is submitted, and it must
+ * never sit in a draft object waiting for someone to press Save at the bottom
+ * of the page.
+ */
+function SetPasswordButton({ id, name }: { id: string; name: string }) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    setBusy(true);
+    try {
+      await setStaffPassword(id, password);
+      toast.success(`New password set for ${name}`);
+      setPassword("");
+      setOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not set the password");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <BtnGhost className="min-h-9 px-3" onClick={() => setOpen(true)}>
+        Set password
+      </BtnGhost>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      <input
+        type="password"
+        autoFocus
+        value={password}
+        disabled={busy}
+        placeholder="New password"
+        aria-label={`New password for ${name}`}
+        onChange={(e) => setPassword(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void submit();
+          if (e.key === "Escape") setOpen(false);
+        }}
+        className={`${inputCls} w-40`}
+      />
+      <BtnPrimary className="min-h-9 px-3" disabled={busy} onClick={() => void submit()}>
+        Save
+      </BtnPrimary>
+      <BtnGhost className="min-h-9 px-3" onClick={() => setOpen(false)}>
+        Cancel
+      </BtnGhost>
     </div>
   );
 }

@@ -40,6 +40,8 @@ export const ADMIN_MODULES = [
   /* See the note in backend rbac.ts: SMS credentials and message switches. */
   "messaging",
   "staff",
+  /* See the note in backend rbac.ts: narrower than `staff` on purpose. */
+  "staffpassword",
   "landingpages",
   /* See the note in backend rbac.ts: correcting a placed order's zone or
      charges, deliberately narrower than `orders`. */

@@ -1,11 +1,9 @@
 import { Elysia } from "elysia";
-import { forgotPasswordDto, resetPasswordDto, staffLoginDto } from "../../dtos/auth.dto";
+import { staffLoginDto } from "../../dtos/auth.dto";
 import { auth } from "../../lib/auth";
-import { prisma } from "../../lib/db";
-import { ApiError, badRequest } from "../../lib/http";
+import { ApiError } from "../../lib/http";
 import { allowHitDurable, clientIp } from "../../lib/rate-limit";
 import { getStaffContext } from "../../lib/rbac";
-import { staffEmail } from "../../lib/rules";
 
 /**
  * Staff authentication. Login/logout wrap Better Auth's username plugin so
@@ -44,64 +42,19 @@ export const adminAuth = new Elysia({ name: "routes/admin/auth", detail: { tags:
     auth.api.signOut({ headers: request.headers, asResponse: true }),
   )
 
-  /** Always `{ok:true}` — the response must not reveal whether the address
-   *  belongs to a staff account. The code only ever travels by email. */
-  .post(
-    "/admin/api/forgot-password",
-    async ({ body, request, server }) => {
-      const email = body.email.trim().toLowerCase();
-
-      const ip = clientIp(request, server);
-      if (
-        !(await allowHitDurable(`staff-forgot:${email}`, 3, 5 * 60_000)) ||
-        !(await allowHitDurable(`staff-forgot-ip:${ip}`, 10, 5 * 60_000))
-      ) {
-        throw new ApiError(429, "Too many attempts — try again in a few minutes");
-      }
-
-      const staff = await prisma.staff.findUnique({
-        where: { email },
-        select: { username: true },
-      });
-      if (staff) {
-        await auth.api.requestPasswordResetEmailOTP({
-          body: { email: staffEmail(staff.username) },
-        });
-      }
-
-      return { ok: true };
-    },
-    { body: forgotPasswordDto },
-  )
-
-  .post(
-    "/admin/api/reset-password",
-    async ({ body, request, server }) => {
-      const email = body.email.trim().toLowerCase();
-
-      const ip = clientIp(request, server);
-      if (
-        !(await allowHitDurable(`staff-reset:${email}`, 5, 5 * 60_000)) ||
-        !(await allowHitDurable(`staff-reset-ip:${ip}`, 10, 5 * 60_000))
-      ) {
-        throw new ApiError(429, "Too many attempts — try again in a few minutes");
-      }
-
-      const staff = await prisma.staff.findUnique({
-        where: { email },
-        select: { username: true },
-      });
-      // Same wording as a bad code — an unknown address and a wrong code are
-      // not worth distinguishing to an attacker.
-      if (!staff) throw badRequest("That code is invalid or has expired");
-
-      return auth.api.resetPasswordEmailOTP({
-        body: { email: staffEmail(staff.username), otp: body.otp, password: body.password },
-        asResponse: true,
-      });
-    },
-    { body: resetPasswordDto },
-  )
+  /*
+   * Staff self-service password reset used to live here — POST
+   * /admin/api/forgot-password and /admin/api/reset-password, mailing a code
+   * to Staff.email.
+   *
+   * Removed on purpose. A staff password is a session away from whatever that
+   * role can do, and the reset was only ever as strong as the mailbox behind
+   * it. A manager sets it instead (POST /admin/api/staff/:id/password), which
+   * puts a person who can verify who is asking in the loop.
+   *
+   * The CUSTOMER flow (routes/public/auth.ts) is untouched — it is keyed on
+   * the phone the customer signs in with and is self-service by design.
+   */
 
   /** The signed-in staff member + their effective permission matrix. */
   .get("/admin/api/me", async ({ request }) => {

@@ -44,6 +44,11 @@ const roles = [
         "homepage",
         "landingpages",
         "sitecontent",
+        /* Staff cannot reset their own passwords, so a manager sets them.
+           Narrower than `staff` on purpose — this is not permission to create,
+           delete or re-permission people, and a Super Admin target still
+           requires being one. */
+        "staffpassword",
       ],
     ),
   },

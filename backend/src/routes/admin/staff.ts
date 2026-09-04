@@ -3,6 +3,7 @@ import {
   createRoleDto,
   createStaffDto,
   type PermissionsDto,
+  setStaffPasswordDto,
   updateRoleDto,
   updateStaffDto,
 } from "../../dtos/staff.dto";
@@ -229,6 +230,64 @@ export const adminStaff = new Elysia({ name: "routes/admin/staff", detail: { tag
     await prisma.user.delete({ where: { id: existing.userId } });
     return { ok: true };
   })
+
+  /**
+   * Set a staff member's password.
+   *
+   * Staff have no self-service reset any more — the endpoints that mailed a
+   * code to `Staff.email` are gone (see routes/admin/auth.ts). A staff password
+   * is a session away from everything that role can do, and a reset was only
+   * ever as strong as the mailbox behind it; a person who can verify who is
+   * asking is now in the loop instead.
+   *
+   * Gated on `staffpassword`, not on `staff`. The seeded Manager holds
+   * `staff: none`, so requiring the broader module would have made this Super
+   * Admin only — and granting Manager the whole staff module to fix that would
+   * hand them staff creation, deletion and the permission matrix as well.
+   * Same carve-out as `orderadjust` against `orders`.
+   */
+  .post(
+    "/admin/api/staff/:id/password",
+    async ({ params, body, staffCtx }) => {
+      assertCan(staffCtx, "staffpassword", "manage");
+
+      const existing = await prisma.staff.findUnique({
+        where: { id: params.id },
+        include: { role: true },
+      });
+      if (!existing) throw notFound("Staff member");
+
+      /*
+       * The guard that matters most on this route.
+       *
+       * Without it, `staff: manage` is a one-step takeover: set the Super
+       * Admin's password, sign in as them, hold every permission in the
+       * matrix. Same rule as editing or deleting one of them.
+       */
+      if (existing.role.isSystem && !staffCtx.role.isSystem) {
+        throw forbidden("Only a Super Admin can set a Super Admin's password");
+      }
+
+      /*
+       * Better Auth exposes no admin set-password endpoint without its `admin`
+       * plugin, but the primitives behind one are reachable: hash with the
+       * configured hasher, then write through the internal adapter, which is
+       * exactly what its own reset flow does. Going through `$context` rather
+       * than writing the Account row directly means the hash format stays
+       * whatever Better Auth decides it is.
+       */
+      const ctx = await auth.$context;
+      await ctx.internalAdapter.updatePassword(
+        existing.userId,
+        await ctx.password.hash(body.password),
+      );
+
+      /* Deliberately no echo of the password and no log line containing it.
+         The manager typed it; they already know it. */
+      return { ok: true };
+    },
+    { body: setStaffPasswordDto },
+  )
 
   /* ===== Roles ===== */
 

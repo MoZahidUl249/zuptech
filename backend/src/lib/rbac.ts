@@ -43,6 +43,13 @@ export const ADMIN_MODULES = [
      money — switching one on is a spending decision, not a copy edit. */
   "messaging",
   "staff",
+  /* Setting another staff member's password, carved out of `staff` for the
+     same reason `orderadjust` is carved out of `orders`: staff no longer reset
+     their own passwords, so a manager needs to do it — but needing to change
+     somebody's password is not a reason to also be able to create staff,
+     delete them, or edit the permission matrix. A Super Admin target still
+     requires being one (routes/admin/staff.ts). */
+  "staffpassword",
   /* Correcting an order's delivery zone or its charges after it was placed.
      Separate from `orders` on purpose: all three seeded roles hold
      `orders: manage` — including Support — and moving money on a placed order
@@ -116,6 +123,7 @@ export function normalizePermissions(raw: unknown): PermissionMatrix {
     shipping: "none",
     messaging: "none",
     staff: "none",
+    staffpassword: "none",
     orderadjust: "none",
   };
   for (const module of ADMIN_MODULES) {
