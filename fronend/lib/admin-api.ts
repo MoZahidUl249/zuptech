@@ -475,7 +475,15 @@ export const deleteCourier = (id: string) =>
 /** Hand an order to a courier. For an API courier this books the parcel. */
 export const bookShipment = (
   orderId: string,
-  body: { courierId: string; riderId?: string | null; consignmentId?: string; trackingCode?: string; note?: string },
+  body: {
+    courierId: string;
+    /** Confirm the order in the same call — see the DTO's note on why it is one act. */
+    confirm?: boolean;
+    riderId?: string | null;
+    consignmentId?: string;
+    trackingCode?: string;
+    note?: string;
+  },
 ) => unwrap(api.admin.api.orders({ id: orderId }).shipment.post(body), "POST /admin/api/orders/:id/shipment");
 
 export const getShipment = (orderId: string) =>

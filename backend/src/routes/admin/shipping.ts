@@ -278,7 +278,18 @@ export const adminShipping = new Elysia({
         raw = booked.raw;
       }
 
-      const shipment = await prisma.$transaction(async (tx) => {
+      /*
+       * From here the parcel may already exist at the courier.
+       *
+       * The API call above deliberately runs OUTSIDE the transaction — a
+       * network round trip inside one holds a row lock for its whole duration,
+       * and a slow courier would then block everything touching that order.
+       * The cost is this window: booked with them, not yet recorded with us.
+       * It cannot be closed, only made loud, so a failure here prints the
+       * consignment id at error level and says what to do about it.
+       */
+      const shipment = await prisma
+        .$transaction(async (tx) => {
         const created = await tx.shipment.create({
           data: {
             orderId: order.id,
@@ -311,11 +322,40 @@ export const adminShipping = new Elysia({
           staffCtx,
         );
 
+        /*
+         * Confirm in the same transaction as the booking.
+         *
+         * This is what makes "Confirm & hand to courier" one act rather than
+         * two: either the order is confirmed AND has a courier, or neither
+         * happened. A confirmed order with nothing carrying it is precisely
+         * the state this flow exists to make unreachable.
+         *
+         * Only ever forward from Processing. An order already Confirmed (by a
+         * payment, say) is left where it is — `setOrderStatus` is a no-op when
+         * the status already matches, but being explicit here keeps a late
+         * booking from looking like it re-confirmed anything.
+         */
+        if (body.confirm && order.status === "Processing") {
+          await setOrderStatus(tx, order.id, "Confirmed", staffCtx.staff.username);
+          await logOrderEvent(tx, order.id, "status", "Processing → Confirmed", staffCtx);
+        }
+
         return tx.shipment.findUniqueOrThrow({
           where: { id: created.id },
           include: shipmentInclude,
         });
-      });
+        })
+        .catch((err: unknown) => {
+          if (adapter && consignmentId) {
+            console.error(
+              `[shipping] BOOKED BUT NOT RECORDED — ${courier.name} consignment ${consignmentId} ` +
+                `exists for order ${order.id}, and writing it here failed. Cancel it with the ` +
+                `courier or attach it by hand; the customer's parcel is real either way.`,
+              err,
+            );
+          }
+          throw err;
+        });
 
       set.status = 201;
       return toShipment(shipment);
