@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { composeAddress, stripComposedAddress } from "@/lib/address";
-import { ApiError, placeOrder } from "@/lib/api";
+import { ApiError, placeOrder, startPayment } from "@/lib/api";
 import { usePaymentOptions } from "@/lib/admin-bridge";
 import { useCart } from "@/lib/cart";
 import {
@@ -20,6 +20,7 @@ import type { Product } from "@/lib/products";
 import { cartToItems, useQuote } from "@/lib/quote";
 import { trackBeginCheckout, trackPurchase, type TrackedItem } from "@/lib/analytics";
 import { buildCustomerMatch } from "@/lib/customer-match";
+import { PENDING_PURCHASE_KEY } from "@/lib/pending-purchase";
 import { formatBDT } from "@/lib/site";
 import { useDeliveryZone } from "@/lib/zone";
 import { CustomerFields, normalizePhone, validateCustomer } from "./customer-fields";
@@ -113,6 +114,8 @@ export function CheckoutFlow({ products = [] }: { products?: Product[] }) {
     payChoice && payDefs.some((p) => p.label === payChoice)
       ? payChoice
       : (payDefs[0]?.label ?? "Cash on Delivery");
+  /** Chosen method redirects to a gateway before the order is paid for. */
+  const payIsOnline = payDefs.some((p) => p.label === pay && p.online);
 
   const { quote, error: quoteError } = useQuote(cartToItems(cart), insideDhaka);
 
@@ -191,16 +194,48 @@ export function CheckoutFlow({ products = [] }: { products?: Product[] }) {
         email: signedIn ? customer!.email : null,
         insideDhaka,
       });
-      trackPurchase(
-        order.orderId,
-        order.total,
-        trackedItems(),
-        {
+      const purchase = {
+        orderId: order.orderId,
+        total: order.total,
+        items: trackedItems(),
+        params: {
           payment_type: pay,
           // The quote is what priced this order, and it is still in hand here.
           shipping: quote?.deliveryFee ?? 0,
         },
         customerMatch,
+      };
+
+      /*
+       * An online payment leaves the site before it is a sale.
+       *
+       * The order exists and is real, but nothing has been paid yet — firing
+       * Purchase here would count every abandoned gateway page as revenue and
+       * quietly wreck the one number the whole funnel is optimised against.
+       * The event is handed to the return page instead, which fires it only
+       * after the backend has confirmed the payment with the gateway.
+       *
+       * Session storage, not local: it belongs to this tab and this checkout,
+       * and must not outlive them.
+       */
+      if (payIsOnline) {
+        try {
+          sessionStorage.setItem(PENDING_PURCHASE_KEY, JSON.stringify(purchase));
+        } catch {
+          // A blocked storage costs an analytics event, never the order.
+        }
+        const session = await startPayment(order.orderId, order.payToken);
+        clear();
+        window.location.href = session.redirectUrl;
+        return;
+      }
+
+      trackPurchase(
+        purchase.orderId,
+        purchase.total,
+        purchase.items,
+        purchase.params,
+        purchase.customerMatch,
       );
       setDone({
         orderId: order.orderId,

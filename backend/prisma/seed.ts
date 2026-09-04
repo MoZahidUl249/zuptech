@@ -250,6 +250,16 @@ const paymentMethods = [
   { id: "nagad", name: "Nagad", kind: "Mobile wallet", provider: "Nagad PGW", providers: ["Nagad PGW"], enabled: false, environment: "Live", apiKey: "MID: ZUP0192837", apiSecret: "ng_live_c210d84feaa1", webhookUrl: "https://api.zuptech.com/pay/nagad", isGateway: true, sort: 1 },
   { id: "card", name: "Cards (Visa / Mastercard)", kind: "Card gateway", provider: "SSLCommerz", providers: ["SSLCommerz", "AamarPay", "Stripe"], enabled: false, environment: "Test", apiKey: "store_id: zuptechlive", apiSecret: "ssl_test_91b2ac0377", webhookUrl: "https://api.zuptech.com/pay/card", isGateway: true, sort: 2 },
   { id: "cod", name: "Cash on Delivery", kind: "Offline", provider: "Manual", providers: ["Manual"], enabled: true, environment: "Live", apiKey: "", apiSecret: "", webhookUrl: "", isGateway: false, sort: 3 },
+  /* EPS is the one real gateway integration (lib/payments/eps.ts). Seeded
+     DISABLED and with no credentials: it does nothing until someone enters the
+     five EPS credentials in the admin panel and turns it on, which is the
+     right default for a method that moves money.
+
+     Note the upsert below rewrites `enabled` on every seed run. Re-seeding a
+     live box would therefore switch online payment off — `credentials` is not
+     in this object, so the secrets themselves survive. Turning it back on is
+     one toggle, but know that before running the seed against production. */
+  { id: "eps", name: "Pay online (cards, bKash, Nagad)", kind: "Card gateway", provider: "EPS", providers: ["EPS"], enabled: false, environment: "Test", apiKey: "", apiSecret: "", webhookUrl: "https://api.zuptech.com/pay/eps", isGateway: true, sort: 5 },
   { id: "rocket", name: "Rocket", kind: "Mobile wallet", provider: "DBBL Rocket", providers: ["DBBL Rocket"], enabled: false, environment: "Test", apiKey: "", apiSecret: "", webhookUrl: "", isGateway: true, sort: 4 },
 ];
 
