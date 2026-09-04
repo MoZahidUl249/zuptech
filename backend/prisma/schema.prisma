@@ -1036,6 +1036,43 @@ model PaymentTransaction {
   @@index([status])
 }
 
+/// ===== Messaging =====
+
+/// SMS provider configuration and which messages are switched on.
+///
+/// A table of its own, deliberately NOT fields on SiteConfig: that row is
+/// served by the PUBLIC `GET /api/site-config`, so an API key living there
+/// would be one careless serializer field away from the storefront. Nothing
+/// public ever reads this model.
+///
+/// Single row, `id = 1`, same shape of singleton as SiteConfig.
+model SmsSettings {
+  id Int @id @default(1)
+
+  /// Master switch. Off means nothing is sent, whatever the per-message
+  /// toggles say — one place to stop the bleeding if a provider misbehaves.
+  enabled  Boolean @default(false)
+  provider String  @default("mimsms")
+
+  /// Write-only, masked in responses — same discipline as PaymentMethod.
+  username String @default("")
+  apiKey   String @default("")
+  /// The registered sender name. Wrong value = every send rejected, so it is
+  /// configuration rather than a constant.
+  senderId String @default("")
+  /// Overridable so a host change does not need a deploy.
+  baseUrl  String @default("https://api.mimsms.com")
+
+  /// Which messages go out. Each one costs money per send, so each is its own
+  /// decision rather than a single "notifications" flag.
+  otpEnabled       Boolean @default(true)
+  placedEnabled    Boolean @default(true)
+  shippedEnabled   Boolean @default(true)
+  deliveredEnabled Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+}
+
 /// ===== Fulfilment =====
 
 /// How an order physically reaches the customer.

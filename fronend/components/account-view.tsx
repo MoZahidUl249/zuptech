@@ -75,11 +75,11 @@ const copy: Record<Mode, { title: string; subtitle: string }> = {
   },
   "forgot-request": {
     title: "Reset your password",
-    subtitle: "Enter your email address and we'll send you a 6-digit code.",
+    subtitle: "Enter your phone number and we'll text you a 6-digit code.",
   },
   "forgot-reset": {
     title: "Choose a new password",
-    subtitle: "Enter the code we emailed you, along with your new password.",
+    subtitle: "Enter the code we sent you, along with your new password.",
   },
 };
 
@@ -651,19 +651,19 @@ export function AccountView({ productNames }: { productNames: Record<string, str
   };
 
   const requestReset = async () => {
-    if (!EMAIL_RE.test(cleanEmail)) {
-      setError("Enter the email address on your account.");
+    if (!/^01\d{9}$/.test(cleanPhone)) {
+      setError("Enter the phone number on your account.");
       return;
     }
     setBusy(true);
     setError("");
     try {
-      await requestPasswordReset(cleanEmail);
+      await requestPasswordReset(cleanPhone);
       setResetToken("");
       setMode("forgot-reset");
-      // Deliberately unconditional — the server won't say whether the address
+      // Deliberately unconditional — the server won't say whether the number
       // has an account, so this message can't either.
-      toast.success("If that email has an account, a code is on its way");
+      toast.success("If that number has an account, a code is on its way");
     } catch {
       setError("Couldn't send a code — please try again.");
     } finally {
@@ -673,7 +673,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
 
   const confirmReset = async () => {
     if (resetToken.length !== 6) {
-      setError("Enter the 6-digit code we emailed you.");
+      setError("Enter the 6-digit code we sent you.");
       return;
     }
     if (password.length < 6) {
@@ -687,7 +687,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
     setBusy(true);
     setError("");
     try {
-      await resetPassword(cleanEmail, resetToken, password);
+      await resetPassword(cleanPhone, resetToken, password);
       toast.success("Password reset — sign in with your new password");
       setResetToken("");
       setPassword("");
@@ -902,7 +902,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
               </div>
             ) : null}
 
-            {mode === "register" || mode === "forgot-request" ? (
+            {mode === "register" ? (
               <div className="flex flex-col gap-2">
                 <label htmlFor="account-email" className="text-[13px] font-semibold text-zup-mid">
                   Email address
@@ -993,7 +993,7 @@ export function AccountView({ productNames }: { productNames: Record<string, str
               <>
                 <div className="flex flex-col gap-2">
                   <label htmlFor="account-reset-otp" className="text-[13px] font-semibold text-zup-mid">
-                    Enter the 6-digit code sent to {cleanEmail}
+                    Enter the 6-digit code sent to {cleanPhone}
                   </label>
                   <OtpInput
                     id="account-reset-otp"
