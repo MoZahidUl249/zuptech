@@ -332,19 +332,24 @@ export async function claimAccount(
   );
 }
 
-/** Mails a 6-digit code. Always succeeds — the response never reveals whether
- *  the address belongs to an account, and the code only travels by email. */
-export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
+/**
+ * Texts a 6-digit code to the phone the account signs in with.
+ *
+ * Always succeeds — the response never reveals whether the number belongs to
+ * an account, and the code only travels by SMS (or email, for the accounts
+ * that have an address on file). It is never in a response body.
+ */
+export async function requestPasswordReset(phone: string): Promise<{ ok: boolean }> {
   return unwrap(
-    api.api.auth["forgot-password"].post({ email }),
+    api.api.auth["forgot-password"].post({ phone }),
     "POST /api/auth/forgot-password",
   );
 }
 
 /** otp is the 6-digit code from requestPasswordReset. */
-export async function resetPassword(email: string, otp: string, password: string): Promise<void> {
+export async function resetPassword(phone: string, otp: string, password: string): Promise<void> {
   await unwrap(
-    api.api.auth["reset-password"].post({ email, otp, password }),
+    api.api.auth["reset-password"].post({ phone, otp, password }),
     "POST /api/auth/reset-password",
   );
 }

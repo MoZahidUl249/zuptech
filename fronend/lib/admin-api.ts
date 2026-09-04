@@ -20,6 +20,7 @@ import type {
   Permission,
   Role,
   SiteContact,
+  SmsSettings,
   SiteCopy,
   StaffMember,
   StockTag,
@@ -193,6 +194,7 @@ export async function loadAdminState(
     slides,
     payments,
     couriers,
+    sms,
     suppliers,
     purchaseOrders,
     movements,
@@ -226,6 +228,12 @@ export async function loadAdminState(
       [],
     ),
     slice("shipping", "Couriers", () => unwrap(api.admin.api.couriers.get(), "GET /admin/api/couriers"), []),
+    slice(
+      "messaging",
+      "Text messages",
+      () => unwrap(api.admin.api["sms-settings"].get(), "GET /admin/api/sms-settings"),
+      emptyState().sms,
+    ),
     slice("inventory", "Suppliers", () => unwrap(api.admin.api.suppliers.get(), "GET /admin/api/suppliers"), []),
     slice(
       "inventory",
@@ -279,6 +287,7 @@ export async function loadAdminState(
       integrations,
       payments,
       couriers,
+      sms,
       suppliers,
       purchaseOrders: purchaseOrders.map((po) => ({ ...po, eta: shortDate(po.eta) })),
       movements: movements.map((m) => ({ ...m, date: shortDateTime(m.date) })),
@@ -467,6 +476,9 @@ export const putPaymentMethod = (id: string, body: Partial<PaymentMethod>) =>
 
 export const createCourier = (body: Courier) =>
   unwrap(api.admin.api.couriers.post(body), "POST /admin/api/couriers");
+export const putSmsSettings = (body: Partial<SmsSettings>) =>
+  unwrap(api.admin.api["sms-settings"].put(body), "PUT /admin/api/sms-settings");
+
 export const putCourier = (id: string, body: Partial<Courier>) =>
   unwrap(api.admin.api.couriers({ id }).put(body), "PUT /admin/api/couriers/:id");
 export const deleteCourier = (id: string) =>

@@ -4,6 +4,7 @@ import { emailOTP, username } from "better-auth/plugins";
 import { prisma } from "./db";
 import { otpEmail, sendMail } from "./mail";
 import { parseInternalEmail } from "./rules";
+import { notify, otpSms } from "./sms";
 
 /**
  * Better Auth handles both audiences, both via email+password:
@@ -77,6 +78,26 @@ export const auth = betterAuth({
       // — sign-in/email-verification/change-email OTPs are never requested.
       sendVerificationOTP: async ({ email, otp, type }) => {
         if (type !== "forget-password") return;
+
+        /*
+         * Customers get the code by SMS, because a phone is the only contact
+         * detail they are guaranteed to have.
+         *
+         * The account IS a phone number — `parseInternalEmail` hands it back
+         * directly — while `Customer.email` is nullable and empty for every
+         * guest checkout. Email-only delivery meant this function looked up an
+         * address, found none, and returned silently: password reset did
+         * nothing at all for most of the customer base.
+         *
+         * Email stays as a fallback for the customers who do have an address,
+         * so switching SMS off does not take a working path away from them.
+         */
+        const parsed = parseInternalEmail(email);
+
+        if (parsed?.audience === "customer") {
+          const sent = await notify("otp", parsed.key, otpSms(otp));
+          if (sent) return;
+        }
 
         // An account with no address on file (legacy signup, guest checkout,
         // staff created before the email field) simply gets nothing. Silence

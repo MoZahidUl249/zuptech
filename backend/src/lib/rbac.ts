@@ -38,6 +38,10 @@ export const ADMIN_MODULES = [
      because courier credentials live behind it, exactly as gateway
      credentials live behind `payments`. */
   "shipping",
+  /* SMS provider credentials and which messages go out. Separate from
+     `sitecontent` because it holds a secret and because every send costs
+     money — switching one on is a spending decision, not a copy edit. */
+  "messaging",
   "staff",
   /* Correcting an order's delivery zone or its charges after it was placed.
      Separate from `orders` on purpose: all three seeded roles hold
@@ -110,6 +114,7 @@ export function normalizePermissions(raw: unknown): PermissionMatrix {
     sitecontent: "none",
     payments: "none",
     shipping: "none",
+    messaging: "none",
     staff: "none",
     orderadjust: "none",
   };

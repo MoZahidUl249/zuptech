@@ -10,6 +10,7 @@ import { adminInventory } from "./routes/admin/inventory";
 import { adminInvoices } from "./routes/admin/invoices";
 import { adminLandingPages } from "./routes/admin/landing-pages";
 import { adminLeadsCustomers } from "./routes/admin/leads-customers";
+import { adminMessaging } from "./routes/admin/messaging";
 import { adminMetrics } from "./routes/admin/metrics";
 import { adminOrders } from "./routes/admin/orders";
 import { adminPayments } from "./routes/admin/payments";
@@ -262,6 +263,7 @@ export function createApp({ quiet = false }: { quiet?: boolean } = {}) {
       .use(adminServices)
       .use(adminPayments)
       .use(adminShipping)
+      .use(adminMessaging)
       .use(adminStaff)
       .use(adminTeam)
   );

@@ -20,6 +20,23 @@ export function isValidPhone(raw: string): boolean {
   return PHONE_RE.test(normalizePhone(raw));
 }
 
+/**
+ * International form for an SMS gateway: 8801XXXXXXXXX.
+ *
+ * Stored numbers are local (`01XXXXXXXXX`) because that is what a customer
+ * types and what the whole app compares on. Gateways want the country code, so
+ * the conversion happens once, here, at the edge — never by storing a second
+ * shape of the same number.
+ *
+ * Returns "" for anything that is not a valid local mobile, so a malformed
+ * number is dropped before it reaches a paid API rather than being sent as
+ * rubbish.
+ */
+export function toMsisdn(raw: string): string {
+  const local = normalizePhone(raw);
+  return PHONE_RE.test(local) ? `88${local}` : "";
+}
+
 /* ===== Internal sign-in identifiers =====
  *
  * Better Auth requires an email per account, but neither audience signs in

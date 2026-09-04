@@ -20,6 +20,7 @@ import {
   type ShipmentStatus,
 } from "../../lib/rules";
 import { toCourier, toShipment } from "../../lib/serialize";
+import { notify, orderDeliveredSms, orderShippedSms } from "../../lib/sms";
 import { adapterFor } from "../../lib/shipping";
 import { ORDER_STATUS_FOR } from "../../lib/shipping/types";
 import { staffGuard } from "./guard";
@@ -357,6 +358,14 @@ export const adminShipping = new Elysia({
           throw err;
         });
 
+      /* After the transaction, for the reason given in public/orders.ts:
+         a send inside one holds locks, and a rollback cannot unsend. */
+      void notify(
+        "shipped",
+        order.phone,
+        orderShippedSms(order.id, courier.name, shipment.trackingCode),
+      );
+
       set.status = 201;
       return toShipment(shipment);
     },
@@ -381,7 +390,11 @@ export const adminShipping = new Elysia({
 
       const shipment = await prisma.shipment.findUnique({
         where: { id: params.id },
-        include: { courier: { select: { kind: true, name: true } } },
+        include: {
+          courier: { select: { kind: true, name: true } },
+          // The customer's number, for the delivered message below.
+          order: { select: { phone: true } },
+        },
       });
       if (!shipment) throw notFound("Shipment");
 
@@ -430,6 +443,12 @@ export const adminShipping = new Elysia({
           include: shipmentInclude,
         });
       });
+
+      /* Only on the transition, not on every save of an already-delivered
+         shipment — otherwise editing a note would text the customer again. */
+      if (body.status === "Delivered" && shipment.status !== "Delivered") {
+        void notify("delivered", shipment.order.phone, orderDeliveredSms(shipment.orderId));
+      }
 
       return toShipment(updated);
     },

@@ -9,6 +9,7 @@ import { logOrderEvent } from "../../lib/order-events";
 import { orderSummary, priceCart, resolveCampaignPricing } from "../../lib/pricing";
 import { allowHit, clientIp } from "../../lib/rate-limit";
 import { isValidPhone, normalizePhone } from "../../lib/rules";
+import { notify, orderPlacedSms } from "../../lib/sms";
 import { toCheckoutOrder, toCustomerProfile, toOrder } from "../../lib/serialize";
 
 /**
@@ -210,6 +211,16 @@ export const publicOrders = new Elysia({ name: "routes/public/orders", detail: {
 
         return created;
       });
+
+      /*
+       * Tell the customer we have it.
+       *
+       * After the transaction, never inside it: an HTTP call under an open
+       * transaction holds row locks for its duration, and a rollback cannot
+       * unsend a message. `notify` swallows its own failures, so a provider
+       * outage costs a text message and not the sale.
+       */
+      void notify("placed", order.phone, orderPlacedSms(order.id, order.total));
 
       set.status = 201;
       return toCheckoutOrder(order, orderSummary(cart.lines));

@@ -1,6 +1,7 @@
 import type {
   AdminOrderDto,
   CourierDto,
+  SmsSettingsDto,
   ShipmentDto,
   AdminOrderItemDto,
   AdminProductDto,
@@ -55,6 +56,7 @@ import type {
   Service,
   ServiceLead,
   Shipment,
+  SmsSettings,
   ShipmentEvent,
   ShowcaseCard,
   Staff,
@@ -851,6 +853,30 @@ export function toPaymentMethod(m: PaymentMethod): PaymentMethodDto {
     credentials: maskCredentials(m.credentials),
     webhookUrl: m.webhookUrl,
     isGateway: m.isGateway,
+  };
+}
+
+/* ===== Messaging ===== */
+
+/**
+ * SMS settings for the admin screen.
+ *
+ * `username` is masked alongside the key. It is the account's login email at
+ * the provider, which is half of a credential pair and worth no more exposure
+ * than the other half.
+ */
+export function toSmsSettings(s: SmsSettings): SmsSettingsDto {
+  return {
+    enabled: s.enabled,
+    provider: s.provider,
+    username: maskSecret(s.username),
+    apiKey: maskSecret(s.apiKey),
+    senderId: s.senderId,
+    baseUrl: s.baseUrl,
+    otpEnabled: s.otpEnabled,
+    placedEnabled: s.placedEnabled,
+    shippedEnabled: s.shippedEnabled,
+    deliveredEnabled: s.deliveredEnabled,
   };
 }
 

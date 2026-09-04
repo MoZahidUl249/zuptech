@@ -35,8 +35,26 @@ export const claimAccountDto = t.Object({
   email: t.Optional(t.String({ format: "email", maxLength: 200 })),
 });
 
-/** Reset is keyed on the real email address, for both audiences — that's the
- *  only identifier that's also a delivery destination. */
+/**
+ * Customer reset is keyed on the PHONE, because that is the identifier a
+ * customer signs in with and the one every account is guaranteed to have.
+ *
+ * It was keyed on `Customer.email`, which is nullable and empty for every
+ * guest checkout — so the customers who most needed a reset could not even ask
+ * for one. The code now goes to the phone by SMS (lib/sms), falling back to
+ * email for the accounts that have one.
+ */
+export const forgotPasswordPhoneDto = t.Object({
+  phone: t.String({ minLength: 6, maxLength: 20 }),
+});
+
+export const resetPasswordPhoneDto = t.Object({
+  phone: t.String({ minLength: 6, maxLength: 20 }),
+  otp: t.String({ minLength: 6, maxLength: 6, pattern: "^[0-9]{6}$" }),
+  password: t.String({ minLength: 6, maxLength: 200 }),
+});
+
+/** Staff reset stays keyed on the real email address — see routes/admin/auth.ts. */
 export const forgotPasswordDto = t.Object({
   email: t.String({ format: "email", maxLength: 200 }),
 });
@@ -53,4 +71,6 @@ export type RegisterCustomerDto = typeof registerCustomerDto.static;
 export type LoginCustomerDto = typeof loginCustomerDto.static;
 export type ClaimAccountDto = typeof claimAccountDto.static;
 export type ForgotPasswordDto = typeof forgotPasswordDto.static;
+export type ForgotPasswordPhoneDto = typeof forgotPasswordPhoneDto.static;
+export type ResetPasswordPhoneDto = typeof resetPasswordPhoneDto.static;
 export type ResetPasswordDto = typeof resetPasswordDto.static;

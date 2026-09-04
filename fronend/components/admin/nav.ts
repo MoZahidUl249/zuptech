@@ -8,6 +8,7 @@ import {
   House,
   LayoutDashboard,
   Megaphone,
+  MessageSquare,
   Package,
   PenLine,
   PhoneCall,
@@ -253,6 +254,13 @@ export const NAV_GROUPS: AdminNavGroup[] = [
         icon: Truck,
         module: "shipping",
         help: "Who carries your parcels — your own riders, or a courier.",
+      },
+      {
+        href: "/admin/settings/messaging",
+        label: "Text messages",
+        icon: MessageSquare,
+        module: "messaging",
+        help: "Which texts customers get, and the account they are sent through.",
       },
       {
         href: "/admin/settings/staff",

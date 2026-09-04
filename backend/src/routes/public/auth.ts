@@ -1,10 +1,10 @@
 import { Elysia } from "elysia";
 import {
   claimAccountDto,
-  forgotPasswordDto,
+  forgotPasswordPhoneDto,
   loginCustomerDto,
   registerCustomerDto,
-  resetPasswordDto,
+  resetPasswordPhoneDto,
 } from "../../dtos/auth.dto";
 import { auth } from "../../lib/auth";
 import { prisma } from "../../lib/db";
@@ -169,73 +169,71 @@ export const customerAuth = new Elysia({ name: "routes/public/auth", detail: { t
   )
 
   /**
-   * Send a reset code to a customer's email. Always 200 with `{ok:true}`,
-   * whether or not the address belongs to an account — the response must not
-   * become an account-existence oracle. The code only ever travels by email;
-   * it is never echoed in a response body.
+   * Send a reset code to a customer's PHONE. Always 200 with `{ok:true}`,
+   * whether or not the number belongs to an account — the response must not
+   * become an account-existence oracle. The code only ever travels by SMS (or
+   * email, for the accounts that have an address); it is never echoed in a
+   * response body.
+   *
+   * Keyed on the phone because that is what a customer signs in with. It used
+   * to be keyed on `Customer.email`, which is nullable and empty for every
+   * guest checkout — so the customers least likely to remember a password were
+   * the ones who could not ask for a reset at all.
    */
   .post(
     "/api/auth/forgot-password",
     async ({ body, request, server }) => {
-      const email = body.email.trim().toLowerCase();
+      const phone = normalizePhone(body.phone);
 
       const ip = clientIp(request, server);
       if (
-        !(await allowHitDurable(`forgot:${email}`, 3, 5 * 60_000)) ||
+        !(await allowHitDurable(`forgot:${phone}`, 3, 5 * 60_000)) ||
         !(await allowHitDurable(`forgot-ip:${ip}`, 10, 5 * 60_000))
       ) {
         throw new ApiError(429, "Too many attempts — try again in a few minutes");
       }
 
-      const customer = await prisma.customer.findUnique({
-        where: { email },
-        select: { phone: true },
-      });
-      if (customer) {
+      if (isValidPhone(phone)) {
         // Better Auth's email-otp plugin generates + stores the code and calls
-        // sendVerificationOTP (lib/auth.ts), which resolves this synthetic
-        // address back to the customer's real inbox. It silently no-ops for a
-        // phone with no auth account behind it (guest checkout).
+        // sendVerificationOTP (lib/auth.ts), which sends it by SMS to this
+        // number. It silently no-ops for a phone with no auth account behind
+        // it (guest checkout), which is what keeps this from being an oracle.
         await auth.api.requestPasswordResetEmailOTP({
-          body: { email: customerEmail(customer.phone) },
+          body: { email: customerEmail(phone) },
         });
       }
 
       return { ok: true };
     },
-    { body: forgotPasswordDto },
+    { body: forgotPasswordPhoneDto },
   )
 
   .post(
     "/api/auth/reset-password",
     async ({ body, request, server }) => {
-      const email = body.email.trim().toLowerCase();
+      const phone = normalizePhone(body.phone);
 
       const ip = clientIp(request, server);
       if (
         !(await allowHitDurable(`reset-ip:${ip}`, 10, 5 * 60_000)) ||
-        !(await allowHitDurable(`reset:${email}`, 5, 5 * 60_000))
+        !(await allowHitDurable(`reset:${phone}`, 5, 5 * 60_000))
       ) {
         throw new ApiError(429, "Too many attempts — try again in a few minutes");
       }
 
-      const customer = await prisma.customer.findUnique({
-        where: { email },
-        select: { phone: true },
-      });
-      // Same wording as an invalid code: whether the address exists and
+      // Same wording as an invalid code: whether the number has an account and
       // whether the code was wrong are not worth distinguishing to an attacker.
-      if (!customer) throw badRequest("That code is invalid or has expired");
+      if (!isValidPhone(phone)) throw badRequest("That code is invalid or has expired");
 
       // Verifies + consumes the OTP and updates the credential account
       // atomically; asResponse forwards Better Auth's own error status for
       // an invalid/expired/too-many-attempts code.
       return auth.api.resetPasswordEmailOTP({
-        body: { email: customerEmail(customer.phone), otp: body.otp, password: body.password },
+        body: { email: customerEmail(phone), otp: body.otp, password: body.password },
         asResponse: true,
       });
     },
-    { body: resetPasswordDto },
+    { body: resetPasswordPhoneDto },
   )
 
   /** Sign out (customers). Staff use POST /admin/api/logout. */

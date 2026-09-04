@@ -608,6 +608,20 @@ export interface PaymentMethodDto {
   isGateway: boolean;
 }
 
+export interface SmsSettingsDto {
+  enabled: boolean;
+  provider: string;
+  /** Masked. "" means the field has never been set. */
+  username: string;
+  apiKey: string;
+  senderId: string;
+  baseUrl: string;
+  otpEnabled: boolean;
+  placedEnabled: boolean;
+  shippedEnabled: boolean;
+  deliveredEnabled: boolean;
+}
+
 export interface CourierDto {
   id: string;
   name: string;

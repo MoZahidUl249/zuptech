@@ -37,6 +37,8 @@ export const ADMIN_MODULES = [
   /* See the note in backend rbac.ts: couriers, bookings and rider
      assignment, deliberately separate from `orders`. */
   "shipping",
+  /* See the note in backend rbac.ts: SMS credentials and message switches. */
+  "messaging",
   "staff",
   "landingpages",
   /* See the note in backend rbac.ts: correcting a placed order's zone or
@@ -586,6 +588,25 @@ export interface Courier {
   shipmentCount?: number;
 }
 
+/**
+ * SMS provider settings and which messages go out.
+ *
+ * `username` and `apiKey` arrive masked; leaving them untouched keeps the
+ * stored value. Every toggle costs money per send when it is on.
+ */
+export interface SmsSettings {
+  enabled: boolean;
+  provider: string;
+  username: string;
+  apiKey: string;
+  senderId: string;
+  baseUrl: string;
+  otpEnabled: boolean;
+  placedEnabled: boolean;
+  shippedEnabled: boolean;
+  deliveredEnabled: boolean;
+}
+
 export interface AdminState {
   roles: Role[];
   staff: StaffMember[];
@@ -609,6 +630,7 @@ export interface AdminState {
   integrations: Integrations;
   payments: PaymentMethod[];
   couriers: Courier[];
+  sms: SmsSettings;
   suppliers: Supplier[];
   purchaseOrders: PurchaseOrder[];
   movements: StockMovement[];
@@ -685,6 +707,18 @@ export function emptyState(): AdminState {
     integrations: { gtmId: "", gtmEnabled: false },
     payments: [],
     couriers: [],
+    sms: {
+      enabled: false,
+      provider: "mimsms",
+      username: "",
+      apiKey: "",
+      senderId: "",
+      baseUrl: "https://api.mimsms.com",
+      otpEnabled: true,
+      placedEnabled: true,
+      shippedEnabled: true,
+      deliveredEnabled: false,
+    },
     suppliers: [],
     purchaseOrders: [],
     movements: [],
@@ -904,6 +938,13 @@ async function syncKeys(
       });
     }
     if (added.length > 0) reload.add("couriers");
+  });
+
+  await run("sms", async () => {
+    if (JSON.stringify(prev.sms) === JSON.stringify(next.sms)) return;
+    /* The masked credentials round-trip unchanged unless retyped; the server
+       treats a mask as "keep stored", so sending the object whole is safe. */
+    await api.putSmsSettings(next.sms);
   });
 
   await run("suppliers", async () => {
