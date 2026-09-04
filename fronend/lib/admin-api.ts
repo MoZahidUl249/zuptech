@@ -52,14 +52,18 @@ export async function adminLogin(username: string, password: string): Promise<bo
   return res.ok;
 }
 
-/** Mails a 6-digit reset code. Always resolves, whether or not the address
- *  belongs to a staff account — the server won't say, and neither do we. */
-export const adminForgotPassword = (email: string) =>
-  unwrap(api.admin.api["forgot-password"].post({ email }), "POST /admin/api/forgot-password");
-
-/** Consumes the code from adminForgotPassword and sets the new password. */
-export const adminResetPassword = (email: string, otp: string, password: string) =>
-  unwrap(api.admin.api["reset-password"].post({ email, otp, password }), "POST /admin/api/reset-password");
+/**
+ * Set another staff member's password.
+ *
+ * Staff self-service reset is gone — see routes/admin/auth.ts. Needs
+ * `staff: manage`, and the server refuses a Super Admin target unless the
+ * caller is one.
+ */
+export const setStaffPassword = (id: string, password: string) =>
+  unwrap(
+    api.admin.api.staff({ id }).password.post({ password }),
+    "POST /admin/api/staff/:id/password",
+  );
 
 export async function adminLogout(): Promise<void> {
   await fetch("/admin/api/logout", { method: "POST" });
