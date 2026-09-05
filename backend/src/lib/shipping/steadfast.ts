@@ -1,7 +1,9 @@
 import { ApiError, badRequest } from "../http";
 import type { ShipmentStatus } from "../rules";
+import { providerSpec } from "./providers";
 import type {
   BookingResult,
+  CheckResult,
   CourierAdapter,
   CourierConfig,
   ShipmentRequest,
@@ -21,11 +23,24 @@ import type {
  * Steadfast has no sandbox host: test and live are the same API with different
  * credentials, which is why `environment` here changes nothing but is still
  * carried — it is what the admin screen shows, and someone reading a booking
- * six months later needs to know which account made it.
+ * six months later needs to know which account made it. The screen says so
+ * too, from `providers.ts`, rather than implying a host switch it never makes.
  */
 
-const BASE = "https://portal.steadfast.com.bd/api/v1";
 const TIMEOUT_MS = 15_000;
+
+/**
+ * The API address, from configuration.
+ *
+ * It was a constant here, which made a host change a deploy. The provider's
+ * declared default is the fallback so an older row with a blank column still
+ * works — the migration backfills them, but a row created by hand would not be.
+ */
+function baseUrl(config: CourierConfig): string {
+  const configured = config.baseUrl?.trim();
+  const fallback = providerSpec("steadfast")?.defaultBaseUrl ?? "";
+  return (configured || fallback).replace(/\/+$/, "");
+}
 
 const courierError = (message: string) => new ApiError(502, `Steadfast: ${message}`);
 
@@ -48,7 +63,7 @@ async function call<T>(
 
   let response: Response;
   try {
-    response = await fetch(`${BASE}${path}`, {
+    response = await fetch(`${baseUrl(config)}${path}`, {
       method: init?.method ?? "GET",
       headers: {
         "Api-Key": apiKey,
@@ -109,6 +124,35 @@ export function mapSteadfastStatus(raw: string): ShipmentStatus | null {
 }
 
 export const steadfast: CourierAdapter = {
+  /**
+   * `/get_balance` — the cheapest thing Steadfast will answer.
+   *
+   * Chosen because it fails *distinctly*: a wrong key comes back as an auth
+   * error from the courier, an unreachable host as a transport failure. Both
+   * were previously indistinguishable from "booking failed" on a customer's
+   * real order.
+   */
+  async check(config): Promise<CheckResult> {
+    try {
+      const result = await call<{ status?: number; current_balance?: number | string }>(
+        "/get_balance",
+        config,
+      );
+      const balance = result.current_balance;
+      return {
+        ok: true,
+        detail:
+          balance === undefined
+            ? "Credentials accepted."
+            : `Credentials accepted. Account balance: ${balance}.`,
+      };
+    } catch (err) {
+      // `call` already turns transport and HTTP failures into a 502 ApiError
+      // whose message names the cause; a failed check is a report, not a throw.
+      return { ok: false, detail: err instanceof Error ? err.message : "Check failed" };
+    }
+  },
+
   async book(config, req: ShipmentRequest): Promise<BookingResult> {
     const result = await call<{
       status?: number;

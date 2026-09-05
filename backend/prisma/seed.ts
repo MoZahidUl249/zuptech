@@ -278,7 +278,7 @@ const paymentMethods = [
    run but leaves `credentials` alone (it is not in these objects). */
 const couriers = [
   { id: "self", name: "Own delivery", kind: "self", provider: "", enabled: true, environment: "Live", trackingUrl: "", sort: 0 },
-  { id: "steadfast", name: "Steadfast", kind: "api", provider: "steadfast", enabled: false, environment: "Test", trackingUrl: "https://steadfast.com.bd/t/{code}", sort: 1 },
+  { id: "steadfast", name: "Steadfast", kind: "api", provider: "steadfast", enabled: false, environment: "Test", baseUrl: "https://portal.steadfast.com.bd/api/v1", trackingUrl: "https://steadfast.com.bd/t/{code}", sort: 1 },
   { id: "other", name: "Other courier", kind: "manual", provider: "", enabled: true, environment: "Live", trackingUrl: "", sort: 2 },
 ];
 

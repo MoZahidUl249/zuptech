@@ -198,6 +198,7 @@ export async function loadAdminState(
     slides,
     payments,
     couriers,
+    courierProviders,
     sms,
     suppliers,
     purchaseOrders,
@@ -232,6 +233,12 @@ export async function loadAdminState(
       [],
     ),
     slice("shipping", "Couriers", () => unwrap(api.admin.api.couriers.get(), "GET /admin/api/couriers"), []),
+    slice(
+      "shipping",
+      "Courier providers",
+      () => unwrap(api.admin.api["courier-providers"].get(), "GET /admin/api/courier-providers"),
+      [],
+    ),
     slice(
       "messaging",
       "Text messages",
@@ -291,6 +298,7 @@ export async function loadAdminState(
       integrations,
       payments,
       couriers,
+      courierProviders,
       sms,
       suppliers,
       purchaseOrders: purchaseOrders.map((po) => ({ ...po, eta: shortDate(po.eta) })),
@@ -480,6 +488,16 @@ export const putPaymentMethod = (id: string, body: Partial<PaymentMethod>) =>
 
 export const createCourier = (body: Courier) =>
   unwrap(api.admin.api.couriers.post(body), "POST /admin/api/couriers");
+/**
+ * Ask a courier whether its saved credentials work.
+ *
+ * Deliberately takes no payload: it tests what the SERVER has, not what is
+ * typed in the form. A test of unsaved input confirms the typing and says
+ * nothing about what will happen tonight.
+ */
+export const testCourier = (id: string) =>
+  unwrap(api.admin.api.couriers({ id }).test.post(), "POST /admin/api/couriers/:id/test");
+
 export const putSmsSettings = (body: Partial<SmsSettings>) =>
   unwrap(api.admin.api["sms-settings"].put(body), "PUT /admin/api/sms-settings");
 

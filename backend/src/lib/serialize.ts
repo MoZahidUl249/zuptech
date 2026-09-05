@@ -900,6 +900,7 @@ export function toCourier(c: CourierRow): CourierDto {
     enabled: c.enabled,
     environment: coerceTo(PAYMENT_ENVIRONMENTS, c.environment, "Test"),
     credentials: maskCredentials(c.credentials),
+    baseUrl: c.baseUrl,
     trackingUrl: c.trackingUrl,
     ...(c._count ? { shipmentCount: c._count.shipments } : {}),
   };

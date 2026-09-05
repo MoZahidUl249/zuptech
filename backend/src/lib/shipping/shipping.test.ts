@@ -18,6 +18,7 @@ import { ORDER_STATUS_FOR } from "./types";
 const CONFIG = {
   credentials: { apiKey: "k", secretKey: "s" },
   environment: "Test" as const,
+  baseUrl: "https://portal.steadfast.com.bd/api/v1",
 };
 
 let calls: { url: string; headers: Record<string, string>; body: unknown }[] = [];
@@ -149,7 +150,7 @@ describe("steadfast.book", () => {
     courier({ consignment: { consignment_id: 1 } });
 
     expect(
-      steadfast.book({ credentials: { apiKey: "k" }, environment: "Test" }, request),
+      steadfast.book({ ...CONFIG, credentials: { apiKey: "k" } }, request),
     ).rejects.toThrow(/missing secretKey/);
     expect(calls).toHaveLength(0);
   });

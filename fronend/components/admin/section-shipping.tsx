@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useAdmin, type Courier } from "@/lib/admin";
+import { testCourier } from "@/lib/admin-api";
+import { useAdmin, type Courier, type CourierProvider } from "@/lib/admin";
 import { Card, KpiCard, Field, Pill, Toggle, BtnGhost, inputCls, selectCls } from "./ui";
 
 /**
@@ -70,6 +71,7 @@ export function ShippingSection() {
         <CourierCard
           key={c.id}
           c={c}
+          spec={state.courierProviders.find((p) => p.id === c.provider.trim().toLowerCase())}
           readOnly={readOnly}
           onChange={(patch) => setCourier(c.id, patch)}
         />
@@ -87,18 +89,38 @@ export function ShippingSection() {
 
 function CourierCard({
   c,
+  spec,
   readOnly,
   onChange,
 }: {
   c: Courier;
+  /** What this provider needs, as the backend declares it. */
+  spec: CourierProvider | undefined;
   readOnly: boolean;
   onChange: (patch: Partial<Courier>) => void;
 }) {
-  const [showSecret, setShowSecret] = useState(false);
+  const [shown, setShown] = useState<Record<string, boolean>>({});
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; detail: string } | null>(null);
   const creds = c.credentials ?? {};
 
   const setCred = (key: string, value: string) =>
     onChange({ credentials: { ...creds, [key]: value } });
+
+  const runTest = async () => {
+    setTesting(true);
+    setResult(null);
+    try {
+      setResult((await testCourier(c.id)) as { ok: boolean; detail: string });
+    } catch (err) {
+      setResult({
+        ok: false,
+        detail: err instanceof Error ? err.message : "Could not run the check",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <Card>
@@ -141,34 +163,61 @@ function CourierCard({
             <option>Live</option>
             <option>Test</option>
           </select>
+          {/* Says what the switch really does for this provider, rather than
+              implying a test server that may not exist. */}
+          {spec ? <p className="mt-1.5 text-xs text-zup-gray">{spec.environmentNote}</p> : null}
         </Field>
 
+        {/* Whatever this provider actually needs, named and explained. It used
+            to be a hardcoded "API key" and "Secret key" for every courier,
+            which is a guess the form had no way to get right. */}
+        {c.kind === "api" && spec
+          ? spec.fields.map((field) => (
+              <Field key={field.key} label={field.label} className="sm:col-span-2">
+                <div className="flex gap-2">
+                  <input
+                    type={field.secret && !shown[field.key] ? "password" : "text"}
+                    value={creds[field.key] ?? ""}
+                    disabled={readOnly}
+                    onChange={(e) => setCred(field.key, e.target.value)}
+                    aria-label={field.label}
+                    className={`${inputCls} min-w-0 flex-1 font-mono text-ui-sm`}
+                  />
+                  {field.secret ? (
+                    <BtnGhost
+                      className="min-h-10 px-4"
+                      onClick={() => setShown((v) => ({ ...v, [field.key]: !v[field.key] }))}
+                    >
+                      {shown[field.key] ? "Hide" : "Show"}
+                    </BtnGhost>
+                  ) : null}
+                </div>
+                <p className="mt-1.5 text-xs text-zup-gray">{field.help}</p>
+              </Field>
+            ))
+          : null}
+
+        {c.kind === "api" && !spec ? (
+          <p className="rounded-xl bg-warn-bg px-4 py-3 text-ui-sm sm:col-span-2">
+            No integration for &ldquo;{c.provider}&rdquo;. Bookings will be refused — set
+            this courier to <strong>Other courier</strong> and record consignment numbers
+            by hand, or use a supported provider.
+          </p>
+        ) : null}
+
         {c.kind === "api" ? (
-          <>
-            <Field label="API key" className="sm:col-span-2">
-              <input
-                value={creds.apiKey ?? ""}
-                disabled={readOnly}
-                onChange={(e) => setCred("apiKey", e.target.value)}
-                className={`${inputCls} font-mono text-ui-sm`}
-              />
-            </Field>
-            <Field label="Secret key" className="sm:col-span-2">
-              <div className="flex gap-2">
-                <input
-                  type={showSecret ? "text" : "password"}
-                  value={creds.secretKey ?? ""}
-                  disabled={readOnly}
-                  onChange={(e) => setCred("secretKey", e.target.value)}
-                  aria-label="Secret key"
-                  className={`${inputCls} min-w-0 flex-1 font-mono text-ui-sm`}
-                />
-                <BtnGhost onClick={() => setShowSecret((v) => !v)} className="min-h-10 px-4">
-                  {showSecret ? "Hide" : "Show"}
-                </BtnGhost>
-              </div>
-            </Field>
-          </>
+          <Field label="API address" className="sm:col-span-2">
+            <input
+              value={c.baseUrl}
+              disabled={readOnly}
+              onChange={(e) => onChange({ baseUrl: e.target.value })}
+              placeholder={spec?.defaultBaseUrl}
+              className={`${inputCls} font-mono text-ui-sm`}
+            />
+            <p className="mt-1.5 text-xs text-zup-gray">
+              Leave as-is unless {spec?.label ?? "the courier"} tells you otherwise.
+            </p>
+          </Field>
         ) : null}
 
         {c.kind !== "self" ? (
@@ -193,6 +242,27 @@ function CourierCard({
           </p>
         )}
       </div>
+
+      {c.kind === "api" && spec ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zup-body/8 pt-4">
+          <BtnGhost className="min-h-10" disabled={testing} onClick={() => void runTest()}>
+            {testing ? "Checking…" : "Check credentials"}
+          </BtnGhost>
+          <p className="text-xs text-zup-gray">
+            Asks {spec.label} whether the <strong>saved</strong> credentials work. Save
+            first if you have just edited them — nothing is shipped either way.
+          </p>
+          {result ? (
+            <p
+              className={`w-full rounded-xl px-4 py-3 text-ui-sm ${
+                result.ok ? "bg-ok-bg text-ok-fg" : "bg-warn-bg text-destructive"
+              }`}
+            >
+              {result.detail}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </Card>
   );
 }
