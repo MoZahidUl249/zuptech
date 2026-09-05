@@ -631,6 +631,7 @@ export interface CourierDto {
   environment: "Live" | "Test";
   /** Masked, like every other credential the admin API returns. */
   credentials: Record<string, string>;
+  baseUrl: string;
   trackingUrl: string;
   /** Shipments booked on this courier — blocks deletion when nonzero. */
   shipmentCount?: number;

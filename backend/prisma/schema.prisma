@@ -1100,6 +1100,12 @@ model Courier {
   environment String  @default("Test") // "Live" | "Test"
   /// Write-only, masked in responses — same discipline as PaymentMethod.
   credentials Json    @default("{}")
+  /// The provider's API address.
+  ///
+  /// Configurable rather than a constant in the adapter: a courier changing
+  /// host should be a field edit, not a deploy. Blank for `self` and `manual`,
+  /// which call nobody.
+  baseUrl     String  @default("")
   /// Where a customer follows a parcel. `{code}` is replaced with the
   /// tracking code, e.g. "https://steadfast.com.bd/t/{code}".
   trackingUrl String  @default("")

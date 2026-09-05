@@ -15,6 +15,8 @@ const courierFields = {
   provider: t.String({ maxLength: 100 }),
   enabled: t.Boolean(),
   environment: paymentEnvironmentDto,
+  /** The provider's API address. Blank for couriers that call nobody. */
+  baseUrl: t.String({ maxLength: 300 }),
   /** `{code}` is replaced with the tracking code when shown to a customer. */
   trackingUrl: t.String({ maxLength: 300 }),
 };

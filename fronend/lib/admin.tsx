@@ -584,6 +584,8 @@ export interface Courier {
   environment: "Live" | "Test";
   /** Masked on arrival, exactly like payment credentials. */
   credentials?: Record<string, string>;
+  /** The provider's API address. Blank for couriers that call nobody. */
+  baseUrl: string;
   /** `{code}` is replaced with the tracking code. "" = no tracking page. */
   trackingUrl: string;
   /** Shipments already booked — the server refuses deletion when nonzero. */
@@ -609,6 +611,21 @@ export interface SmsSettings {
   deliveredEnabled: boolean;
 }
 
+/**
+ * What an integrated courier needs configured, as declared by the backend.
+ *
+ * Served rather than duplicated here on purpose: the adapter reads credentials
+ * by these keys, so a copy that drifts produces a courier that looks set up and
+ * refuses every booking.
+ */
+export interface CourierProvider {
+  id: string;
+  label: string;
+  defaultBaseUrl: string;
+  environmentNote: string;
+  fields: { key: string; label: string; help: string; secret: boolean }[];
+}
+
 export interface AdminState {
   roles: Role[];
   staff: StaffMember[];
@@ -632,6 +649,7 @@ export interface AdminState {
   integrations: Integrations;
   payments: PaymentMethod[];
   couriers: Courier[];
+  courierProviders: CourierProvider[];
   sms: SmsSettings;
   suppliers: Supplier[];
   purchaseOrders: PurchaseOrder[];
@@ -709,6 +727,7 @@ export function emptyState(): AdminState {
     integrations: { gtmId: "", gtmEnabled: false },
     payments: [],
     couriers: [],
+    courierProviders: [],
     sms: {
       enabled: false,
       provider: "mimsms",
@@ -931,6 +950,7 @@ async function syncKeys(
         provider: c.provider,
         enabled: c.enabled,
         environment: c.environment,
+        baseUrl: c.baseUrl,
         trackingUrl: c.trackingUrl,
         /* Merged key by key on the server, so sending the bag cannot replace
            an untouched credential with the mask it arrived as. */

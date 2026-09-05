@@ -54,10 +54,20 @@ export interface StatusResult {
   raw: Record<string, unknown>;
 }
 
-/** Credentials come from Courier.credentials, shaped per provider. */
+/** Credentials come from Courier.credentials, keyed by `providers.ts`. */
 export interface CourierConfig {
   credentials: Record<string, string>;
   environment: "Live" | "Test";
+  /** The provider's API address, from `Courier.baseUrl`. */
+  baseUrl: string;
+}
+
+/** What a connection test found. Never books anything, never stores anything. */
+export interface CheckResult {
+  ok: boolean;
+  /** The provider's own words — a bad key and an unreachable host read very
+   *  differently, and that difference is the whole value of the test. */
+  detail: string;
 }
 
 export interface CourierAdapter {
@@ -68,4 +78,13 @@ export interface CourierAdapter {
    * different from "not moving" and must not overwrite a known status.
    */
   track(config: CourierConfig, consignmentId: string): Promise<StatusResult | null>;
+  /**
+   * Prove the credentials work, without shipping anything.
+   *
+   * Optional: `self` and `manual` have no adapter at all, and a provider with
+   * no cheap read endpoint should offer nothing rather than fake a success.
+   * Until this existed the only way to find out whether a courier was
+   * configured correctly was to book a real parcel for a real customer.
+   */
+  check?(config: CourierConfig): Promise<CheckResult>;
 }

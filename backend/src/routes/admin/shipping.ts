@@ -22,6 +22,8 @@ import {
 import { toCourier, toShipment } from "../../lib/serialize";
 import { notify, orderDeliveredSms, orderShippedSms } from "../../lib/sms";
 import { adapterFor } from "../../lib/shipping";
+import { COURIER_PROVIDERS } from "../../lib/shipping/providers";
+import type { CourierConfig } from "../../lib/shipping/types";
 import { ORDER_STATUS_FOR } from "../../lib/shipping/types";
 import { staffGuard } from "./guard";
 
@@ -40,6 +42,25 @@ const shipmentInclude = {
   rider: { select: { id: true, name: true } },
   events: { orderBy: { at: "desc" as const } },
 };
+
+/**
+ * Everything an adapter needs, from the courier row.
+ *
+ * One place, because there are now three callers — book, track and check — and
+ * a fourth that forgot to pass `baseUrl` would silently fall back to the
+ * provider's default and talk to the wrong host.
+ */
+function configFor(courier: {
+  credentials: unknown;
+  environment: string;
+  baseUrl: string;
+}): CourierConfig {
+  return {
+    credentials: (courier.credentials ?? {}) as Record<string, string>,
+    environment: coerceTo(PAYMENT_ENVIRONMENTS, courier.environment, "Test"),
+    baseUrl: courier.baseUrl,
+  };
+}
 
 /** A courier's reply, stored verbatim — it came out of JSON.parse. */
 const asJson = (value: Record<string, unknown>) => value as Prisma.InputJsonObject;
@@ -118,6 +139,24 @@ export const adminShipping = new Elysia({
 })
   .use(staffGuard)
 
+  /* ===== Providers ===== */
+
+  /**
+   * What each integrated courier needs to be configured.
+   *
+   * Served rather than duplicated in the frontend: the adapter reads
+   * credentials by these keys and the Delivery screen renders these fields, and
+   * a screen that drifts from the adapter produces a courier that looks
+   * configured and refuses every booking.
+   *
+   * `view`, not `manage` — it is a description of the software, not the shop's
+   * data, and the screen needs it to render at all.
+   */
+  .get("/admin/api/courier-providers", async ({ staffCtx }) => {
+    assertCan(staffCtx, "shipping", "view");
+    return COURIER_PROVIDERS;
+  })
+
   /* ===== Couriers ===== */
 
   .get("/admin/api/couriers", async ({ staffCtx }) => {
@@ -194,6 +233,39 @@ export const adminShipping = new Elysia({
     return { ok: true };
   })
 
+  /**
+   * Prove a courier's credentials work, without shipping anything.
+   *
+   * Before this, the only way to find out whether Steadfast was configured
+   * correctly was to book a real parcel for a real customer — and a wrong
+   * secret, a wrong host and a wrong sender all surfaced identically as
+   * "booking failed" on somebody's order.
+   *
+   * Uses the SAVED credentials, never a form payload. A test that checked
+   * whatever was typed would confirm the typing and tell you nothing about what
+   * the server will do tonight.
+   *
+   * `manage`, not `view`: it spends a request against the merchant account.
+   */
+  .post("/admin/api/couriers/:id/test", async ({ params, staffCtx }) => {
+    assertCan(staffCtx, "shipping", "manage");
+
+    const courier = await prisma.courier.findUnique({ where: { id: params.id } });
+    if (!courier) throw notFound("Courier");
+
+    const adapter = adapterFor(courier.kind, courier.provider);
+    if (!adapter?.check) {
+      throw badRequest(
+        `${courier.name} has nothing to test — it calls no API. Own delivery and manual couriers are moved by hand.`,
+      );
+    }
+
+    // A failed check is a report, not an error: the whole point is to read the
+    // provider's own words, so a bad key must come back as 200 + ok:false
+    // rather than as an exception the screen renders as "something went wrong".
+    return adapter.check(configFor(courier));
+  })
+
   /* ===== Shipments ===== */
 
   /**
@@ -259,20 +331,14 @@ export const adminShipping = new Elysia({
       if (adapter) {
         // The courier's own numbers win: a consignment id typed by hand that
         // the courier never issued makes every later status query lie.
-        const booked = await adapter.book(
-          {
-            credentials: (courier.credentials ?? {}) as Record<string, string>,
-            environment: coerceTo(PAYMENT_ENVIRONMENTS, courier.environment, "Test"),
-          },
-          {
+        const booked = await adapter.book(configFor(courier), {
             orderId: order.id,
             recipientName: order.name,
             recipientPhone: order.phone,
             recipientAddress: order.address,
             codAmount,
             note: body.note ?? "",
-          },
-        );
+        });
         consignmentId = booked.consignmentId;
         trackingCode = booked.trackingCode;
         status = booked.status;
@@ -481,13 +547,7 @@ export const adminShipping = new Elysia({
       throw badRequest("This shipment has no consignment id to look up");
     }
 
-    const result = await adapter.track(
-      {
-        credentials: (shipment.courier.credentials ?? {}) as Record<string, string>,
-        environment: coerceTo(PAYMENT_ENVIRONMENTS, shipment.courier.environment, "Test"),
-      },
-      shipment.consignmentId,
-    );
+    const result = await adapter.track(configFor(shipment.courier), shipment.consignmentId);
 
     const updated = await prisma.$transaction(async (tx) => {
       if (result) {
